@@ -104,4 +104,4 @@
 - [x] Add Certificates of Achievement teaser card
 - [x] Add Head-to-Head Challenges teaser card
 - [x] Add Native Mobile Apps teaser card
-- [ ] Save checkpoint after landing page rebuild
+- [x] Save checkpoint after landing page rebuild
