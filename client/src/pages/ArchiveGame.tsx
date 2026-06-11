@@ -1,0 +1,217 @@
+import { trpc } from "@/lib/trpc";
+import { useParams } from "wouter";
+import PublicLayout from "@/components/PublicLayout";
+import { Link } from "wouter";
+import { ArrowLeft, Trophy, BookOpen, Users, Loader2, HelpCircle } from "lucide-react";
+
+export default function ArchiveGame() {
+  const { id } = useParams<{ id: string }>();
+  const gameId = parseInt(id ?? "0", 10);
+
+  const { data: game, isLoading } = trpc.games.getById.useQuery({ id: gameId });
+  const { data: research } = trpc.games.getResearch.useQuery(
+    { gameId },
+    { enabled: !!gameId }
+  );
+  const { data: communityStats } = trpc.games.getCommunityStats.useQuery({ gameId });
+  const { data: validationQ } = trpc.games.getValidationQuestion.useQuery({ gameId });
+
+  if (isLoading) {
+    return (
+      <PublicLayout>
+        <div className="container py-24 flex justify-center">
+          <Loader2 size={28} className="animate-spin" style={{ color: "var(--color-brand)" }} />
+        </div>
+      </PublicLayout>
+    );
+  }
+
+  if (!game) {
+    return (
+      <PublicLayout>
+        <div className="container py-24 text-center">
+          <p style={{ color: "var(--color-muted)" }}>Game not found.</p>
+          <Link href="/research" className="btn-ghost mt-4 inline-flex">
+            <ArrowLeft size={14} /> Back to Research Hub
+          </Link>
+        </div>
+      </PublicLayout>
+    );
+  }
+
+  const winnerName = game.winner === "A" ? game.companyAName : game.companyBName;
+  const winnerTicker = game.winner === "A" ? game.companyATicker : game.companyBTicker;
+
+  return (
+    <PublicLayout>
+      <div className="container py-10 max-w-3xl mx-auto">
+        <Link href="/research" className="btn-ghost text-sm mb-6 inline-flex">
+          <ArrowLeft size={14} /> Research Hub
+        </Link>
+
+        {/* Game header */}
+        <div className="mb-6 animate-fade-up">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="ticker-chip">{game.companyATicker}</span>
+            <span className="text-sm" style={{ color: "var(--color-subtle)" }}>vs</span>
+            <span className="ticker-chip">{game.companyBTicker}</span>
+            <span className="ml-auto text-xs" style={{ color: "var(--color-subtle)" }}>
+              {game.gameDate}
+            </span>
+          </div>
+          <h1 className="font-display text-2xl mb-1" style={{ color: "var(--color-foreground)" }}>
+            {game.companyAName} vs {game.companyBName}
+          </h1>
+          {game.sector && (
+            <p className="text-sm" style={{ color: "var(--color-subtle)" }}>
+              {game.sector}
+            </p>
+          )}
+        </div>
+
+        {/* Result */}
+        {game.winner && (
+          <div
+            className="card-glass p-5 mb-5 flex items-center gap-4 animate-fade-up delay-75"
+            style={{
+              borderColor: "var(--color-brand)",
+              background: "oklch(0.18 0.02 75 / 0.5)",
+            }}
+          >
+            <Trophy size={24} style={{ color: "var(--color-brand)" }} />
+            <div>
+              <p className="text-xs uppercase tracking-wider mb-0.5" style={{ color: "var(--color-brand)" }}>
+                Winner
+              </p>
+              <p className="font-semibold" style={{ color: "var(--color-foreground)" }}>
+                {winnerTicker} — {winnerName}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Research snapshot */}
+        {research?.content && (
+          <div className="card-glass p-6 mb-5 animate-fade-up delay-100">
+            <div className="flex items-center gap-2 mb-4">
+              <BookOpen size={16} style={{ color: "var(--color-brand)" }} />
+              <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-brand)" }}>
+                Research Snapshot
+                {research.isSnapshot && (
+                  <span className="ml-2 text-xs font-normal" style={{ color: "var(--color-subtle)" }}>
+                    (archived at close)
+                  </span>
+                )}
+              </p>
+            </div>
+            {game.pairingRationale && (
+              <div className="mb-4">
+                <p className="text-xs font-semibold mb-1" style={{ color: "var(--color-subtle)" }}>
+                  Pairing Rationale
+                </p>
+                <p className="text-sm" style={{ color: "var(--color-muted)" }}>
+                  {game.pairingRationale}
+                </p>
+              </div>
+            )}
+            <div className="prose-munymo text-sm whitespace-pre-wrap">
+              {research.content}
+            </div>
+          </div>
+        )}
+
+        {/* Validation question + answer */}
+        {validationQ && (
+          <div className="card-glass p-5 mb-5 animate-fade-up delay-150">
+            <div className="flex items-center gap-2 mb-3">
+              <HelpCircle size={16} style={{ color: "var(--color-brand)" }} />
+              <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-brand)" }}>
+                Validation Question
+              </p>
+            </div>
+            <p className="text-sm font-medium mb-2" style={{ color: "var(--color-foreground)" }}>
+              {validationQ.questionText}
+            </p>
+            <p className="text-sm" style={{ color: "var(--color-muted)" }}>
+              Correct answer:{" "}
+              <strong style={{ color: "var(--color-success)" }}>
+                {validationQ.correctAnswer}
+              </strong>
+            </p>
+          </div>
+        )}
+
+        {/* Commentary */}
+        {game.resultCommentary && (
+          <div className="card-glass p-6 mb-5 animate-fade-up delay-200">
+            <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--color-brand)" }}>
+              Educational Commentary
+            </p>
+            <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "var(--color-muted)" }}>
+              {game.resultCommentary}
+            </p>
+          </div>
+        )}
+
+        {/* Community stats */}
+        {communityStats && (
+          <div className="card-glass p-6 animate-fade-up delay-200">
+            <div className="flex items-center gap-2 mb-4">
+              <Users size={16} style={{ color: "var(--color-brand)" }} />
+              <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-brand)" }}>
+                Community Statistics
+              </p>
+              <span className="ml-auto text-xs" style={{ color: "var(--color-subtle)" }}>
+                {communityStats.totalParticipants} participants
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <p className="text-xs mb-2" style={{ color: "var(--color-subtle)" }}>
+                  Gut picks — {game.companyATicker}
+                </p>
+                <div className="h-2 rounded-full overflow-hidden mb-1" style={{ background: "var(--color-surface-raised)" }}>
+                  <div
+                    className="h-full rounded-full"
+                    style={{ width: `${parseFloat(communityStats.gutPctA)}%`, background: "var(--color-brand)" }}
+                  />
+                </div>
+                <p className="text-xs" style={{ color: "var(--color-muted)" }}>
+                  {parseFloat(communityStats.gutPctA).toFixed(1)}% / {parseFloat(communityStats.gutPctB).toFixed(1)}%
+                </p>
+              </div>
+              <div>
+                <p className="text-xs mb-2" style={{ color: "var(--color-subtle)" }}>
+                  Final picks — {game.companyATicker}
+                </p>
+                <div className="h-2 rounded-full overflow-hidden mb-1" style={{ background: "var(--color-surface-raised)" }}>
+                  <div
+                    className="h-full rounded-full"
+                    style={{ width: `${parseFloat(communityStats.finalPctA)}%`, background: "var(--color-brand)" }}
+                  />
+                </div>
+                <p className="text-xs" style={{ color: "var(--color-muted)" }}>
+                  {parseFloat(communityStats.finalPctA).toFixed(1)}% / {parseFloat(communityStats.finalPctB).toFixed(1)}%
+                </p>
+              </div>
+              <div>
+                <p className="text-xs mb-2" style={{ color: "var(--color-subtle)" }}>
+                  Validation correct
+                </p>
+                <div className="h-2 rounded-full overflow-hidden mb-1" style={{ background: "var(--color-surface-raised)" }}>
+                  <div
+                    className="h-full rounded-full"
+                    style={{ width: `${parseFloat(communityStats.validationCorrectPct)}%`, background: "var(--color-success)" }}
+                  />
+                </div>
+                <p className="text-xs" style={{ color: "var(--color-muted)" }}>
+                  {parseFloat(communityStats.validationCorrectPct).toFixed(1)}%
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </PublicLayout>
+  );
+}
