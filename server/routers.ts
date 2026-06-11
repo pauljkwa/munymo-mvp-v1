@@ -140,7 +140,8 @@ const gamesRouter = router({
     .query(async ({ input }) => {
       const game = await getGameById(input.gameId);
       if (!game || game.status !== "result_published") return null;
-      return getCommunityStats(input.gameId);
+      const stats = await getCommunityStats(input.gameId);
+      return stats ?? null;
     }),
 });
 
@@ -150,7 +151,8 @@ const picksRouter = router({
   getMyPick: protectedProcedure
     .input(z.object({ gameId: z.number() }))
     .query(async ({ ctx, input }) => {
-      return getPlayerPick(ctx.user.id, input.gameId);
+      const pick = await getPlayerPick(ctx.user.id, input.gameId);
+      return pick ?? null;
     }),
 
   submitGut: protectedProcedure
@@ -210,7 +212,8 @@ const scoresRouter = router({
   getMyScoreForGame: protectedProcedure
     .input(z.object({ gameId: z.number() }))
     .query(async ({ ctx, input }) => {
-      return getPlayerScoreForGame(ctx.user.id, input.gameId);
+      const score = await getPlayerScoreForGame(ctx.user.id, input.gameId);
+      return score ?? null;
     }),
 
   getMyHistory: protectedProcedure.query(async ({ ctx }) => {
@@ -218,7 +221,8 @@ const scoresRouter = router({
   }),
 
   getMyLeaderboardStat: protectedProcedure.query(async ({ ctx }) => {
-    return getLeaderboardStatForUser(ctx.user.id);
+    const stat = await getLeaderboardStatForUser(ctx.user.id);
+    return stat ?? null;
   }),
 });
 
@@ -234,7 +238,8 @@ const leaderboardRouter = router({
 
 const streaksRouter = router({
   getMyStreak: protectedProcedure.query(async ({ ctx }) => {
-    return getStreakForUser(ctx.user.id);
+    const streak = await getStreakForUser(ctx.user.id);
+    return streak ?? null;
   }),
 });
 

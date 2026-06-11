@@ -93,5 +93,5 @@
 - [x] Add RESEND_API_KEY via webdev_request_secrets
 - [x] Write Vitest tests for email helper (mock Resend SDK)
 - [ ] Provide DNS records guidance for Cloudflare (SPF/DKIM/DMARC from Resend dashboard)
-- [x] Push updated code to GitHub
+- [ ] Push updated code to GitHub (requires gh auth login — user action needed)
 - [x] Save checkpoint after email integration verified
