@@ -1,5 +1,10 @@
 import { TRPCError } from "@trpc/server";
 import { calculateScore, checkLockout, computeNewStreak, isQualified } from "./scoring";
+import {
+  broadcastEmail,
+  buildGameAvailableEmail,
+  buildResultPublishedEmail,
+} from "./email";
 import { z } from "zod";
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -271,6 +276,26 @@ const adminRouter = router({
       }
       await updateGame(input.gameId, { status: "active" });
       await writeAuditLog(ctx.user.id, "activate_game", "game", input.gameId);
+
+      // Notify all registered players that today's game is live
+      try {
+        const allUsers = await getAllUsers();
+        const players = allUsers.filter((u) => u.role !== "admin");
+        const { subject, html } = buildGameAvailableEmail({
+          companyAName: game.companyAName,
+          companyATicker: game.companyATicker,
+          companyBName: game.companyBName,
+          companyBTicker: game.companyBTicker,
+          sector: game.sector,
+          gameDate: game.gameDate,
+          lockoutAt: game.lockoutAt ? new Date(game.lockoutAt) : null,
+        });
+        const { sent, failed } = await broadcastEmail({ recipients: players, subject, html });
+        console.log(`[Email] Game available notifications: ${sent} sent, ${failed} failed`);
+      } catch (err) {
+        console.warn("[Email] Failed to send game available notifications:", err);
+      }
+
       return { success: true };
     }),
 
@@ -364,6 +389,14 @@ const adminRouter = router({
 
       // 4. Calculate and store scores for all participants
       const picks = await getPicksForGame(input.gameId);
+      // Collect scored picks for email notifications after all DB writes
+      const scoredPicks: Array<{
+        userId: number;
+        predictionScore: number;
+        validationScore: number;
+        totalScore: number;
+      }> = [];
+
       for (const pick of picks) {
         if (!pick.finalSelection) continue; // skip players who only submitted Gut
         const { predictionScore, validationScore } = calculateScore(
@@ -373,6 +406,7 @@ const adminRouter = router({
           question?.correctAnswer ?? ""
         );
         await insertDailyScore(pick.userId, input.gameId, predictionScore, validationScore);
+        scoredPicks.push({ userId: pick.userId, predictionScore, validationScore, totalScore: predictionScore + validationScore });
 
         // 5. Update leaderboard stats
         await upsertLeaderboardStat(pick.userId);
@@ -399,6 +433,39 @@ const adminRouter = router({
         input.gameId,
         JSON.stringify({ winner: input.winner })
       );
+
+      // 9. Send personalised result emails to each participant
+      try {
+        const allUsers = await getAllUsers();
+        const userMap = new Map(allUsers.map((u) => [u.id, u]));
+        let emailsSent = 0;
+        let emailsFailed = 0;
+        for (const scored of scoredPicks) {
+          const user = userMap.get(scored.userId);
+          if (!user?.email) { emailsFailed++; continue; }
+          const { subject, html } = buildResultPublishedEmail({
+            playerName: user.name,
+            companyAName: game.companyAName,
+            companyATicker: game.companyATicker,
+            companyBName: game.companyBName,
+            companyBTicker: game.companyBTicker,
+            winner: input.winner,
+            predictionScore: scored.predictionScore,
+            validationScore: scored.validationScore,
+            totalScore: scored.totalScore,
+            resultCommentary: input.resultCommentary,
+            gameDate: game.gameDate,
+          });
+          const result = await import("./email").then((m) =>
+            m.sendEmail({ to: user.email!, subject, html })
+          );
+          if (result.success) emailsSent++; else emailsFailed++;
+        }
+        console.log(`[Email] Result notifications: ${emailsSent} sent, ${emailsFailed} failed`);
+      } catch (err) {
+        console.warn("[Email] Failed to send result notifications:", err);
+      }
+
       return { success: true };
     }),
 

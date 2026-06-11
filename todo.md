@@ -78,6 +78,20 @@
 - [x] 33 tests passing across 2 test files — all import real production functions from scoring.ts
 
 ## Phase 9: GitHub & Delivery
-- [ ] Push all code to GitHub repository — pending GitHub auth from user
+- [x] Push all code to GitHub repository — pushed to pauljkwa/munymo-mvp-v1
 - [ ] Save checkpoint
 - [ ] Deliver preview URL and document summary to user
+
+## Phase 10: Transactional Email Notifications (Resend)
+- [x] Install resend npm package
+- [x] Create server/email.ts — Resend SDK wrapper with RESEND_API_KEY env var
+- [x] Build HTML email template: daily game available notification
+- [x] Build HTML email template: result published (with player score breakdown)
+- [x] Build HTML email template: streak at risk reminder
+- [x] Wire email trigger into admin.activateGame → notify all registered players
+- [x] Wire email trigger into admin.publishResult → notify all participating players with scores
+- [x] Add RESEND_API_KEY via webdev_request_secrets
+- [x] Write Vitest tests for email helper (mock Resend SDK)
+- [ ] Provide DNS records guidance for Cloudflare (SPF/DKIM/DMARC from Resend dashboard)
+- [x] Push updated code to GitHub
+- [x] Save checkpoint after email integration verified
