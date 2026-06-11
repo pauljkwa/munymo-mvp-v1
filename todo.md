@@ -95,3 +95,13 @@
 - [ ] Provide DNS records guidance for Cloudflare (SPF/DKIM/DMARC from Resend dashboard)
 - [ ] Push updated code to GitHub (requires gh auth login — user action needed)
 - [x] Save checkpoint after email integration verified
+
+## Phase 11: Landing Page Rebuild — Positioning & Roadmap Teasers
+- [x] Generate MunyIQ gemstone card visuals: Sapphire, Emerald, Ruby, Diamond (faceted interior view)
+- [x] Upload card images to webdev static assets
+- [x] Rewrite hero sub-headline with corrected novice/professional positioning
+- [x] Add "Road Ahead" teaser section with MunyIQ card showcase
+- [x] Add Certificates of Achievement teaser card
+- [x] Add Head-to-Head Challenges teaser card
+- [x] Add Native Mobile Apps teaser card
+- [ ] Save checkpoint after landing page rebuild
