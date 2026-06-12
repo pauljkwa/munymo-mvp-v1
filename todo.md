@@ -105,3 +105,14 @@
 - [x] Add Head-to-Head Challenges teaser card
 - [x] Add Native Mobile Apps teaser card
 - [x] Save checkpoint after landing page rebuild
+
+## Phase 12: Light-First Premium Financial Redesign
+- [ ] Redesign index.css — light-first colour tokens, clean typography, component primitives
+- [ ] Update ThemeProvider to default light, add proper dark mode CSS variables
+- [ ] Rebuild PublicLayout.tsx — clean white nav, light/dark states
+- [ ] Redesign Home.tsx — finance-publication layout, asymmetric hero, clean sections
+- [ ] Update DashboardLayout.tsx — light sidebar, clean borders
+- [ ] Update Game, Leaderboard, Profile pages — light-first
+- [ ] Add dark mode toggle to nav (sun/moon icon)
+- [ ] Verify both light and dark themes render correctly
+- [ ] Save checkpoint after redesign

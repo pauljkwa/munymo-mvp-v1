@@ -6,40 +6,99 @@
 /* ─── Google Fonts ─────────────────────────────────────────────────────────── */
 /* Loaded via <link> in index.html */
 
-/* ─── Design Tokens ────────────────────────────────────────────────────────── */
+/* ─── Design Tokens — Light (default) ─────────────────────────────────────── */
 @theme inline {
   /* Spacing & Radius */
-  --radius-sm: 0.375rem;
-  --radius-md: 0.625rem;
-  --radius-lg: 0.875rem;
-  --radius-xl: 1.25rem;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
   --radius: var(--radius-md);
 
   /* Typography */
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Playfair Display", Georgia, serif;
+  --font-display: "DM Serif Display", "Playfair Display", Georgia, serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
-  /* ── Dark Theme Palette (default) ── */
-  /* Background layers */
-  --color-background:      oklch(0.11 0.012 260);   /* near-black navy */
-  --color-surface:         oklch(0.15 0.015 260);   /* card surface */
-  --color-surface-raised:  oklch(0.19 0.018 260);   /* elevated card */
-  --color-border:          oklch(0.26 0.018 260);   /* subtle border */
-  --color-border-strong:   oklch(0.36 0.022 260);   /* visible border */
+  /* ── Light Theme Palette (default) ── */
+  --color-background:      oklch(0.99 0.002 240);   /* near-white, barely cool */
+  --color-surface:         oklch(1.00 0.000 0);     /* pure white card */
+  --color-surface-raised:  oklch(0.97 0.003 240);   /* slightly off-white */
+  --color-border:          oklch(0.90 0.005 240);   /* light grey border */
+  --color-border-strong:   oklch(0.80 0.008 240);   /* visible border */
 
   /* Foreground */
-  --color-foreground:      oklch(0.95 0.005 260);   /* primary text */
-  --color-muted:           oklch(0.62 0.010 260);   /* secondary text */
-  --color-subtle:          oklch(0.42 0.010 260);   /* tertiary / placeholder */
+  --color-foreground:      oklch(0.15 0.010 260);   /* near-black */
+  --color-muted:           oklch(0.42 0.010 260);   /* medium grey text */
+  --color-subtle:          oklch(0.62 0.008 260);   /* light grey text */
 
-  /* Brand — deep gold accent */
-  --color-brand:           oklch(0.78 0.14 75);     /* gold */
-  --color-brand-hover:     oklch(0.84 0.16 75);
-  --color-brand-muted:     oklch(0.78 0.14 75 / 0.15);
-  --color-brand-foreground: oklch(0.12 0.012 260);
+  /* Brand — deep navy with gold accent */
+  --color-brand:           oklch(0.42 0.12 255);    /* deep navy blue */
+  --color-brand-hover:     oklch(0.35 0.14 255);
+  --color-brand-muted:     oklch(0.42 0.12 255 / 0.08);
+  --color-brand-foreground: oklch(0.99 0.002 240);
+
+  /* Gold accent (for highlights, scores, CTAs) */
+  --color-gold:            oklch(0.72 0.14 75);
+  --color-gold-hover:      oklch(0.65 0.16 75);
+  --color-gold-muted:      oklch(0.72 0.14 75 / 0.12);
+  --color-gold-foreground: oklch(0.15 0.010 260);
 
   /* Semantic */
+  --color-success:         oklch(0.52 0.16 145);
+  --color-success-muted:   oklch(0.52 0.16 145 / 0.10);
+  --color-danger:          oklch(0.55 0.22 25);
+  --color-danger-muted:    oklch(0.55 0.22 25 / 0.10);
+  --color-warning:         oklch(0.62 0.16 65);
+  --color-warning-muted:   oklch(0.62 0.16 65 / 0.10);
+  --color-info:            oklch(0.52 0.16 230);
+  --color-info-muted:      oklch(0.52 0.16 230 / 0.10);
+
+  /* Shadcn compatibility aliases */
+  --color-card:                    var(--color-surface);
+  --color-card-foreground:         var(--color-foreground);
+  --color-popover:                 var(--color-surface);
+  --color-popover-foreground:      var(--color-foreground);
+  --color-primary:                 var(--color-brand);
+  --color-primary-foreground:      var(--color-brand-foreground);
+  --color-secondary:               var(--color-surface-raised);
+  --color-secondary-foreground:    var(--color-foreground);
+  --color-muted-bg:                var(--color-surface-raised);
+  --color-muted-foreground:        var(--color-muted);
+  --color-accent:                  var(--color-brand-muted);
+  --color-accent-foreground:       var(--color-brand);
+  --color-destructive:             var(--color-danger);
+  --color-destructive-foreground:  var(--color-surface);
+  --color-input:                   var(--color-border);
+  --color-ring:                    var(--color-brand);
+
+  /* Animation easings */
+  --ease-out-snap: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out-smooth: cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+/* ─── Dark Mode Overrides ──────────────────────────────────────────────────── */
+.dark {
+  --color-background:      oklch(0.11 0.012 260);
+  --color-surface:         oklch(0.15 0.015 260);
+  --color-surface-raised:  oklch(0.19 0.018 260);
+  --color-border:          oklch(0.26 0.018 260);
+  --color-border-strong:   oklch(0.36 0.022 260);
+
+  --color-foreground:      oklch(0.95 0.005 260);
+  --color-muted:           oklch(0.62 0.010 260);
+  --color-subtle:          oklch(0.42 0.010 260);
+
+  --color-brand:           oklch(0.68 0.14 255);
+  --color-brand-hover:     oklch(0.74 0.16 255);
+  --color-brand-muted:     oklch(0.68 0.14 255 / 0.15);
+  --color-brand-foreground: oklch(0.11 0.012 260);
+
+  --color-gold:            oklch(0.78 0.14 75);
+  --color-gold-hover:      oklch(0.84 0.16 75);
+  --color-gold-muted:      oklch(0.78 0.14 75 / 0.15);
+  --color-gold-foreground: oklch(0.11 0.012 260);
+
   --color-success:         oklch(0.72 0.18 145);
   --color-success-muted:   oklch(0.72 0.18 145 / 0.15);
   --color-danger:          oklch(0.65 0.22 25);
@@ -49,7 +108,6 @@
   --color-info:            oklch(0.68 0.18 230);
   --color-info-muted:      oklch(0.68 0.18 230 / 0.15);
 
-  /* Shadcn compatibility aliases */
   --color-card:                    var(--color-surface);
   --color-card-foreground:         var(--color-foreground);
   --color-popover:                 var(--color-surface-raised);
@@ -66,10 +124,6 @@
   --color-destructive-foreground:  var(--color-foreground);
   --color-input:                   var(--color-border);
   --color-ring:                    var(--color-brand);
-
-  /* Animation easings */
-  --ease-out-snap: cubic-bezier(0.23, 1, 0.32, 1);
-  --ease-in-out-smooth: cubic-bezier(0.77, 0, 0.175, 1);
 }
 
 /* ─── Base Layer ───────────────────────────────────────────────────────────── */
@@ -94,7 +148,7 @@
   }
 
   /* Scrollbar styling */
-  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb {
     background: var(--color-border-strong);
@@ -124,11 +178,11 @@
     color: var(--color-foreground);
   }
 
-  h1 { font-size: clamp(2rem, 5vw, 3.5rem); }
-  h2 { font-size: clamp(1.5rem, 3.5vw, 2.5rem); }
-  h3 { font-size: clamp(1.25rem, 2.5vw, 1.875rem); }
-  h4 { font-size: 1.25rem; }
-  h5 { font-size: 1.0625rem; }
+  h1 { font-size: clamp(2rem, 5vw, 3.25rem); }
+  h2 { font-size: clamp(1.5rem, 3vw, 2.25rem); }
+  h3 { font-size: clamp(1.2rem, 2.5vw, 1.75rem); }
+  h4 { font-size: 1.125rem; }
+  h5 { font-size: 1rem; }
   h6 { font-size: 0.9375rem; }
 
   p { color: var(--color-muted); }
@@ -163,21 +217,23 @@
   /* Flex min-size reset */
   .flex { min-width: 0; min-height: 0; }
 
-  /* Glass card */
+  /* Clean card — light-first, no glass blur */
   .card-glass {
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-lg);
-    backdrop-filter: blur(12px);
     transition: border-color 200ms var(--ease-out-snap),
                 box-shadow 200ms var(--ease-out-snap);
   }
   .card-glass:hover {
     border-color: var(--color-border-strong);
+    box-shadow: 0 4px 20px oklch(0.15 0.01 260 / 0.06);
+  }
+  .dark .card-glass:hover {
     box-shadow: 0 8px 32px oklch(0 0 0 / 0.4);
   }
 
-  /* Brand button */
+  /* Primary brand button — navy */
   .btn-brand {
     display: inline-flex;
     align-items: center;
@@ -196,9 +252,32 @@
   }
   .btn-brand:hover {
     background: var(--color-brand-hover);
-    box-shadow: 0 4px 20px oklch(0.78 0.14 75 / 0.35);
+    box-shadow: 0 4px 16px oklch(0.42 0.12 255 / 0.25);
   }
   .btn-brand:active { transform: scale(0.97); }
+
+  /* Gold CTA button */
+  .btn-gold {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.625rem 1.5rem;
+    background: var(--color-gold);
+    color: var(--color-gold-foreground);
+    font-weight: 600;
+    font-size: 0.9375rem;
+    border-radius: var(--radius-md);
+    border: none;
+    cursor: pointer;
+    transition: background 160ms var(--ease-out-snap),
+                transform 100ms var(--ease-out-snap),
+                box-shadow 160ms var(--ease-out-snap);
+  }
+  .btn-gold:hover {
+    background: var(--color-gold-hover);
+    box-shadow: 0 4px 16px oklch(0.72 0.14 75 / 0.30);
+  }
+  .btn-gold:active { transform: scale(0.97); }
 
   /* Ghost button */
   .btn-ghost {
@@ -253,16 +332,16 @@
     display: inline-flex;
     align-items: center;
     gap: 0.375rem;
-    padding: 0.25rem 0.75rem;
+    padding: 0.2rem 0.65rem;
     border-radius: 9999px;
-    font-size: 0.75rem;
+    font-size: 0.6875rem;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.07em;
   }
-  .status-active   { background: var(--color-success-muted); color: var(--color-success); }
-  .status-draft    { background: var(--color-border); color: var(--color-muted); }
-  .status-locked   { background: var(--color-warning-muted); color: var(--color-warning); }
+  .status-active    { background: var(--color-success-muted); color: var(--color-success); }
+  .status-draft     { background: var(--color-border); color: var(--color-muted); }
+  .status-locked    { background: var(--color-warning-muted); color: var(--color-warning); }
   .status-published { background: var(--color-info-muted); color: var(--color-info); }
   .status-cancelled { background: var(--color-danger-muted); color: var(--color-danger); }
 
@@ -277,14 +356,15 @@
   .ticker-chip {
     display: inline-flex;
     align-items: center;
-    padding: 0.2rem 0.6rem;
+    padding: 0.2rem 0.55rem;
     background: var(--color-brand-muted);
     color: var(--color-brand);
     border-radius: var(--radius-sm);
     font-family: var(--font-mono);
-    font-size: 0.8125rem;
+    font-size: 0.75rem;
     font-weight: 700;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.06em;
+    border: 1px solid oklch(0.42 0.12 255 / 0.15);
   }
 
   /* Streak flame */
@@ -300,7 +380,7 @@
   .field-input {
     width: 100%;
     padding: 0.625rem 0.875rem;
-    background: var(--color-surface-raised);
+    background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     color: var(--color-foreground);
@@ -314,6 +394,25 @@
     box-shadow: 0 0 0 3px var(--color-brand-muted);
   }
   .field-input::placeholder { color: var(--color-subtle); }
+
+  /* input-field alias for backward compat */
+  .input-field {
+    width: 100%;
+    padding: 0.625rem 0.875rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    color: var(--color-foreground);
+    font-size: 0.9375rem;
+    transition: border-color 160ms var(--ease-out-snap),
+                box-shadow 160ms var(--ease-out-snap);
+  }
+  .input-field:focus {
+    outline: none;
+    border-color: var(--color-brand);
+    box-shadow: 0 0 0 3px var(--color-brand-muted);
+  }
+  .input-field::placeholder { color: var(--color-subtle); }
 
   /* Prose for research content */
   .prose-munymo {
@@ -330,55 +429,67 @@
   .prose-munymo ul, .prose-munymo ol { padding-left: 1.5em; margin-bottom: 1em; }
   .prose-munymo li { margin-bottom: 0.25em; }
   .prose-munymo blockquote {
-    border-left: 3px solid var(--color-brand);
+    border-left: 3px solid var(--color-gold);
     padding-left: 1em;
     color: var(--color-muted);
     font-style: italic;
     margin: 1.5em 0;
   }
+
+  /* Section divider line with label */
+  .section-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--color-subtle);
+  }
 }
 
 /* ─── Utility Layer ────────────────────────────────────────────────────────── */
 @layer utilities {
-  /* Text gradient */
+  /* Text gradient — navy to brand */
   .text-gradient-brand {
-    background: linear-gradient(135deg, var(--color-brand) 0%, oklch(0.88 0.12 55) 100%);
+    background: linear-gradient(135deg, var(--color-brand) 0%, oklch(0.55 0.18 220) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
 
-  /* Glow effects */
-  .glow-brand {
-    box-shadow: 0 0 24px oklch(0.78 0.14 75 / 0.25);
-  }
-  .glow-success {
-    box-shadow: 0 0 16px oklch(0.72 0.18 145 / 0.25);
+  /* Text gradient — gold */
+  .text-gradient-gold {
+    background: linear-gradient(135deg, var(--color-gold) 0%, oklch(0.82 0.12 55) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
   }
 
-  /* Noise texture overlay */
-  .noise-overlay::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
-    pointer-events: none;
-    border-radius: inherit;
+  /* Subtle shadow for cards */
+  .shadow-card {
+    box-shadow: 0 1px 3px oklch(0.15 0.01 260 / 0.08),
+                0 4px 12px oklch(0.15 0.01 260 / 0.05);
+  }
+  .dark .shadow-card {
+    box-shadow: 0 1px 3px oklch(0 0 0 / 0.3),
+                0 4px 12px oklch(0 0 0 / 0.2);
   }
 
   /* Animate entrance */
   .animate-fade-up {
-    animation: fadeUp 400ms var(--ease-out-snap) both;
+    animation: fadeUp 350ms var(--ease-out-snap) both;
   }
   .animate-fade-in {
-    animation: fadeIn 300ms var(--ease-out-snap) both;
+    animation: fadeIn 250ms var(--ease-out-snap) both;
   }
   .animate-scale-in {
-    animation: scaleIn 250ms var(--ease-out-snap) both;
+    animation: scaleIn 220ms var(--ease-out-snap) both;
   }
 
   @keyframes fadeUp {
-    from { opacity: 0; transform: translateY(16px); }
+    from { opacity: 0; transform: translateY(12px); }
     to   { opacity: 1; transform: translateY(0); }
   }
   @keyframes fadeIn {
@@ -386,7 +497,7 @@
     to   { opacity: 1; }
   }
   @keyframes scaleIn {
-    from { opacity: 0; transform: scale(0.95); }
+    from { opacity: 0; transform: scale(0.96); }
     to   { opacity: 1; transform: scale(1); }
   }
 

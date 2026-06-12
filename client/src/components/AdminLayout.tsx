@@ -32,6 +32,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         style={{
           background: "var(--color-surface)",
           borderColor: "var(--color-border)",
+          boxShadow: "1px 0 0 var(--color-border)",
         }}
       >
         {/* Logo */}
