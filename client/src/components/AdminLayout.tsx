@@ -5,10 +5,10 @@ import {
   PlusCircle,
   Users,
   ScrollText,
-  TrendingUp,
   ChevronRight,
   LogOut,
 } from "lucide-react";
+import MunymoLogo from "@/components/MunymoLogo";
 
 const navItems = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true },
@@ -37,17 +37,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       >
         {/* Logo */}
         <div className="h-16 flex items-center gap-2 px-5 border-b" style={{ borderColor: "var(--color-border)" }}>
+          <MunymoLogo variant="full" height={22} />
           <div
-            className="w-7 h-7 rounded-md flex items-center justify-center"
-            style={{ background: "var(--color-brand)" }}
+            className="ml-1 text-xs font-semibold px-2 py-0.5 rounded"
+            style={{ background: "var(--color-warning-muted)", color: "var(--color-warning)" }}
           >
-            <TrendingUp size={14} style={{ color: "var(--color-brand-foreground)" }} />
-          </div>
-          <div>
-            <div className="text-sm font-semibold" style={{ color: "var(--color-foreground)", fontFamily: "var(--font-display)" }}>
-              Munymo
-            </div>
-            <div className="text-xs" style={{ color: "var(--color-warning)" }}>Admin Console</div>
+            Admin
           </div>
         </div>
 
@@ -80,8 +75,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors"
             style={{ color: "var(--color-subtle)" }}
           >
-            <TrendingUp size={14} />
-            Back to site
+            ← Back to site
           </Link>
           <button
             onClick={() => logout()}
@@ -109,9 +103,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           className="md:hidden h-14 flex items-center gap-3 px-4 border-b"
           style={{ background: "var(--color-surface)", borderColor: "var(--color-border)" }}
         >
-          <TrendingUp size={16} style={{ color: "var(--color-brand)" }} />
-          <span className="text-sm font-semibold" style={{ color: "var(--color-foreground)" }}>
-            Admin Console
+          <MunymoLogo variant="full" height={20} />
+          <span
+            className="text-xs font-semibold px-2 py-0.5 rounded"
+            style={{ background: "var(--color-warning-muted)", color: "var(--color-warning)" }}
+          >
+            Admin
           </span>
         </header>
         <main className="flex-1 p-6 overflow-auto">{children}</main>

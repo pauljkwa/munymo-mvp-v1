@@ -2,8 +2,9 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
 import { Link, useLocation } from "wouter";
 import { useState } from "react";
-import { Menu, X, TrendingUp, Sun, Moon } from "lucide-react";
+import { Menu, X, Sun, Moon } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
+import MunymoLogo from "@/components/MunymoLogo";
 
 const navLinks = [
   { href: "/game", label: "Today's Game" },
@@ -30,19 +31,8 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
       >
         <div className="container flex items-center justify-between h-16">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2.5 group">
-            <div
-              className="w-8 h-8 rounded-md flex items-center justify-center"
-              style={{ background: "var(--color-brand)" }}
-            >
-              <TrendingUp size={15} style={{ color: "var(--color-brand-foreground)" }} />
-            </div>
-            <span
-              className="font-display font-semibold text-lg tracking-tight"
-              style={{ color: "var(--color-foreground)" }}
-            >
-              Munymo
-            </span>
+          <Link href="/" className="flex items-center group" aria-label="Munymo home">
+            <MunymoLogo variant="full" height={28} />
           </Link>
 
           {/* Desktop nav */}
@@ -53,7 +43,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
                 <Link
                   key={link.href}
                   href={link.href}
-                  className="px-4 py-2 rounded-md text-sm font-medium transition-all duration-150"
+                  className="px-4 py-2 rounded-md text-sm transition-all duration-150"
                   style={{
                     color: isActive ? "var(--color-brand)" : "var(--color-muted)",
                     background: isActive ? "var(--color-brand-muted)" : "transparent",
@@ -77,7 +67,6 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
 
           {/* Right side: auth + theme toggle */}
           <div className="hidden md:flex items-center gap-2">
-            {/* Dark mode toggle */}
             {toggleTheme && (
               <button
                 onClick={toggleTheme}
@@ -200,16 +189,8 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
         <div className="container">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
             <div>
-              <div className="flex items-center gap-2 mb-2">
-                <div
-                  className="w-6 h-6 rounded flex items-center justify-center"
-                  style={{ background: "var(--color-brand)" }}
-                >
-                  <TrendingUp size={12} style={{ color: "var(--color-brand-foreground)" }} />
-                </div>
-                <span className="font-display font-semibold text-sm" style={{ color: "var(--color-foreground)" }}>
-                  Munymo
-                </span>
+              <div className="mb-3">
+                <MunymoLogo variant="full" height={24} />
               </div>
               <p className="text-xs" style={{ color: "var(--color-subtle)" }}>
                 Daily stock prediction game. For educational purposes only.
