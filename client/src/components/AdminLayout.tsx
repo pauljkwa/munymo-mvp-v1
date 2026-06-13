@@ -37,7 +37,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       >
         {/* Logo */}
         <div className="h-16 flex items-center gap-2 px-5 border-b" style={{ borderColor: "var(--color-border)" }}>
-          <MunymoLogo variant="full" height={22} />
+          <MunymoLogo variant="full" height={30} />
           <div
             className="ml-1 text-xs font-semibold px-2 py-0.5 rounded"
             style={{ background: "var(--color-warning-muted)", color: "var(--color-warning)" }}
@@ -103,7 +103,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           className="md:hidden h-14 flex items-center gap-3 px-4 border-b"
           style={{ background: "var(--color-surface)", borderColor: "var(--color-border)" }}
         >
-          <MunymoLogo variant="full" height={20} />
+          <MunymoLogo variant="full" height={26} />
           <span
             className="text-xs font-semibold px-2 py-0.5 rounded"
             style={{ background: "var(--color-warning-muted)", color: "var(--color-warning)" }}

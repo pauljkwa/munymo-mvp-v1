@@ -32,7 +32,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
         <div className="container flex items-center justify-between h-16">
           {/* Logo */}
           <Link href="/" className="flex items-center group" aria-label="Munymo home">
-            <MunymoLogo variant="full" height={28} />
+            <MunymoLogo variant="full" height={36} />
           </Link>
 
           {/* Desktop nav */}
@@ -190,7 +190,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
             <div>
               <div className="mb-3">
-                <MunymoLogo variant="full" height={24} />
+                <MunymoLogo variant="full" height={28} />
               </div>
               <p className="text-xs" style={{ color: "var(--color-subtle)" }}>
                 Daily stock prediction game. For educational purposes only.

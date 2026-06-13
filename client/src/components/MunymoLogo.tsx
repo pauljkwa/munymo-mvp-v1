@@ -83,16 +83,14 @@ export default function MunymoLogo({
     );
   }
 
-  // Full wordmark — PNG with CSS filter for dark mode adaptation
-  // In dark mode: invert the deep forest green to near-white, keep accent green
-  // We use a CSS filter approach: invert(1) hue-rotate(180deg) gives us a light version
-  // For the specific green-on-dark look we want, we use a brightness/invert combo
-  const aspectRatio = 7680 / 4320; // original image ratio
+  // Full wordmark — cropped PNG (no whitespace) with CSS filter for dark mode adaptation
+  // Cropped dimensions: 1200 x 260 → aspect ratio 4.6154
+  const aspectRatio = 1200 / 260;
   const width = Math.round(height * aspectRatio);
 
   return (
     <img
-      src="/manus-storage/munymo-logo-original_66f3c711.png"
+      src="/manus-storage/munymo-logo-cropped_75fe3c86.png"
       alt="Munymo"
       width={width}
       height={height}

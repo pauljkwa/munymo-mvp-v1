@@ -107,12 +107,22 @@
 - [x] Save checkpoint after landing page rebuild
 
 ## Phase 12: Light-First Premium Financial Redesign
-- [ ] Redesign index.css — light-first colour tokens, clean typography, component primitives
-- [ ] Update ThemeProvider to default light, add proper dark mode CSS variables
-- [ ] Rebuild PublicLayout.tsx — clean white nav, light/dark states
-- [ ] Redesign Home.tsx — finance-publication layout, asymmetric hero, clean sections
-- [ ] Update DashboardLayout.tsx — light sidebar, clean borders
-- [ ] Update Game, Leaderboard, Profile pages — light-first
-- [ ] Add dark mode toggle to nav (sun/moon icon)
-- [ ] Verify both light and dark themes render correctly
-- [ ] Save checkpoint after redesign
+- [x] Redesign index.css — light-first colour tokens, clean typography, component primitives
+- [x] Update ThemeProvider to default light, add proper dark mode CSS variables
+- [x] Rebuild PublicLayout.tsx — clean white nav, light/dark states
+- [x] Redesign Home.tsx — finance-publication layout, asymmetric hero, clean sections
+- [x] Update AdminLayout.tsx — light sidebar, clean borders
+- [x] Add dark mode toggle to nav (sun/moon icon)
+- [x] Verify both light and dark themes render correctly
+- [x] Save checkpoint after redesign
+
+## Phase 13: Logo & Typography Integration
+- [x] Analyse logo PNG — extract exact brand colours (#002000 wordmark, #009050 accent)
+- [x] Create MunymoLogo React component — full wordmark + icon variants, CSS filter dark mode adaptation
+- [x] Upload logo PNG to webdev static storage
+- [x] Update fonts: Plus Jakarta Sans (body) + Syne (headings) via Google Fonts
+- [x] Place logo in PublicLayout nav and footer
+- [x] Place logo in AdminLayout sidebar (desktop + mobile)
+- [x] Generate favicon (32px) and Apple touch icon (180px) from logo icon mark
+- [x] Update index.html with favicon links
+- [x] Save checkpoint after logo integration
