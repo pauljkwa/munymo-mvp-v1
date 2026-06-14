@@ -106,9 +106,16 @@ const gamesRouter = router({
       const rawMetrics = (research.researchMetrics ?? []) as Array<{ label: string; value: string }>;
       const metrics: Record<string, string> = Object.fromEntries(rawMetrics.map((m) => [m.label, m.value]));
       if (game.status === "result_published" && research.researchSnapshot) {
-        return { content: research.researchSnapshot, isSnapshot: true, metrics };
+        return {
+          content: research.researchSnapshot,
+          isSnapshot: true,
+          metrics,
+          hindsightSpotlight: game.hindsightSpotlight ?? null,
+          winner: game.winner ?? null,
+          winnerName: game.winner === "A" ? game.companyAName : game.winner === "B" ? game.companyBName : null,
+        };
       }
-      return { content: research.content, isSnapshot: false, metrics };
+      return { content: research.content, isSnapshot: false, metrics, hindsightSpotlight: null, winner: null, winnerName: null };
     }),
 
   getValidationQuestion: publicProcedure

@@ -18,6 +18,8 @@ import {
   TrendingUp,
   Loader2,
   Timer,
+  Lightbulb,
+  Trophy,
 } from "lucide-react";
 
 type GameStep = "gut" | "research" | "final" | "submitted";
@@ -738,6 +740,60 @@ export default function DailyGame() {
             <p className="text-sm" style={{ color: "var(--color-muted)" }}>
               The submission window has closed. You did not submit a pick for today's game.
             </p>
+          </div>
+        )}
+
+        {/* ── Result + Hindsight Spotlight (shown when result_published) ── */}
+        {game.status === "result_published" && (
+          <div className="space-y-4 mt-4 animate-fade-up">
+            {/* Winner announcement */}
+            {game.winner && (
+              <div
+                className="card-glass p-5 flex items-center gap-4"
+                style={{ borderColor: "var(--color-brand)", boxShadow: "0 0 0 1px var(--color-brand)" }}
+              >
+                <Trophy size={28} style={{ color: "var(--color-brand)", flexShrink: 0 }} />
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider mb-0.5" style={{ color: "var(--color-brand)" }}>
+                    Result
+                  </p>
+                  <p className="font-semibold" style={{ color: "var(--color-foreground)" }}>
+                    {game.winner === "A" ? game.companyAName : game.companyBName} outperformed
+                  </p>
+                  {myPick?.finalSelection && (
+                    <p className="text-sm mt-0.5" style={{ color: myPick.finalSelection === game.winner ? "var(--color-success)" : "var(--color-error)" }}>
+                      {myPick.finalSelection === game.winner ? "✓ Your prediction was correct" : "✗ Your prediction was incorrect"}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Hindsight Spotlight */}
+            {research?.hindsightSpotlight && (
+              <div
+                className="card-glass p-6"
+                style={{ borderColor: "oklch(0.65 0.18 145)", background: "oklch(0.97 0.02 145 / 0.4)" }}
+              >
+                <div className="flex items-center gap-3 mb-4">
+                  <Lightbulb size={20} style={{ color: "oklch(0.55 0.18 145)" }} />
+                  <div>
+                    <h3 className="text-base font-semibold" style={{ color: "var(--color-foreground)" }}>
+                      Hindsight Spotlight
+                    </h3>
+                    <p className="text-xs" style={{ color: "var(--color-muted)" }}>
+                      20/20 hindsight — what we know now that the result is in
+                    </p>
+                  </div>
+                </div>
+                <div
+                  className="text-sm leading-relaxed whitespace-pre-wrap"
+                  style={{ color: "var(--color-muted)" }}
+                >
+                  {research.hindsightSpotlight}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

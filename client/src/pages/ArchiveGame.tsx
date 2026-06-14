@@ -2,7 +2,7 @@ import { trpc } from "@/lib/trpc";
 import { useParams } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
 import { Link } from "wouter";
-import { ArrowLeft, Trophy, BookOpen, Users, Loader2, HelpCircle } from "lucide-react";
+import { ArrowLeft, Trophy, BookOpen, Users, Loader2, HelpCircle, Lightbulb } from "lucide-react";
 
 export default function ArchiveGame() {
   const { id } = useParams<{ id: string }>();
@@ -138,6 +138,29 @@ export default function ArchiveGame() {
                 {validationQ.correctAnswer}
               </strong>
             </p>
+          </div>
+        )}
+
+        {/* Hindsight Spotlight */}
+        {research?.hindsightSpotlight && (
+          <div
+            className="card-glass p-6 mb-5 animate-fade-up delay-175"
+            style={{ borderColor: "oklch(0.65 0.18 145)", background: "oklch(0.97 0.02 145 / 0.4)" }}
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <Lightbulb size={18} style={{ color: "oklch(0.55 0.18 145)" }} />
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "oklch(0.55 0.18 145)" }}>
+                  Hindsight Spotlight
+                </p>
+                <p className="text-xs" style={{ color: "var(--color-subtle)" }}>
+                  20/20 hindsight — the full picture after the result
+                </p>
+              </div>
+            </div>
+            <div className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "var(--color-muted)" }}>
+              {research.hindsightSpotlight}
+            </div>
           </div>
         )}
 

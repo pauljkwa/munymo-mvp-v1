@@ -117,9 +117,13 @@ export default function EvolutionOfMunymo() {
             where you want to be.
           </p>
           <Callout>
-            The name "Munymo" is a portmanteau of "money" and "dynamo" — the idea of financial
-            energy in motion. It is also short, memorable, and does not already belong to a bank.
-            These things matter.
+            The name "Munymo" was invented as a spin-off from <em>eeny meeny miney mo</em> — the
+            childhood rhyme used to make a choice between two outcomes. That felt right. The game
+            is, at its core, a choice between two outcomes. The fact that it also sounds like
+            "money" is a happy accident that nobody is complaining about. It is short, easy to say,
+            easy to remember, and — importantly — it does not already belong to a bank. Eeny meeny
+            miney mo suggests a quick guessing game. Munymo has proven to be considerably more than
+            that. But the name still fits, because the gut instinct comes first.
           </Callout>
         </Section>
 
@@ -191,7 +195,7 @@ export default function EvolutionOfMunymo() {
           <p>
             The validation question also serves a secondary purpose: it creates a moment of
             accountability. You cannot claim to have "read the research" if you cannot answer a
-            basic question about it. The 20 points are, in a sense, a honesty tax.
+            basic question about it. The 20 points are, in a sense, an honesty tax.
           </p>
         </Section>
 
