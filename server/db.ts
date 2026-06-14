@@ -73,6 +73,65 @@ export async function getUserByOpenId(openId: string) {
   return result[0];
 }
 
+export async function getUserByClerkId(clerkId: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(users).where(eq(users.clerkId, clerkId)).limit(1);
+  return result[0];
+}
+
+export async function getUserById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  return result[0];
+}
+
+export async function upsertUserByClerkId(user: {
+  clerkId: string;
+  name?: string | null;
+  email?: string | null;
+  loginMethod?: string | null;
+  lastSignedIn?: Date;
+  role?: "user" | "admin";
+}): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+
+  const values: InsertUser = { clerkId: user.clerkId };
+  const updateSet: Record<string, unknown> = {};
+
+  if (user.name !== undefined) { values.name = user.name; updateSet.name = user.name; }
+  if (user.email !== undefined) { values.email = user.email; updateSet.email = user.email; }
+  if (user.loginMethod !== undefined) { values.loginMethod = user.loginMethod; updateSet.loginMethod = user.loginMethod; }
+
+  values.lastSignedIn = user.lastSignedIn ?? new Date();
+  updateSet.lastSignedIn = values.lastSignedIn;
+
+  if (user.role !== undefined) {
+    values.role = user.role;
+    updateSet.role = user.role;
+  }
+
+  if (Object.keys(updateSet).length === 0) {
+    updateSet.lastSignedIn = new Date();
+  }
+
+  await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
+}
+
+export async function updateUserProfile(userId: number, data: {
+  displayName?: string | null;
+  awayStatus?: boolean;
+  awayStatusUntil?: Date | null;
+  deactivated?: boolean;
+  tier?: "free" | "premium";
+}): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(users).set(data).where(eq(users.id, userId));
+}
+
 export async function getAllUsers() {
   const db = await getDb();
   if (!db) return [];

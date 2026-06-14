@@ -19,6 +19,7 @@ import {
   getGameById,
   getLeaderboard,
   getLeaderboardStatForUser,
+  getUserById,
   getPicksForGame,
   getPlayerPick,
   getPlayerScoreForGame,
@@ -40,6 +41,7 @@ import {
   upsertFinalSelection,
   upsertGutSelection,
   upsertLeaderboardStat,
+  updateUserProfile,
   upsertResearch,
   upsertResearchWithMetrics,
   upsertValidationQuestion,
@@ -831,15 +833,96 @@ async function updateStreakForPlayer(userId: number, gameDate: string) {
   await updateStreak(userId, newCurrent, newLongest, gameDate);
 }
 
+// ─── Dashboard Router ───────────────────────────────────────────────────────────
+
+const dashboardRouter = router({
+  /** Get the current user's full profile including dashboard fields */
+  getProfile: protectedProcedure.query(async ({ ctx }) => {
+    const profile = await getUserById(ctx.user.id);
+    return profile ?? null;
+  }),
+
+  /** Update the user's custom display name (max 64 chars) */
+  updateDisplayName: protectedProcedure
+    .input(z.object({ displayName: z.string().min(1).max(64).nullable() }))
+    .mutation(async ({ ctx, input }) => {
+      await updateUserProfile(ctx.user.id, { displayName: input.displayName });
+      return { success: true };
+    }),
+
+  /** Toggle Away Status on/off */
+  setAwayStatus: protectedProcedure
+    .input(z.object({ active: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      await updateUserProfile(ctx.user.id, {
+        awayStatus: input.active,
+        awayStatusUntil: input.active ? null : null,
+      });
+      return { success: true };
+    }),
+
+  /** Soft-delete the account — sets deactivated=true and signs the user out */
+  deactivateAccount: protectedProcedure
+    .input(z.object({ confirm: z.literal(true) }))
+    .mutation(async ({ ctx }) => {
+      await updateUserProfile(ctx.user.id, { deactivated: true });
+      return { success: true };
+    }),
+
+  /** Get paginated game history for the dashboard */
+  getHistory: protectedProcedure
+    .input(z.object({ page: z.number().int().min(1).default(1), pageSize: z.number().int().min(1).max(50).default(20) }))
+    .query(async ({ ctx, input }) => {
+      const all = await getPlayerScoreHistory(ctx.user.id);
+      const total = all.length;
+      const start = (input.page - 1) * input.pageSize;
+      const items = all.slice(start, start + input.pageSize);
+      return { items, total, page: input.page, pageSize: input.pageSize, totalPages: Math.ceil(total / input.pageSize) };
+    }),
+
+  /** Get a summary of the user's stats for the dashboard */
+  getStats: protectedProcedure.query(async ({ ctx }) => {
+    const [stat, streak, history] = await Promise.all([
+      getLeaderboardStatForUser(ctx.user.id),
+      getStreakForUser(ctx.user.id),
+      getPlayerScoreHistory(ctx.user.id),
+    ]);
+
+    const totalGames = history.length;
+    const correctPredictions = history.filter((h) => h.predictionScore > 0).length;
+    const accuracy = totalGames > 0 ? Math.round((correctPredictions / totalGames) * 100) : 0;
+    const totalScore = history.reduce((sum, h) => sum + (h.totalScore ?? 0), 0);
+    const validationCorrect = history.filter((h) => (h.validationScore ?? 0) > 0).length;
+    const validationAccuracy = totalGames > 0 ? Math.round((validationCorrect / totalGames) * 100) : 0;
+
+    // Compute leaderboard rank from the full leaderboard
+    const leaderboard = await getLeaderboard();
+    const rankIndex = leaderboard.findIndex((entry) => entry.userId === ctx.user.id);
+    const leaderboardRank = rankIndex >= 0 ? rankIndex + 1 : null;
+
+    return {
+      totalGames,
+      accuracy,
+      totalScore,
+      validationAccuracy,
+      currentStreak: streak?.currentStreak ?? 0,
+      longestStreak: streak?.longestStreak ?? 0,
+      awayStatus: streak?.awayStatus ?? "active",
+      leaderboardRank,
+      isQualified: stat ? isQualified(stat.gamesPlayed) : false,
+      gamesPlayed: stat?.gamesPlayed ?? 0,
+    };
+  }),
+});
+
 // ─── App Router ───────────────────────────────────────────────────────────────
 
 export const appRouter = router({
   system: systemRouter,
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
-    logout: publicProcedure.mutation(({ ctx }) => {
-      const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+    // Logout is handled client-side by Clerk; this endpoint exists for compatibility
+    logout: publicProcedure.mutation(() => {
       return { success: true } as const;
     }),
   }),
@@ -849,6 +932,7 @@ export const appRouter = router({
   leaderboard: leaderboardRouter,
   streaks: streaksRouter,
   admin: adminRouter,
+  dashboard: dashboardRouter,
 });
 
 export type AppRouter = typeof appRouter;

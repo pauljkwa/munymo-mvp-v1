@@ -1,5 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
-import { getLoginUrl } from "@/const";
+import { SignInButton } from "@clerk/clerk-react";
 import { trpc } from "@/lib/trpc";
 import { useState, useEffect, useRef } from "react";
 import { Link } from "wouter";
@@ -341,10 +341,12 @@ export default function DailyGame() {
           <p className="mb-8" style={{ color: "var(--color-muted)" }}>
             Create a free account to make your daily prediction.
           </p>
-          <a href={getLoginUrl()} className="btn-brand">
-            Sign in to Play
-            <ArrowRight size={16} />
-          </a>
+          <SignInButton mode="modal">
+            <button className="btn-brand">
+              Sign in to Play
+              <ArrowRight size={16} />
+            </button>
+          </SignInButton>
         </div>
       </PublicLayout>
     );

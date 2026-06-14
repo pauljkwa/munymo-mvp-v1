@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { getLoginUrl } from "@/const";
+import { SignInButton } from "@clerk/clerk-react";
 import { trpc } from "@/lib/trpc";
 import { Link } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
@@ -166,10 +166,12 @@ export default function Home() {
                     <ArrowRight size={16} />
                   </Link>
                 ) : (
-                  <a href={getLoginUrl()} className="btn-gold text-sm px-6 py-2.5">
-                    Start Playing Free
-                    <ArrowRight size={16} />
-                  </a>
+                  <SignInButton mode="modal">
+                    <button className="btn-gold text-sm px-6 py-2.5">
+                      Start Playing Free
+                      <ArrowRight size={16} />
+                    </button>
+                  </SignInButton>
                 )}
                 <Link href="/leaderboard" className="btn-ghost text-sm px-6 py-2.5">
                   View Leaderboard
@@ -647,10 +649,12 @@ export default function Home() {
                 </p>
               </div>
               {!isAuthenticated && (
-                <a href={getLoginUrl()} className="btn-brand text-sm flex-shrink-0" style={{ padding: "0.5rem 1.25rem" }}>
-                  Join Now
-                  <ArrowRight size={14} />
-                </a>
+                <SignInButton mode="modal">
+                  <button className="btn-brand text-sm flex-shrink-0" style={{ padding: "0.5rem 1.25rem" }}>
+                    Join Now
+                    <ArrowRight size={14} />
+                  </button>
+                </SignInButton>
               )}
             </div>
           </div>
@@ -676,10 +680,12 @@ export default function Home() {
                 Join Munymo today. Every game you play is a data point in your financial
                 intelligence story — and the story starts now.
               </p>
-              <a href={getLoginUrl()} className="btn-gold text-sm px-8 py-3">
-                Get Started Free
-                <ArrowRight size={16} />
-              </a>
+              <SignInButton mode="modal">
+                <button className="btn-gold text-sm px-8 py-3">
+                  Get Started Free
+                  <ArrowRight size={16} />
+                </button>
+              </SignInButton>
             </div>
           </div>
         </section>

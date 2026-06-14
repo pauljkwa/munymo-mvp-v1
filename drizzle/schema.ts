@@ -15,11 +15,23 @@ import {
 
 export const users = mysqlTable("users", {
   id: int("id").autoincrement().primaryKey(),
-  openId: varchar("openId", { length: 64 }).notNull().unique(),
+  // Clerk user ID — primary identity key going forward
+  clerkId: varchar("clerkId", { length: 64 }).unique(),
+  // Legacy Manus openId — kept for backward compatibility, nullable
+  openId: varchar("openId", { length: 64 }).unique(),
   name: text("name"),
+  // Custom display name set by the user (overrides name from OAuth)
+  displayName: varchar("displayName", { length: 64 }),
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+  // Membership tier
+  tier: mysqlEnum("tier", ["free", "premium"]).default("free").notNull(),
+  // Away Status — when true, streak is protected
+  awayStatus: boolean("awayStatus").default(false).notNull(),
+  awayStatusUntil: timestamp("awayStatusUntil"),
+  // Soft delete — deactivated users cannot sign in
+  deactivated: boolean("deactivated").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),

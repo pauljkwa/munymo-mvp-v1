@@ -190,22 +190,27 @@ describe("Leaderboard qualification — 20-game threshold (production constants)
 });
 
 // ─── Auth Logout ──────────────────────────────────────────────────────────────
+// Since switching to Clerk, logout is handled client-side by Clerk's signOut().
+// The server procedure is a no-op stub for API compatibility.
 import { appRouter } from "./routers";
-import { COOKIE_NAME } from "../shared/const";
 import type { TrpcContext } from "./_core/context";
 
-type CookieCall = { name: string; options: Record<string, unknown> };
-type AuthenticatedUser = NonNullable<TrpcContext["user"]>;
+type AuthenticatedUser2 = NonNullable<TrpcContext["user"]>;
 
-function createAuthContext(): { ctx: TrpcContext; clearedCookies: CookieCall[] } {
-  const clearedCookies: CookieCall[] = [];
-  const user: AuthenticatedUser = {
+function createAuthContext2(): { ctx: TrpcContext } {
+  const user: AuthenticatedUser2 = {
     id: 1,
-    openId: "test-user",
+    clerkId: "user_test_456",
+    openId: null,
     email: "test@example.com",
     name: "Test User",
-    loginMethod: "manus",
+    displayName: null,
+    loginMethod: "clerk",
     role: "user",
+    tier: "free",
+    awayStatus: false,
+    awayStatusUntil: null,
+    deactivated: false,
     createdAt: new Date(),
     updatedAt: new Date(),
     lastSignedIn: new Date(),
@@ -213,29 +218,16 @@ function createAuthContext(): { ctx: TrpcContext; clearedCookies: CookieCall[] }
   const ctx: TrpcContext = {
     user,
     req: { protocol: "https", headers: {} } as TrpcContext["req"],
-    res: {
-      clearCookie: (name: string, options: Record<string, unknown>) => {
-        clearedCookies.push({ name, options });
-      },
-    } as TrpcContext["res"],
+    res: {} as TrpcContext["res"],
   };
-  return { ctx, clearedCookies };
+  return { ctx };
 }
 
 describe("auth.logout", () => {
-  it("clears the session cookie and reports success", async () => {
-    const { ctx, clearedCookies } = createAuthContext();
+  it("returns success (logout is handled client-side by Clerk)", async () => {
+    const { ctx } = createAuthContext2();
     const caller = appRouter.createCaller(ctx);
     const result = await caller.auth.logout();
     expect(result).toEqual({ success: true });
-    expect(clearedCookies).toHaveLength(1);
-    expect(clearedCookies[0]?.name).toBe(COOKIE_NAME);
-    expect(clearedCookies[0]?.options).toMatchObject({
-      maxAge: -1,
-      secure: true,
-      sameSite: "none",
-      httpOnly: true,
-      path: "/",
-    });
   });
 });

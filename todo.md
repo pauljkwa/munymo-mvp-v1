@@ -178,5 +178,63 @@
 - [x] Create /evolution page (Evolution of Munymo — detailed, conversational tone)
 - [x] Wire /evolution route in App.tsx
 - [x] Add legal and evolution links to footer
+- [x] Save checkpoint (3d262360)
+- [x] Push to GitHub (b98e815..3d26236)
+
+## Phase 18: My Dashboard
+
+- [ ] Schema: add displayName, awayStatus (boolean), awayStatusUntil (timestamp), deactivated (boolean), tier (enum: free/premium) to users table
+- [ ] Run pnpm db:push to apply migration
+- [ ] tRPC: dashboard.getStats procedure (games played, accuracy, streak, best streak, total score, leaderboard rank, gut agreement rate, validation accuracy)
+- [ ] tRPC: dashboard.getHistory procedure (paginated game history with result and score)
+- [ ] tRPC: dashboard.updateDisplayName procedure
+- [ ] tRPC: dashboard.toggleAwayStatus procedure
+- [ ] tRPC: dashboard.softDeleteAccount procedure (sets deactivated=true, signs out)
+- [ ] Block deactivated users from signing in (check in auth context)
+- [ ] Build My Dashboard page at /profile — Stats section
+- [ ] Build My Dashboard page — Game History section
+- [ ] Build My Dashboard page — Away Status section
+- [ ] Build My Dashboard page — Account Settings section (display name, Manus password note)
+- [ ] Build My Dashboard page — Tier & Upgrade section (free/premium UI, Coming Soon for premium)
+- [ ] Build My Dashboard page — MunyIQ placeholder (locked, premium-only)
+- [ ] Build My Dashboard page — Danger Zone (soft delete with confirmation dialog)
+- [ ] Rename nav link from "Profile" to "My Dashboard" in PublicLayout
+- [ ] Write vitest tests for new procedures
+- [ ] Save checkpoint
+- [ ] Push to GitHub
+
+## Phase 19: Clerk Auth Migration + My Dashboard
+
+### Auth Migration
+- [x] Install @clerk/clerk-react and @clerk/express packages
+- [x] Add VITE_CLERK_PUBLISHABLE_KEY and CLERK_SECRET_KEY secrets
+- [x] Replace Manus OAuth context/hooks with Clerk provider and useUser hook
+- [x] Replace server-side JWT/session auth with Clerk Express middleware
+- [x] Update tRPC context to use Clerk session for ctx.user
+- [x] Update useAuth hook to use Clerk
+- [x] Remove Manus OAuth login URL references, replace with Clerk SignIn
+- [x] Update PublicLayout sign-in button to use Clerk modal/redirect
+- [x] Test auth flow end to end
+
+### Dashboard Schema & Backend
+- [x] Schema: add displayName, awayStatus, awayStatusUntil, deactivated, tier fields to users table
+- [x] Run pnpm db:push
+- [x] tRPC dashboard.getStats procedure
+- [x] tRPC dashboard.getHistory procedure (paginated)
+- [x] tRPC dashboard.updateDisplayName procedure
+- [x] tRPC dashboard.toggleAwayStatus procedure
+- [x] tRPC dashboard.softDeleteAccount procedure
+- [x] Block deactivated users in auth middleware
+
+### Dashboard UI
+- [x] Build /dashboard page — Stats cards section
+- [x] Build /dashboard page — Game History section
+- [x] Build /dashboard page — Away Status toggle section
+- [x] Build /dashboard page — Account Settings section (display name, Clerk password note)
+- [x] Build /dashboard page — Tier & Upgrade section
+- [x] Build /dashboard page — MunyIQ locked placeholder
+- [x] Build /dashboard page — Danger Zone (soft delete with confirmation)
+- [x] Rename nav "Profile" → "My Dashboard" (links to /dashboard)
+- [x] Update vitest tests for Clerk-based logout
 - [ ] Save checkpoint
 - [ ] Push to GitHub

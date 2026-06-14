@@ -1,5 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
-import { getLoginUrl } from "@/const";
+import { SignInButton } from "@clerk/clerk-react";
 import { trpc } from "@/lib/trpc";
 import PublicLayout from "@/components/PublicLayout";
 import { Link } from "wouter";
@@ -44,9 +44,11 @@ export default function PlayerProfile() {
           <h2 className="font-display mb-3" style={{ color: "var(--color-foreground)" }}>
             Sign in to view your profile
           </h2>
-          <a href={getLoginUrl()} className="btn-brand">
-            Sign in <ArrowRight size={16} />
-          </a>
+          <SignInButton mode="modal">
+            <button className="btn-brand">
+              Sign in <ArrowRight size={16} />
+            </button>
+          </SignInButton>
         </div>
       </PublicLayout>
     );
