@@ -38,9 +38,14 @@ export default function AdminDashboard() {
               Manage daily games, results, and players.
             </p>
           </div>
-          <Link href="/admin/games/new" className="btn-brand">
-            <Plus size={16} /> New Game
-          </Link>
+          <div className="flex gap-2">
+            <Link href="/admin/end-of-day" className="btn-brand" style={{ background: "var(--color-success)", borderColor: "var(--color-success)" }}>
+              <CheckCircle2 size={16} /> End of Day
+            </Link>
+            <Link href="/admin/games/new" className="btn-brand">
+              <Plus size={16} /> New Game
+            </Link>
+          </div>
         </div>
 
         {/* Games list */}

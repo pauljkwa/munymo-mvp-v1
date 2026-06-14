@@ -4,19 +4,52 @@
  */
 
 // ─── Score Calculation ────────────────────────────────────────────────────────
+
+/**
+ * Time-decay modifier for the validation score.
+ * Full 20 points if answered within FAST_THRESHOLD_MS.
+ * Linearly decays to MIN_VALIDATION_SCORE between FAST and SLOW thresholds.
+ * Minimum MIN_VALIDATION_SCORE if answered at or beyond SLOW_THRESHOLD_MS.
+ * If no timing data, full 20 points (backward compatible).
+ */
+export const VALIDATION_FAST_THRESHOLD_MS = 15_000; // 15 seconds → full 20
+export const VALIDATION_SLOW_THRESHOLD_MS = 60_000; // 60 seconds → minimum
+export const VALIDATION_MAX_SCORE = 20;
+export const VALIDATION_MIN_SCORE = 12;
+
+export function computeValidationScore(
+  isCorrect: boolean,
+  answerTimeMs: number | null | undefined
+): number {
+  if (!isCorrect) return 0;
+  if (answerTimeMs == null || answerTimeMs <= 0) return VALIDATION_MAX_SCORE;
+  if (answerTimeMs <= VALIDATION_FAST_THRESHOLD_MS) return VALIDATION_MAX_SCORE;
+  if (answerTimeMs >= VALIDATION_SLOW_THRESHOLD_MS) return VALIDATION_MIN_SCORE;
+  // Linear decay between fast and slow thresholds
+  const range = VALIDATION_SLOW_THRESHOLD_MS - VALIDATION_FAST_THRESHOLD_MS;
+  const elapsed = answerTimeMs - VALIDATION_FAST_THRESHOLD_MS;
+  const scoreRange = VALIDATION_MAX_SCORE - VALIDATION_MIN_SCORE;
+  return Math.round(VALIDATION_MAX_SCORE - (elapsed / range) * scoreRange);
+}
+
 /**
  * 80/20 Daily Score model:
  *   80% — Prediction Accuracy (Final Selection matches winner)
- *   20% — Validation Accuracy (validation answer matches correct answer)
+ *   20% — Validation Accuracy (correct answer) with time-decay modifier
+ *
+ * answerTimeMs: milliseconds from question display to answer submission.
+ *   Pass null/undefined for backward compatibility (no time decay applied).
  */
 export function calculateScore(
   finalSelection: "A" | "B" | null | undefined,
   winner: "A" | "B",
   validationAnswer: string | null | undefined,
-  correctAnswer: string
+  correctAnswer: string,
+  answerTimeMs?: number | null
 ): { predictionScore: number; validationScore: number; dailyScore: number } {
   const predictionScore = finalSelection === winner ? 80 : 0;
-  const validationScore = validationAnswer === correctAnswer ? 20 : 0;
+  const isCorrect = validationAnswer === correctAnswer;
+  const validationScore = computeValidationScore(isCorrect, answerTimeMs);
   return { predictionScore, validationScore, dailyScore: predictionScore + validationScore };
 }
 

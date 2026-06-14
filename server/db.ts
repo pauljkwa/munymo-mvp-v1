@@ -153,6 +153,19 @@ export async function upsertResearch(gameId: number, content: string) {
     .onDuplicateKeyUpdate({ set: { content } });
 }
 
+export async function upsertResearchWithMetrics(
+  gameId: number,
+  content: string,
+  researchMetrics: Array<{ label: string; value: string }>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .insert(gameResearch)
+    .values({ gameId, content, researchMetrics })
+    .onDuplicateKeyUpdate({ set: { content, researchMetrics } });
+}
+
 export async function snapshotResearch(gameId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -160,7 +173,11 @@ export async function snapshotResearch(gameId: number) {
   if (!research) return;
   await db
     .update(gameResearch)
-    .set({ researchSnapshot: research.content, snapshotTakenAt: new Date() })
+    .set({
+      researchSnapshot: research.content,
+      metricsSnapshot: research.researchMetrics ?? null,
+      snapshotTakenAt: new Date(),
+    })
     .where(eq(gameResearch.gameId, gameId));
 }
 
@@ -238,6 +255,22 @@ export async function upsertFinalSelection(
         validationSubmittedAt: now,
       },
     });
+}
+
+/** Submit validation answer separately (post-final-pick flow) with timing data */
+export async function submitValidationAnswer(
+  userId: number,
+  gameId: number,
+  validationAnswer: string,
+  validationAnswerTimeMs: number
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const now = new Date();
+  await db
+    .update(playerPicks)
+    .set({ validationAnswer, validationAnswerTimeMs, validationSubmittedAt: now })
+    .where(and(eq(playerPicks.userId, userId), eq(playerPicks.gameId, gameId)));
 }
 
 export async function lockPicksForGame(gameId: number) {

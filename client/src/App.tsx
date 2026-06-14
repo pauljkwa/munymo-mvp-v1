@@ -17,6 +17,7 @@ import AdminEditGame from "./pages/admin/AdminEditGame";
 import AdminPublishResult from "./pages/admin/AdminPublishResult";
 import AdminPlayers from "./pages/admin/AdminPlayers";
 import AdminAuditLog from "./pages/admin/AdminAuditLog";
+import AdminEndOfDay from "./pages/admin/AdminEndOfDay";
 
 function Router() {
   return (
@@ -37,6 +38,7 @@ function Router() {
       <Route path="/admin/games/:id/result" component={AdminPublishResult} />
       <Route path="/admin/players" component={AdminPlayers} />
       <Route path="/admin/audit" component={AdminAuditLog} />
+      <Route path="/admin/end-of-day" component={AdminEndOfDay} />
 
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />

@@ -34,12 +34,14 @@ import {
   lockPicksForGame,
   setAwayStatus,
   snapshotResearch,
+  submitValidationAnswer,
   updateGame,
   updateStreak,
   upsertFinalSelection,
   upsertGutSelection,
   upsertLeaderboardStat,
   upsertResearch,
+  upsertResearchWithMetrics,
   upsertValidationQuestion,
   writeAuditLog,
 } from "./db";
@@ -98,10 +100,13 @@ const gamesRouter = router({
       // For archived games, return the immutable snapshot
       const research = await getResearchByGameId(input.gameId);
       if (!research) return null;
+      // researchMetrics is stored as an array of {label, value} objects; convert to a plain record
+      const rawMetrics = (research.researchMetrics ?? []) as Array<{ label: string; value: string }>;
+      const metrics: Record<string, string> = Object.fromEntries(rawMetrics.map((m) => [m.label, m.value]));
       if (game.status === "result_published" && research.researchSnapshot) {
-        return { content: research.researchSnapshot, isSnapshot: true };
+        return { content: research.researchSnapshot, isSnapshot: true, metrics };
       }
-      return { content: research.content, isSnapshot: false };
+      return { content: research.content, isSnapshot: false, metrics };
     }),
 
   getValidationQuestion: publicProcedure
@@ -180,7 +185,6 @@ const picksRouter = router({
       z.object({
         gameId: z.number(),
         selection: z.enum(["A", "B"]),
-        validationAnswer: z.string().min(1),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -196,13 +200,43 @@ const picksRouter = router({
           message: "You must submit a Gut Selection before your Final Selection",
         });
       }
-      await upsertFinalSelection(
-        ctx.user.id,
-        input.gameId,
-        input.selection,
-        input.validationAnswer
-      );
+      // Store final selection without validation answer (submitted separately via timed modal)
+      await upsertFinalSelection(ctx.user.id, input.gameId, input.selection, "");
       return { success: true };
+    }),
+
+  /** Submit validation answer separately after the timed modal flow */
+  submitValidation: protectedProcedure
+    .input(
+      z.object({
+        gameId: z.number(),
+        answer: z.string().min(1),
+        answerTimeMs: z.number().int().min(0),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const game = await assertNotLocked(input.gameId);
+      if (game.status !== "active") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Game is not active" });
+      }
+      const existing = await getPlayerPick(ctx.user.id, input.gameId);
+      if (!existing?.finalSelection) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "You must submit your Final Selection before answering the validation question",
+        });
+      }
+      if (existing.validationAnswer && existing.validationAnswer !== "") {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Validation question already answered — no second chances",
+        });
+      }
+      await submitValidationAnswer(ctx.user.id, input.gameId, input.answer, input.answerTimeMs);
+      // Immediately reveal whether the answer was correct
+      const question = await getValidationQuestion(input.gameId);
+      const isCorrect = question?.correctAnswer === input.answer;
+      return { success: true, isCorrect, correctAnswer: question?.correctAnswer ?? "" };
     }),
 });
 
@@ -241,7 +275,78 @@ const streaksRouter = router({
     const streak = await getStreakForUser(ctx.user.id);
     return streak ?? null;
   }),
+
+  getStockChart: publicProcedure
+    .input(
+      z.object({
+        ticker: z.string().min(1),
+        range: z.enum(["1d", "5d", "1mo", "3mo", "6mo", "1y"]).default("1mo"),
+      })
+    )
+    .query(async ({ input }) => {
+      const intervalMap: Record<string, string> = {
+        "1d": "5m",
+        "5d": "1h",
+        "1mo": "1d",
+        "3mo": "1d",
+        "6mo": "1wk",
+        "1y": "1wk",
+      };
+      const interval = intervalMap[input.range] ?? "1d";
+      try {
+        return await fetchYahooOHLCV(input.ticker, input.range, interval);
+      } catch (err) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: String(err) });
+      }
+    }),
 });
+
+// ─── Stock Chart Proxy ───────────────────────────────────────────────────────
+// Fetches OHLCV candlestick data from Yahoo Finance server-side to avoid CORS
+async function fetchYahooOHLCV(
+  ticker: string,
+  range: string, // "1d" | "5d" | "1mo" | "3mo" | "6mo" | "1y"
+  interval: string // "5m" | "1h" | "1d"
+) {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=${range}&interval=${interval}&includePrePost=false`;
+  const res = await fetch(url, {
+    headers: { "User-Agent": "Mozilla/5.0" },
+  });
+  if (!res.ok) throw new Error(`Yahoo Finance returned ${res.status}`);
+  const json = (await res.json()) as {
+    chart: {
+      result: Array<{
+        timestamp: number[];
+        indicators: {
+          quote: Array<{
+            open: (number | null)[];
+            high: (number | null)[];
+            low: (number | null)[];
+            close: (number | null)[];
+            volume: (number | null)[];
+          }>;
+        };
+        meta: { currency: string; regularMarketPrice: number };
+      }> | null;
+      error: unknown;
+    };
+  };
+  const result = json?.chart?.result?.[0];
+  if (!result) throw new Error("No data returned from Yahoo Finance");
+  const { timestamp, indicators } = result;
+  const q = indicators.quote[0];
+  const candles = timestamp
+    .map((t, i) => ({
+      time: t,
+      open: q.open[i],
+      high: q.high[i],
+      low: q.low[i],
+      close: q.close[i],
+      volume: q.volume[i],
+    }))
+    .filter((c) => c.open !== null && c.close !== null);
+  return { candles, meta: result.meta };
+}
 
 // ─── Admin Router ─────────────────────────────────────────────────────────────
 
@@ -250,6 +355,7 @@ const adminRouter = router({
     .input(
       z.object({
         gameDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        exchange: z.string().default("NASDAQ"),
         companyAName: z.string().min(1),
         companyATicker: z.string().min(1),
         companyBName: z.string().min(1),
@@ -370,6 +476,10 @@ const adminRouter = router({
       z.object({
         gameId: z.number(),
         winner: z.enum(["A", "B"]),
+        companyAPerf: z.number().optional(),
+        companyBPerf: z.number().optional(),
+        resultSummary: z.string().optional(),
+        hindsightSpotlight: z.string().optional(),
         resultCommentary: z.string().optional(),
       })
     )
@@ -427,6 +537,10 @@ const adminRouter = router({
       await updateGame(input.gameId, {
         status: "result_published",
         winner: input.winner,
+        companyAPerf: input.companyAPerf !== undefined ? String(input.companyAPerf) : undefined,
+        companyBPerf: input.companyBPerf !== undefined ? String(input.companyBPerf) : undefined,
+        resultSummary: input.resultSummary,
+        hindsightSpotlight: input.hindsightSpotlight,
         resultCommentary: input.resultCommentary,
         publishedAt: new Date(),
       });
@@ -528,6 +642,148 @@ const adminRouter = router({
     .input(z.object({ limit: z.number().default(50), offset: z.number().default(0) }))
     .query(async ({ input }) => {
       return getAuditLog(input.limit, input.offset);
+    }),
+
+  // Unified end-of-day procedure: atomically close today's game and pre-load tomorrow's
+  endOfDay: adminProcedure
+    .input(
+      z.object({
+        // ── Close today's game ──
+        closeGameId: z.number(),
+        winner: z.enum(["A", "B"]),
+        companyAPerf: z.number(),
+        companyBPerf: z.number(),
+        resultSummary: z.string().min(1),
+        hindsightSpotlight: z.string().min(1),
+        // ── Tomorrow's game ──
+        nextGameDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        nextExchange: z.string().default("NASDAQ"),
+        nextCompanyAName: z.string().min(1),
+        nextCompanyATicker: z.string().min(1),
+        nextCompanyBName: z.string().min(1),
+        nextCompanyBTicker: z.string().min(1),
+        nextSector: z.string().optional(),
+        nextPairingRationale: z.string().optional(),
+        nextLockoutAt: z.string().datetime().optional(),
+        // ── Tomorrow's research ──
+        nextResearchContent: z.string().optional(),
+        nextResearchMetrics: z.record(z.string(), z.string()).optional(),
+        // ── Tomorrow's validation question ──
+        nextQuestionType: z.enum(["multiple_choice", "yes_no", "true_false"]).optional(),
+        nextQuestionText: z.string().optional(),
+        nextQuestionOptions: z.array(z.string()).optional(),
+        nextCorrectAnswer: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const db = await import("./db").then((m) => m.getDb());
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+      const game = await getGameById(input.closeGameId);
+      if (!game) throw new TRPCError({ code: "NOT_FOUND", message: "Game not found" });
+      if (game.status === "result_published") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Result already published" });
+      }
+
+      // ── 1. Close today's game (same logic as publishResult) ──
+      await lockPicksForGame(input.closeGameId);
+      await snapshotResearch(input.closeGameId);
+      const question = await getValidationQuestion(input.closeGameId);
+      const picks = await getPicksForGame(input.closeGameId);
+      const scoredPicks: Array<{ userId: number; predictionScore: number; validationScore: number; totalScore: number }> = [];
+
+      for (const pick of picks) {
+        if (!pick.finalSelection) continue;
+        const { predictionScore, validationScore } = calculateScore(
+          pick.finalSelection,
+          input.winner,
+          pick.validationAnswer,
+          question?.correctAnswer ?? ""
+        );
+        await insertDailyScore(pick.userId, input.closeGameId, predictionScore, validationScore);
+        scoredPicks.push({ userId: pick.userId, predictionScore, validationScore, totalScore: predictionScore + validationScore });
+        await upsertLeaderboardStat(pick.userId);
+        await updateStreakForPlayer(pick.userId, game.gameDate);
+      }
+      await computeAndStoreCommunityStats(input.closeGameId);
+      await updateGame(input.closeGameId, {
+        status: "result_published",
+        winner: input.winner,
+        companyAPerf: String(input.companyAPerf),
+        companyBPerf: String(input.companyBPerf),
+        resultSummary: input.resultSummary,
+        hindsightSpotlight: input.hindsightSpotlight,
+        publishedAt: new Date(),
+      });
+
+      // ── 2. Create tomorrow's game ──
+      await createGame({
+        gameDate: input.nextGameDate,
+        exchange: input.nextExchange,
+        companyAName: input.nextCompanyAName,
+        companyATicker: input.nextCompanyATicker,
+        companyBName: input.nextCompanyBName,
+        companyBTicker: input.nextCompanyBTicker,
+        sector: input.nextSector,
+        pairingRationale: input.nextPairingRationale,
+        lockoutAt: input.nextLockoutAt ? new Date(input.nextLockoutAt) : undefined,
+        createdBy: ctx.user.id,
+        status: "draft",
+      });
+
+      // Get the newly created game to attach research/question
+      const allGames = await listGames(1, 0);
+      const nextGame = allGames[0];
+
+      if (nextGame && input.nextResearchContent) {
+        // Convert record to label/value array for upsertResearchWithMetrics
+        const metricsArray = input.nextResearchMetrics
+          ? Object.entries(input.nextResearchMetrics).map(([label, value]) => ({ label, value: String(value) }))
+          : [];
+        await upsertResearchWithMetrics(
+          nextGame.id,
+          input.nextResearchContent,
+          metricsArray
+        );
+      }
+      if (nextGame && input.nextQuestionType && input.nextQuestionText && input.nextCorrectAnswer) {
+        await upsertValidationQuestion(nextGame.id, {
+          questionType: input.nextQuestionType,
+          questionText: input.nextQuestionText,
+          options: input.nextQuestionOptions,
+          correctAnswer: input.nextCorrectAnswer,
+        });
+      }
+
+      await writeAuditLog(ctx.user.id, "end_of_day", "game", input.closeGameId, JSON.stringify({ winner: input.winner, nextGameDate: input.nextGameDate }));
+
+      // ── 3. Send result emails ──
+      try {
+        const allUsers = await getAllUsers();
+        const userMap = new Map(allUsers.map((u) => [u.id, u]));
+        for (const scored of scoredPicks) {
+          const user = userMap.get(scored.userId);
+          if (!user?.email) continue;
+          const { subject, html } = buildResultPublishedEmail({
+            playerName: user.name,
+            companyAName: game.companyAName,
+            companyATicker: game.companyATicker,
+            companyBName: game.companyBName,
+            companyBTicker: game.companyBTicker,
+            winner: input.winner,
+            predictionScore: scored.predictionScore,
+            validationScore: scored.validationScore,
+            totalScore: scored.totalScore,
+            resultCommentary: input.resultSummary,
+            gameDate: game.gameDate,
+          });
+          await import("./email").then((m) => m.sendEmail({ to: user.email!, subject, html }));
+        }
+      } catch (err) {
+        console.warn("[Email] End-of-day result notifications failed:", err);
+      }
+
+      return { success: true, nextGameId: nextGame?.id };
     }),
 
   listPlayers: adminProcedure.query(async () => {

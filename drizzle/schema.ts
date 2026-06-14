@@ -43,6 +43,7 @@ export type InsertUser = typeof users.$inferInsert;
 export const dailyGames = mysqlTable("daily_games", {
   id: int("id").autoincrement().primaryKey(),
   gameDate: varchar("gameDate", { length: 10 }).notNull(), // YYYY-MM-DD
+  exchange: varchar("exchange", { length: 16 }).default("NASDAQ").notNull(), // e.g. NASDAQ, NYSE, ASX
   companyAName: varchar("companyAName", { length: 128 }).notNull(),
   companyATicker: varchar("companyATicker", { length: 16 }).notNull(),
   companyBName: varchar("companyBName", { length: 128 }).notNull(),
@@ -59,7 +60,11 @@ export const dailyGames = mysqlTable("daily_games", {
     .default("draft")
     .notNull(),
   winner: mysqlEnum("winner", ["A", "B"]), // null until result_published
-  resultCommentary: text("resultCommentary"),
+  companyAPerf: decimal("companyAPerf", { precision: 7, scale: 3 }), // % change e.g. +2.450
+  companyBPerf: decimal("companyBPerf", { precision: 7, scale: 3 }), // % change e.g. -1.230
+  resultSummary: text("resultSummary"), // short paragraph summary of the matchup outcome
+  hindsightSpotlight: text("hindsightSpotlight"), // educational debrief with 20/20 hindsight
+  resultCommentary: text("resultCommentary"), // legacy field kept for compatibility
   lockoutAt: timestamp("lockoutAt"), // server-enforced deadline
   publishedAt: timestamp("publishedAt"),
   cancelledAt: timestamp("cancelledAt"),
@@ -78,11 +83,19 @@ export type InsertDailyGame = typeof dailyGames.$inferInsert;
  * On result_published, a snapshot is taken and stored in researchSnapshot
  * for the Research Hub archive. The snapshot is immutable after that point.
  */
+/**
+ * ResearchMetric shape stored in the researchMetrics JSON column:
+ * Array of { label: string, value: string } — admin-editable, up to 12 items.
+ */
+export type ResearchMetric = { label: string; value: string };
+
 export const gameResearch = mysqlTable("game_research", {
   id: int("id").autoincrement().primaryKey(),
   gameId: int("gameId").notNull().unique(),
-  content: text("content").notNull(), // Markdown/rich text
+  content: text("content").notNull(), // Markdown/rich text narrative
+  researchMetrics: json("researchMetrics").$type<ResearchMetric[]>(), // flexible key-value metrics
   researchSnapshot: text("researchSnapshot"), // immutable copy taken at publish
+  metricsSnapshot: json("metricsSnapshot").$type<ResearchMetric[]>(), // immutable metrics copy
   snapshotTakenAt: timestamp("snapshotTakenAt"),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -126,6 +139,7 @@ export const playerPicks = mysqlTable("player_picks", {
   finalSelection: mysqlEnum("finalSelection", ["A", "B"]), // null until submitted
   finalSubmittedAt: timestamp("finalSubmittedAt"),
   validationAnswer: varchar("validationAnswer", { length: 256 }),
+  validationAnswerTimeMs: int("validationAnswerTimeMs"), // ms from question display to answer submit
   validationSubmittedAt: timestamp("validationSubmittedAt"),
   isLocked: boolean("isLocked").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

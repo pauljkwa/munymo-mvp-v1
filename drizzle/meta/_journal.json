@@ -15,6 +15,13 @@
       "when": 1781144860250,
       "tag": "0001_jittery_inertia",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1781417953818,
+      "tag": "0002_yielding_george_stacy",
+      "breakpoints": true
     }
   ]
 }

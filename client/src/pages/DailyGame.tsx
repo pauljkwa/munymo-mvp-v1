@@ -1,23 +1,262 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
 import { trpc } from "@/lib/trpc";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
+import { CandlestickChart } from "@/components/CandlestickChart";
 import { toast } from "sonner";
 import {
   Brain,
   BookOpen,
   CheckCircle2,
+  XCircle,
   Lock,
   ArrowRight,
   Clock,
   AlertCircle,
   TrendingUp,
   Loader2,
+  Timer,
 } from "lucide-react";
 
 type GameStep = "gut" | "research" | "final" | "submitted";
+
+// ─── Timed Validation Modal ───────────────────────────────────────────────────
+
+interface ValidationModalProps {
+  phase: "confirm" | "question" | "result";
+  question: {
+    questionType: string;
+    questionText: string;
+    options?: string[] | null | undefined;
+  } | null;
+  onOpenQuestion: () => void;
+  onSubmitAnswer: (answer: string, timeMs: number) => void;
+  isSubmitting: boolean;
+  result: { isCorrect: boolean; correctAnswer: string } | null;
+  onClose: () => void;
+}
+
+function ValidationModal({
+  phase,
+  question,
+  onOpenQuestion,
+  onSubmitAnswer,
+  isSubmitting,
+  result,
+  onClose,
+}: ValidationModalProps) {
+  const [selectedAnswer, setSelectedAnswer] = useState<string>("");
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const startTimeRef = useRef<number | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Start timer when question phase begins
+  useEffect(() => {
+    if (phase === "question") {
+      startTimeRef.current = Date.now();
+      timerRef.current = setInterval(() => {
+        setElapsedMs(Date.now() - (startTimeRef.current ?? Date.now()));
+      }, 100);
+    }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [phase]);
+
+  const handleSubmit = () => {
+    if (!selectedAnswer) return;
+    const timeMs = startTimeRef.current ? Date.now() - startTimeRef.current : 0;
+    if (timerRef.current) clearInterval(timerRef.current);
+    onSubmitAnswer(selectedAnswer, timeMs);
+  };
+
+  const bgColor =
+    phase === "result"
+      ? result?.isCorrect
+        ? "oklch(0.35 0.12 145)"
+        : "oklch(0.35 0.12 25)"
+      : "var(--color-surface)";
+
+  const textColor =
+    phase === "result" ? "#fff" : "var(--color-foreground)";
+
+  const options: string[] =
+    question?.questionType === "multiple_choice"
+      ? (question.options ?? [])
+      : question?.questionType === "yes_no"
+      ? ["Yes", "No"]
+      : ["True", "False"];
+
+  return (
+    // Overlay — pointer-events blocked to prevent navigation
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "oklch(0 0 0 / 0.7)" }}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      <div
+        className="w-full max-w-md rounded-2xl p-8 shadow-2xl transition-colors duration-500"
+        style={{ background: bgColor, color: textColor }}
+      >
+        {/* ── Phase: Confirm ── */}
+        {phase === "confirm" && (
+          <>
+            <div className="flex items-center gap-3 mb-5">
+              <CheckCircle2 size={28} style={{ color: "var(--color-success)" }} />
+              <h3 className="font-display text-xl" style={{ color: "var(--color-foreground)" }}>
+                Selection Confirmed
+              </h3>
+            </div>
+            <p className="text-sm mb-2" style={{ color: "var(--color-muted)" }}>
+              Your final company selection has been locked in.
+            </p>
+            <div
+              className="rounded-xl p-4 mb-6"
+              style={{
+                background: "var(--color-surface-raised)",
+                border: "1px solid var(--color-warning)",
+              }}
+            >
+              <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: "var(--color-warning)" }}>
+                ⚠ Important — Read Before Continuing
+              </p>
+              <p className="text-sm" style={{ color: "var(--color-foreground)" }}>
+                A <strong>Research Validation Question</strong> worth{" "}
+                <strong>20% of your daily score</strong> will open when you press the button below.
+              </p>
+              <ul className="mt-3 text-sm space-y-1.5" style={{ color: "var(--color-muted)" }}>
+                <li>• You have <strong>one attempt only</strong> — no second chances</li>
+                <li>• Your answer will be <strong>timed</strong> — faster correct answers score higher</li>
+                <li>• <strong>Do not close this window</strong> or navigate away once the question opens</li>
+              </ul>
+            </div>
+            <button
+              className="btn-brand w-full justify-center"
+              onClick={onOpenQuestion}
+            >
+              I Understand — Open the Question
+              <ArrowRight size={16} />
+            </button>
+          </>
+        )}
+
+        {/* ── Phase: Question ── */}
+        {phase === "question" && question && (
+          <>
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2">
+                <Timer size={18} style={{ color: "var(--color-brand)" }} />
+                <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-brand)" }}>
+                  Research Validation
+                </span>
+              </div>
+              <span
+                className="font-mono text-sm font-bold tabular-nums"
+                style={{ color: elapsedMs > 30000 ? "var(--color-warning)" : "var(--color-muted)" }}
+              >
+                {(elapsedMs / 1000).toFixed(1)}s
+              </span>
+            </div>
+
+            <p className="font-semibold mb-6" style={{ color: "var(--color-foreground)" }}>
+              {question.questionText}
+            </p>
+
+            <div className={`flex flex-col gap-2 mb-6 ${question.questionType !== "multiple_choice" ? "flex-row" : ""}`}>
+              {options.map((opt) => (
+                <button
+                  key={opt}
+                  onClick={() => setSelectedAnswer(opt)}
+                  className="px-4 py-3 rounded-xl text-sm font-semibold text-left transition-all"
+                  style={{
+                    background:
+                      selectedAnswer === opt
+                        ? "var(--color-brand)"
+                        : "var(--color-surface-raised)",
+                    color:
+                      selectedAnswer === opt
+                        ? "var(--color-brand-foreground)"
+                        : "var(--color-foreground)",
+                    border: `1px solid ${selectedAnswer === opt ? "var(--color-brand)" : "var(--color-border)"}`,
+                  }}
+                >
+                  {opt}
+                </button>
+              ))}
+            </div>
+
+            <div
+              className="rounded-lg px-3 py-2 mb-5 text-xs"
+              style={{ background: "var(--color-surface-raised)", color: "var(--color-muted)" }}
+            >
+              ⚠ Do not close this window or navigate away — your answer will be lost
+            </div>
+
+            <button
+              className="btn-brand w-full justify-center"
+              disabled={!selectedAnswer || isSubmitting}
+              onClick={handleSubmit}
+            >
+              {isSubmitting ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <>Submit Answer</>
+              )}
+            </button>
+          </>
+        )}
+
+        {/* ── Phase: Result ── */}
+        {phase === "result" && result && (
+          <>
+            <div className="text-center mb-6">
+              {result.isCorrect ? (
+                <CheckCircle2 size={48} className="mx-auto mb-4" style={{ color: "#fff" }} />
+              ) : (
+                <XCircle size={48} className="mx-auto mb-4" style={{ color: "#fff" }} />
+              )}
+              <h3 className="font-display text-2xl mb-2" style={{ color: "#fff" }}>
+                {result.isCorrect ? "Correct!" : "Incorrect"}
+              </h3>
+              {result.isCorrect ? (
+                <p className="text-sm" style={{ color: "oklch(0.9 0.05 145)" }}>
+                  Well done — your research paid off. The 20% validation score has been added.
+                </p>
+              ) : (
+                <div>
+                  <p className="text-sm mb-3" style={{ color: "oklch(0.9 0.05 25)" }}>
+                    Not quite — the correct answer was:
+                  </p>
+                  <div
+                    className="inline-block px-4 py-2 rounded-lg font-bold text-sm"
+                    style={{ background: "oklch(0.25 0.1 25)", color: "#fff" }}
+                  >
+                    {result.correctAnswer}
+                  </div>
+                </div>
+              )}
+            </div>
+            <button
+              className="w-full py-3 rounded-xl font-semibold text-sm transition-all"
+              style={{
+                background: "oklch(1 0 0 / 0.15)",
+                color: "#fff",
+                border: "1px solid oklch(1 0 0 / 0.3)",
+              }}
+              onClick={onClose}
+            >
+              Continue
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main DailyGame Component ─────────────────────────────────────────────────
 
 export default function DailyGame() {
   const { isAuthenticated } = useAuth();
@@ -41,7 +280,10 @@ export default function DailyGame() {
   const [step, setStep] = useState<GameStep>("gut");
   const [gutSelection, setGutSelection] = useState<"A" | "B" | null>(null);
   const [finalSelection, setFinalSelection] = useState<"A" | "B" | null>(null);
-  const [validationAnswer, setValidationAnswer] = useState<string>("");
+
+  // Validation modal state
+  const [modalPhase, setModalPhase] = useState<"confirm" | "question" | "result" | null>(null);
+  const [validationResult, setValidationResult] = useState<{ isCorrect: boolean; correctAnswer: string } | null>(null);
 
   // Sync step with existing pick on load
   useEffect(() => {
@@ -54,16 +296,39 @@ export default function DailyGame() {
       setStep("research");
       toast.success("Gut selection saved — now read the research.");
     },
-    onError: (e: {message: string}) => toast.error(e.message),
+    onError: (e: { message: string }) => toast.error(e.message),
   });
 
   const submitFinal = trpc.picks.submitFinal.useMutation({
     onSuccess: () => {
-      setStep("submitted");
-      toast.success("Final selection submitted. Good luck!");
+      // Open the validation confirmation modal
+      if (validationQ) {
+        setModalPhase("confirm");
+      } else {
+        setStep("submitted");
+        toast.success("Final selection submitted. Good luck!");
+      }
     },
-    onError: (e: {message: string}) => toast.error(e.message),
+    onError: (e: { message: string }) => toast.error(e.message),
   });
+
+  const submitValidation = trpc.picks.submitValidation.useMutation({
+    onSuccess: (data) => {
+      setValidationResult({ isCorrect: data.isCorrect, correctAnswer: data.correctAnswer });
+      setModalPhase("result");
+    },
+    onError: (e: { message: string }) => {
+      toast.error(e.message);
+      setModalPhase(null);
+      setStep("submitted");
+    },
+  });
+
+  const handleCloseModal = () => {
+    setModalPhase(null);
+    setStep("submitted");
+    toast.success("All done — your picks are locked in!");
+  };
 
   if (!isAuthenticated) {
     return (
@@ -116,12 +381,27 @@ export default function DailyGame() {
 
   const stepLabels: GameStep[] = ["gut", "research", "final", "submitted"];
   const stepDisplayLabels = ["Gut Pick", "Research", "Final Pick", "Done"];
-
   const stepIndex = (s: GameStep) => stepLabels.indexOf(s);
   const currentIndex = stepIndex(step);
 
   return (
     <PublicLayout>
+      {/* Timed Validation Modal — rendered outside normal flow */}
+      {modalPhase && (
+        <ValidationModal
+          phase={modalPhase}
+          question={validationQ ?? null}
+          onOpenQuestion={() => setModalPhase("question")}
+          onSubmitAnswer={(answer, timeMs) => {
+            if (!game.id) return;
+            submitValidation.mutate({ gameId: game.id, answer, answerTimeMs: timeMs });
+          }}
+          isSubmitting={submitValidation.isPending}
+          result={validationResult}
+          onClose={handleCloseModal}
+        />
+      )}
+
       <div className="container py-10 max-w-3xl mx-auto">
         {/* Header */}
         <div className="mb-8 animate-fade-up">
@@ -195,13 +475,14 @@ export default function DailyGame() {
             const ticker = side === "A" ? game.companyATicker : game.companyBTicker;
             const isGutSelected = gutSelection === side || myPick?.gutSelection === side;
             const isFinalSelected = finalSelection === side || myPick?.finalSelection === side;
-            const showSelected = step === "submitted"
-              ? isFinalSelected
-              : step === "gut"
-              ? isGutSelected
-              : step === "final"
-              ? isFinalSelected
-              : isGutSelected;
+            const showSelected =
+              step === "submitted"
+                ? isFinalSelected
+                : step === "gut"
+                ? isGutSelected
+                : step === "final"
+                ? isFinalSelected
+                : isGutSelected;
             const canSelect = !isLocked && step !== "submitted" && step !== "research";
 
             return (
@@ -304,7 +585,76 @@ export default function DailyGame() {
                   No additional research notes provided for today's game.
                 </p>
               )}
+
+              {/* Research Metrics Table */}
+              {research?.metrics && Object.keys(research.metrics as Record<string, string>).length > 0 && (
+                <div className="mt-5">
+                  <p
+                    className="text-xs font-semibold uppercase tracking-wider mb-3"
+                    style={{ color: "var(--color-brand)" }}
+                  >
+                    Key Metrics
+                  </p>
+                  <div className="rounded-lg overflow-hidden" style={{ border: "1px solid var(--color-border)" }}>
+                    <table className="w-full text-sm">
+                      <tbody>
+                        {Object.entries(research.metrics as Record<string, string>).map(([label, value], i, arr) => (
+                          <tr
+                            key={label}
+                            style={{
+                              borderBottom: i < arr.length - 1 ? "1px solid var(--color-border)" : undefined,
+                              background: i % 2 === 0 ? "var(--color-surface)" : "transparent",
+                            }}
+                          >
+                            <td className="px-4 py-2.5 font-medium" style={{ color: "var(--color-muted)" }}>{label}</td>
+                            <td className="px-4 py-2.5 text-right font-mono font-semibold" style={{ color: "var(--color-foreground)" }}>{value}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Candlestick Charts */}
+              {game.companyATicker && game.companyBTicker && (
+                <div className="mt-6 space-y-4">
+                  <p
+                    className="text-xs font-semibold uppercase tracking-wider"
+                    style={{ color: "var(--color-brand)" }}
+                  >
+                    Price Charts
+                  </p>
+                  <CandlestickChart
+                    ticker={game.companyATicker}
+                    companyName={game.companyAName}
+                    accentColor="#009050"
+                  />
+                  <CandlestickChart
+                    ticker={game.companyBTicker}
+                    companyName={game.companyBName}
+                    accentColor="#1d4ed8"
+                  />
+                </div>
+              )}
             </div>
+
+            {/* Validation question hint */}
+            {validationQ && (
+              <div
+                className="card-glass p-4 mb-4 flex items-start gap-3"
+                style={{ borderColor: "var(--color-warning)" }}
+              >
+                <Timer size={16} className="mt-0.5 shrink-0" style={{ color: "var(--color-warning)" }} />
+                <p className="text-sm" style={{ color: "var(--color-muted)" }}>
+                  After submitting your final selection, a{" "}
+                  <strong style={{ color: "var(--color-foreground)" }}>timed Research Validation Question</strong>{" "}
+                  will open worth <strong style={{ color: "var(--color-foreground)" }}>20% of your score</strong>.
+                  Study the research carefully.
+                </p>
+              </div>
+            )}
+
             <button
               className="btn-brand w-full justify-center"
               onClick={() => setStep("final")}
@@ -326,96 +676,12 @@ export default function DailyGame() {
               Having reviewed the research, confirm your official prediction. This is the pick
               that will be scored.
             </p>
-
-            {/* Validation question */}
-            {validationQ && (
-              <div
-                className="mb-6 p-4 rounded-xl"
-                style={{
-                  background: "var(--color-surface-raised)",
-                  border: "1px solid var(--color-border)",
-                }}
-              >
-                <p
-                  className="text-xs font-semibold uppercase tracking-wider mb-3"
-                  style={{ color: "var(--color-brand)" }}
-                >
-                  Validation Question (20% of score)
-                </p>
-                <p
-                  className="text-sm font-medium mb-4"
-                  style={{ color: "var(--color-foreground)" }}
-                >
-                  {validationQ.questionText}
-                </p>
-                {/* Options */}
-                {validationQ.questionType === "multiple_choice" && validationQ.options ? (
-                  <div className="flex flex-col gap-2">
-                    {validationQ.options.map((opt: string) => (
-                      <button
-                        key={opt}
-                        onClick={() => setValidationAnswer(opt)}
-                        className="text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-all"
-                        style={{
-                          background:
-                            validationAnswer === opt
-                              ? "var(--color-brand-muted)"
-                              : "var(--color-surface)",
-                          border: `1px solid ${validationAnswer === opt ? "var(--color-brand)" : "var(--color-border)"}`,
-                          color:
-                            validationAnswer === opt
-                              ? "var(--color-brand)"
-                              : "var(--color-muted)",
-                        }}
-                      >
-                        {opt}
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="flex gap-3">
-                    {(validationQ.questionType === "yes_no"
-                      ? ["Yes", "No"]
-                      : ["True", "False"]
-                    ).map((opt) => (
-                      <button
-                        key={opt}
-                        onClick={() => setValidationAnswer(opt)}
-                        className="flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all"
-                        style={{
-                          background:
-                            validationAnswer === opt
-                              ? "var(--color-brand-muted)"
-                              : "var(--color-surface)",
-                          border: `1px solid ${validationAnswer === opt ? "var(--color-brand)" : "var(--color-border)"}`,
-                          color:
-                            validationAnswer === opt
-                              ? "var(--color-brand)"
-                              : "var(--color-muted)",
-                        }}
-                      >
-                        {opt}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
             <button
               className="btn-brand w-full justify-center"
-              disabled={
-                !finalSelection ||
-                (!!validationQ && !validationAnswer) ||
-                submitFinal.isPending
-              }
+              disabled={!finalSelection || submitFinal.isPending}
               onClick={() => {
                 if (!finalSelection || !game.id) return;
-                submitFinal.mutate({
-                  gameId: game.id,
-                  selection: finalSelection,
-                  validationAnswer: validationAnswer || "",
-                });
+                submitFinal.mutate({ gameId: game.id, selection: finalSelection });
               }}
             >
               {submitFinal.isPending ? (
@@ -445,8 +711,7 @@ export default function DailyGame() {
               Picks Submitted
             </h3>
             <p className="text-sm mb-5" style={{ color: "var(--color-muted)" }}>
-              Your final selection is locked in. Results will be published after the game
-              closes.
+              Your final selection is locked in. Results will be published after the game closes.
             </p>
             <Link href="/leaderboard" className="btn-ghost text-sm">
               View Leaderboard

@@ -126,3 +126,23 @@
 - [x] Generate favicon (32px) and Apple touch icon (180px) from logo icon mark
 - [x] Update index.html with favicon links
 - [x] Save checkpoint after logo integration
+
+## Phase 14: Unified Admin Form, Timed Validation, Candlestick Charts
+
+- [ ] Extend drizzle/schema.ts — add exchange field, result fields (companyAPerf, companyBPerf, summary, hindsightSpotlight), researchMetrics JSON column, validationQuestionFormat, validationAnswerTime to picks table
+- [ ] Run pnpm db:push to migrate schema
+- [ ] Add server-side Yahoo Finance OHLCV proxy endpoint in routers.ts
+- [ ] Add atomic admin.endOfDay tRPC procedure — closes today's game + creates tomorrow's game in one transaction
+- [ ] Build unified admin end-of-day page (AdminEndOfDay.tsx) with JSON paste-to-populate and two-section form
+- [ ] Register /admin/end-of-day route in App.tsx and AdminLayout nav
+- [ ] Build timed Research Validation Question popup component (ValidationQuestionModal.tsx)
+- [ ] Wire popup into game page — opens after company pick submission, two-step CTA flow
+- [ ] Implement time-decay scoring modifier for validation question (20% max, scales to 12% at 60s+)
+- [ ] Update server-side score calculation to include timed validation component
+- [ ] Install lightweight-charts npm package
+- [ ] Build CandlestickChart component using TradingView Lightweight Charts
+- [ ] Add candlestick charts with range selector (1D, 5D, 1M, 3M, 6M, 1Y) to game page research section
+- [ ] Update game page to display result fields (performance %, summary, hindsight spotlight) when published
+- [ ] Rewrite daily Manus curation prompt in new JSON format
+- [ ] Write/update Vitest tests for new procedures
+- [ ] Save checkpoint after full feature set verified
