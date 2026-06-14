@@ -146,3 +146,13 @@
 - [ ] Rewrite daily Manus curation prompt in new JSON format
 - [ ] Write/update Vitest tests for new procedures
 - [ ] Save checkpoint after full feature set verified
+
+## Phase 15: Analyst Consensus Relocation & Housekeeping
+
+- [x] Remove analyst consensus from pre-game research metrics in AdminEndOfDay.tsx form
+- [x] Update Hindsight Spotlight field description in AdminEndOfDay.tsx to explicitly include analyst consensus
+- [x] Update daily curation prompt v2 (MD) — move analyst consensus from researchMetrics block to hindsightSpotlight block
+- [x] Regenerate daily curation prompt v2 PDF from updated MD
+- [x] Fix hero headline accent colour from amber/gold to brand green (#009050) in Home.tsx
+- [ ] Save checkpoint
+- [ ] Push to GitHub (pauljkwa/munymo-mvp-v1)

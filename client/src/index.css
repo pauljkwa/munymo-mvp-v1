@@ -32,17 +32,17 @@
   --color-muted:           oklch(0.42 0.010 260);   /* medium grey text */
   --color-subtle:          oklch(0.62 0.008 260);   /* light grey text */
 
-  /* Brand — deep navy with gold accent */
-  --color-brand:           oklch(0.42 0.12 255);    /* deep navy blue */
-  --color-brand-hover:     oklch(0.35 0.14 255);
-  --color-brand-muted:     oklch(0.42 0.12 255 / 0.08);
+  /* Brand — deep forest green */
+  --color-brand:           oklch(0.35 0.10 160);    /* #002000 deep forest green */
+  --color-brand-hover:     oklch(0.28 0.12 160);
+  --color-brand-muted:     oklch(0.35 0.10 160 / 0.08);
   --color-brand-foreground: oklch(0.99 0.002 240);
 
-  /* Gold accent (for highlights, scores, CTAs) */
-  --color-gold:            oklch(0.72 0.14 75);
-  --color-gold-hover:      oklch(0.65 0.16 75);
-  --color-gold-muted:      oklch(0.72 0.14 75 / 0.12);
-  --color-gold-foreground: oklch(0.15 0.010 260);
+  /* Emerald accent — brand green #009050 */
+  --color-gold:            oklch(0.58 0.16 155);    /* #009050 emerald green */
+  --color-gold-hover:      oklch(0.50 0.18 155);
+  --color-gold-muted:      oklch(0.58 0.16 155 / 0.12);
+  --color-gold-foreground: oklch(0.99 0.002 240);
 
   /* Semantic */
   --color-success:         oklch(0.52 0.16 145);
@@ -89,14 +89,14 @@
   --color-muted:           oklch(0.62 0.010 260);
   --color-subtle:          oklch(0.42 0.010 260);
 
-  --color-brand:           oklch(0.68 0.14 255);
-  --color-brand-hover:     oklch(0.74 0.16 255);
-  --color-brand-muted:     oklch(0.68 0.14 255 / 0.15);
+  --color-brand:           oklch(0.45 0.12 160);
+  --color-brand-hover:     oklch(0.52 0.14 160);
+  --color-brand-muted:     oklch(0.45 0.12 160 / 0.15);
   --color-brand-foreground: oklch(0.11 0.012 260);
 
-  --color-gold:            oklch(0.78 0.14 75);
-  --color-gold-hover:      oklch(0.84 0.16 75);
-  --color-gold-muted:      oklch(0.78 0.14 75 / 0.15);
+  --color-gold:            oklch(0.68 0.18 155);    /* brighter emerald in dark mode */
+  --color-gold-hover:      oklch(0.74 0.20 155);
+  --color-gold-muted:      oklch(0.68 0.18 155 / 0.15);
   --color-gold-foreground: oklch(0.11 0.012 260);
 
   --color-success:         oklch(0.72 0.18 145);
@@ -256,7 +256,7 @@
   }
   .btn-brand:active { transform: scale(0.97); }
 
-  /* Gold CTA button */
+  /* Emerald CTA button */
   .btn-gold {
     display: inline-flex;
     align-items: center;
@@ -275,7 +275,7 @@
   }
   .btn-gold:hover {
     background: var(--color-gold-hover);
-    box-shadow: 0 4px 16px oklch(0.72 0.14 75 / 0.30);
+    box-shadow: 0 4px 16px oklch(0.58 0.16 155 / 0.30);
   }
   .btn-gold:active { transform: scale(0.97); }
 
@@ -459,9 +459,9 @@
     background-clip: text;
   }
 
-  /* Text gradient — gold */
+  /* Text gradient — emerald green */
   .text-gradient-gold {
-    background: linear-gradient(135deg, var(--color-gold) 0%, oklch(0.82 0.12 55) 100%);
+    background: linear-gradient(135deg, var(--color-gold) 0%, oklch(0.72 0.20 145) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;

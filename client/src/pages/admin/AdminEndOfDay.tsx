@@ -83,12 +83,19 @@ const defaultForm: FormState = {
 function parseJsonImport(raw: string): Partial<FormState> | null {
   try {
     const obj = JSON.parse(raw);
-    const metrics: MetricRow[] = obj.nextResearchMetrics
-      ? Object.entries(obj.nextResearchMetrics as Record<string, string>).map(([label, value]) => ({
-          id: makeId(),
-          label,
-          value,
-        }))
+    // Filter out analyst consensus from pre-game metrics — it belongs in Hindsight Spotlight only
+    const CONSENSUS_PATTERN = /analyst\s*(consensus|rating|rec|recommendation)/i;
+    const rawMetrics = obj.nextResearchMetrics
+      ? Object.entries(obj.nextResearchMetrics as Record<string, string>)
+      : [];
+    const filteredMetrics = rawMetrics.filter(([label]) => !CONSENSUS_PATTERN.test(label));
+    const removedCount = rawMetrics.length - filteredMetrics.length;
+    if (removedCount > 0) {
+      // We'll surface a warning via a returned flag so the caller can toast
+      (obj as Record<string, unknown>).__consensusRemoved = removedCount;
+    }
+    const metrics: MetricRow[] = filteredMetrics.length > 0
+      ? filteredMetrics.map(([label, value]) => ({ id: makeId(), label, value }))
       : [];
     return {
       closeGameId: String(obj.closeGameId ?? ""),
@@ -147,7 +154,9 @@ export default function AdminEndOfDay() {
   }
 
   function handleJsonImport() {
-    const parsed = parseJsonImport(jsonInput);
+    let obj: Record<string, unknown> | null = null;
+    try { obj = JSON.parse(jsonInput); } catch { /* handled below */ }
+    const parsed = obj ? parseJsonImport(jsonInput) : null;
     if (!parsed) {
       setJsonError("Invalid JSON — please check the format and try again.");
       return;
@@ -156,7 +165,15 @@ export default function AdminEndOfDay() {
     setForm((prev) => ({ ...prev, ...parsed }));
     setShowJsonPanel(false);
     setJsonInput("");
-    toast.success("Fields populated from JSON. Please review before submitting.");
+    const removed = obj?.__consensusRemoved as number | undefined;
+    if (removed && removed > 0) {
+      toast.warning(
+        `${removed} analyst consensus metric${removed > 1 ? "s were" : " was"} removed from Research Metrics. Analyst consensus belongs in the Hindsight Spotlight only.`,
+        { duration: 6000 }
+      );
+    } else {
+      toast.success("Fields populated from JSON. Please review before submitting.");
+    }
   }
 
   function addMetric() {
@@ -382,7 +399,7 @@ export default function AdminEndOfDay() {
             <div className="space-y-1.5">
               <Label>Hindsight Spotlight <span className="text-destructive">*</span></Label>
               <p className="text-xs text-muted-foreground">
-                Educational debrief: what the research indicated → how players voted → what actually happened → conclusions with hindsight.
+                Post-result educational debrief. Cover: what the research indicated → how players voted → what actually happened → conclusions with hindsight. <strong>Include analyst consensus here</strong> (e.g. "14 analysts had a Buy rating on Company A — the market agreed") as a retrospective teaching point, not as pre-game guidance.
               </p>
               <Textarea
                 rows={5}
@@ -509,7 +526,7 @@ export default function AdminEndOfDay() {
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                Key financial data points displayed as a structured table. Add, remove, and edit freely — these are not hard-coded.
+                Key financial data points displayed as a structured table. Add, remove, and edit freely — these are not hard-coded. <strong>Do not include analyst consensus ratings here</strong> — that belongs in the Hindsight Spotlight post-result debrief only.
               </p>
               <div className="space-y-2">
                 {form.metrics.map((m) => (

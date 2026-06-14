@@ -127,7 +127,7 @@ export default function Home() {
                 style={{
                   background: "var(--color-brand-muted)",
                   color: "var(--color-brand)",
-                  border: "1px solid oklch(0.42 0.12 255 / 0.2)",
+                  border: "1px solid oklch(0.35 0.10 160 / 0.2)",
                 }}
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
@@ -446,7 +446,7 @@ export default function Home() {
               style={{
                 background: "var(--color-gold-muted)",
                 color: "var(--color-gold)",
-                border: "1px solid oklch(0.72 0.14 75 / 0.2)",
+                border: "1px solid oklch(0.58 0.16 155 / 0.2)",
               }}
             >
               <Sparkles size={11} />
@@ -632,7 +632,7 @@ export default function Home() {
             className="mt-8 rounded-xl p-8"
             style={{
               background: "var(--color-brand-muted)",
-              border: "1px solid oklch(0.42 0.12 255 / 0.15)",
+              border: "1px solid oklch(0.35 0.10 160 / 0.15)",
             }}
           >
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
