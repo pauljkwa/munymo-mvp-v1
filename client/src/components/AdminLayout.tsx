@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Link, useLocation } from "wouter";
 import {
@@ -8,6 +9,9 @@ import {
   ChevronRight,
   LogOut,
   Sunset,
+  Menu,
+  X,
+  Home,
 } from "lucide-react";
 import MunymoLogo from "@/components/MunymoLogo";
 
@@ -22,13 +26,16 @@ const navItems = [
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const [location] = useLocation();
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const isActive = (href: string, exact?: boolean) =>
     exact ? location === href : location.startsWith(href);
 
+  const close = () => setDrawerOpen(false);
+
   return (
     <div className="min-h-dvh flex" style={{ background: "var(--color-background)" }}>
-      {/* ── Sidebar ── */}
+      {/* ── Desktop Sidebar ── */}
       <aside
         className="hidden md:flex flex-col w-60 shrink-0 border-r"
         style={{
@@ -39,7 +46,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       >
         {/* Logo */}
         <div className="h-16 flex items-center gap-2 px-5 border-b" style={{ borderColor: "var(--color-border)" }}>
-          <MunymoLogo variant="full" height={30} />
+          <Link href="/" aria-label="Back to site">
+            <MunymoLogo variant="full" height={30} />
+          </Link>
           <div
             className="ml-1 text-xs font-semibold px-2 py-0.5 rounded"
             style={{ background: "var(--color-warning-muted)", color: "var(--color-warning)" }}
@@ -77,7 +86,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors"
             style={{ color: "var(--color-subtle)" }}
           >
-            ← Back to site
+            <Home size={14} />
+            Back to site
           </Link>
           <button
             onClick={() => logout()}
@@ -100,20 +110,97 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
       {/* ── Main ── */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Mobile header */}
+
+        {/* Mobile header — always visible on small screens */}
         <header
-          className="md:hidden h-14 flex items-center gap-3 px-4 border-b"
+          className="md:hidden h-14 flex items-center justify-between px-4 border-b sticky top-0 z-40"
           style={{ background: "var(--color-surface)", borderColor: "var(--color-border)" }}
         >
-          <MunymoLogo variant="full" height={26} />
-          <span
-            className="text-xs font-semibold px-2 py-0.5 rounded"
-            style={{ background: "var(--color-warning-muted)", color: "var(--color-warning)" }}
-          >
-            Admin
-          </span>
+          <Link href="/" aria-label="Back to site" onClick={close}>
+            <MunymoLogo variant="full" height={26} />
+          </Link>
+          <div className="flex items-center gap-2">
+            <span
+              className="text-xs font-semibold px-2 py-0.5 rounded"
+              style={{ background: "var(--color-warning-muted)", color: "var(--color-warning)" }}
+            >
+              Admin
+            </span>
+            <button
+              className="w-9 h-9 rounded-md flex items-center justify-center transition-colors"
+              style={{
+                color: drawerOpen ? "var(--color-brand)" : "var(--color-muted)",
+                border: `1px solid ${drawerOpen ? "var(--color-brand)" : "var(--color-border)"}`,
+                background: drawerOpen ? "var(--color-brand-muted)" : "transparent",
+              }}
+              onClick={() => setDrawerOpen(!drawerOpen)}
+              aria-label="Toggle admin menu"
+              aria-expanded={drawerOpen}
+            >
+              {drawerOpen ? <X size={18} /> : <Menu size={18} />}
+            </button>
+          </div>
         </header>
+
+        {/* Mobile nav drawer */}
+        {drawerOpen && (
+          <div
+            className="md:hidden border-b"
+            style={{ borderColor: "var(--color-border)", background: "var(--color-surface)" }}
+          >
+            <div className="px-4 py-3 flex flex-col gap-0.5">
+              {navItems.map((item) => {
+                const active = isActive(item.href, item.exact);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-all duration-150"
+                    style={{
+                      color: active ? "var(--color-brand)" : "var(--color-foreground)",
+                      background: active ? "var(--color-brand-muted)" : "transparent",
+                    }}
+                    onClick={close}
+                  >
+                    <item.icon size={16} />
+                    {item.label}
+                    <ChevronRight size={14} className="ml-auto" style={{ color: "var(--color-subtle)" }} />
+                  </Link>
+                );
+              })}
+              <div
+                className="mt-2 pt-3 flex flex-col gap-1"
+                style={{ borderTop: "1px solid var(--color-border)" }}
+              >
+                <Link
+                  href="/"
+                  className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition-colors"
+                  style={{ color: "var(--color-muted)" }}
+                  onClick={close}
+                >
+                  <Home size={16} />
+                  Back to site
+                </Link>
+                <button
+                  onClick={() => { logout(); close(); }}
+                  className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm w-full text-left transition-colors"
+                  style={{ color: "var(--color-muted)" }}
+                >
+                  <LogOut size={16} />
+                  Sign out
+                  {user && (
+                    <span className="ml-auto text-xs" style={{ color: "var(--color-subtle)" }}>
+                      {user.name}
+                    </span>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <main className="flex-1 p-6 overflow-auto">{children}</main>
+
         {/* Footer */}
         <footer
           className="px-6 py-4 border-t text-xs"

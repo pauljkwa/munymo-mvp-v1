@@ -18,6 +18,11 @@ import AdminPublishResult from "./pages/admin/AdminPublishResult";
 import AdminPlayers from "./pages/admin/AdminPlayers";
 import AdminAuditLog from "./pages/admin/AdminAuditLog";
 import AdminEndOfDay from "./pages/admin/AdminEndOfDay";
+import EvolutionOfMunymo from "./pages/EvolutionOfMunymo";
+import TermsOfUse from "./pages/legal/TermsOfUse";
+import PrivacyPolicy from "./pages/legal/PrivacyPolicy";
+import Disclaimer from "./pages/legal/Disclaimer";
+import ResponsibleGaming from "./pages/legal/ResponsibleGaming";
 
 function Router() {
   return (
@@ -30,6 +35,11 @@ function Router() {
       <Route path="/research" component={ResearchHub} />
       <Route path="/research/:id" component={ArchiveGame} />
       <Route path="/profile" component={PlayerProfile} />
+      <Route path="/evolution" component={EvolutionOfMunymo} />
+      <Route path="/terms" component={TermsOfUse} />
+      <Route path="/privacy" component={PrivacyPolicy} />
+      <Route path="/disclaimer" component={Disclaimer} />
+      <Route path="/responsible-gaming" component={ResponsibleGaming} />
 
       {/* Admin */}
       <Route path="/admin" component={AdminDashboard} />

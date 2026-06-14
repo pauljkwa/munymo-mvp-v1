@@ -163,5 +163,20 @@
 - [x] Wrap NotFound.tsx in PublicLayout (currently standalone with no nav)
 - [x] Verify all other public pages use PublicLayout
 - [x] Verify all other admin pages use AdminLayout
+- [x] Save checkpoint
+- [x] Push to GitHub (99e31a0..b98e815)
+
+## Phase 17: Navigation, Legal Pages & Evolution of Munymo
+
+- [x] PublicLayout: hamburger in header on ALL screen sizes (not just mobile), one-click nav to all role-appropriate pages, logo links to home, footer has internal links to all pages including legal
+- [x] AdminLayout: hamburger on mobile header opens full admin nav drawer with all admin links
+- [x] Create /terms page (Terms of Use)
+- [x] Create /privacy page (Privacy Policy)
+- [x] Create /disclaimer page (Disclaimer)
+- [x] Create /responsible-gaming page (Responsible Gaming)
+- [x] Wire all four legal routes in App.tsx
+- [x] Create /evolution page (Evolution of Munymo — detailed, conversational tone)
+- [x] Wire /evolution route in App.tsx
+- [x] Add legal and evolution links to footer
 - [ ] Save checkpoint
 - [ ] Push to GitHub
