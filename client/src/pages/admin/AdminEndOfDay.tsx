@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
+import AdminLayout from "@/components/AdminLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -256,6 +257,7 @@ export default function AdminEndOfDay() {
   }
 
   return (
+    <AdminLayout>
     <div className="max-w-3xl mx-auto py-8 px-4 space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between">
@@ -686,5 +688,6 @@ export default function AdminEndOfDay() {
         </Button>
       </div>
     </div>
+    </AdminLayout>
   );
 }

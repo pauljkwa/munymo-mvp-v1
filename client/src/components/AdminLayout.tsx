@@ -7,11 +7,13 @@ import {
   ScrollText,
   ChevronRight,
   LogOut,
+  Sunset,
 } from "lucide-react";
 import MunymoLogo from "@/components/MunymoLogo";
 
 const navItems = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true },
+  { href: "/admin/end-of-day", label: "End of Day", icon: Sunset },
   { href: "/admin/games/new", label: "New Game", icon: PlusCircle },
   { href: "/admin/players", label: "Players", icon: Users },
   { href: "/admin/audit", label: "Audit Log", icon: ScrollText },
@@ -112,6 +114,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </span>
         </header>
         <main className="flex-1 p-6 overflow-auto">{children}</main>
+        {/* Footer */}
+        <footer
+          className="px-6 py-4 border-t text-xs"
+          style={{
+            borderColor: "var(--color-border)",
+            background: "var(--color-surface)",
+            color: "var(--color-subtle)",
+          }}
+        >
+          © {new Date().getFullYear()} Munymo &mdash; Admin Console
+        </footer>
       </div>
     </div>
   );

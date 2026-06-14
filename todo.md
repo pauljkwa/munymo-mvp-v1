@@ -154,5 +154,14 @@
 - [x] Update daily curation prompt v2 (MD) — move analyst consensus from researchMetrics block to hindsightSpotlight block
 - [x] Regenerate daily curation prompt v2 PDF from updated MD
 - [x] Fix hero headline accent colour from amber/gold to brand green (#009050) in Home.tsx
+- [x] Save checkpoint
+- [x] Push to GitHub (pauljkwa/munymo-mvp-v1) — pushed successfully (faa8ad0..99e31a0)
+
+## Phase 16: Layout Consistency — Header/Footer/Nav on All Pages
+
+- [x] Wrap AdminEndOfDay.tsx in AdminLayout (currently has no layout — no header, footer, or nav)
+- [x] Wrap NotFound.tsx in PublicLayout (currently standalone with no nav)
+- [x] Verify all other public pages use PublicLayout
+- [x] Verify all other admin pages use AdminLayout
 - [ ] Save checkpoint
-- [ ] Push to GitHub (pauljkwa/munymo-mvp-v1)
+- [ ] Push to GitHub
