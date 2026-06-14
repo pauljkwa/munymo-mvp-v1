@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
 import { trpc } from "@/lib/trpc";
@@ -15,8 +15,6 @@ import {
   Smartphone,
   Users,
   Award,
-  ChevronLeft,
-  ChevronRight,
   Sparkles,
   BarChart2,
   CheckCircle2,
@@ -93,8 +91,26 @@ export default function Home() {
   const { isAuthenticated } = useAuth();
   const { data: todayGame } = trpc.games.getToday.useQuery();
   const [activeCard, setActiveCard] = useState(0);
+  const touchStartX = useRef<number | null>(null);
 
   const card = MUNYIQ_CARDS[activeCard];
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const delta = e.changedTouches[0].clientX - touchStartX.current;
+    if (Math.abs(delta) > 40) {
+      if (delta < 0) {
+        setActiveCard((p) => (p + 1) % MUNYIQ_CARDS.length);
+      } else {
+        setActiveCard((p) => (p - 1 + MUNYIQ_CARDS.length) % MUNYIQ_CARDS.length);
+      }
+    }
+    touchStartX.current = null;
+  };
 
   return (
     <PublicLayout>
@@ -455,7 +471,11 @@ export default function Home() {
                 className="absolute inset-0 rounded-3xl blur-3xl opacity-30 transition-all duration-700 pointer-events-none"
                 style={{ background: card.glowColor, transform: "scale(0.8)" }}
               />
-              <div className="relative w-full max-w-md">
+              <div
+                className="relative w-full max-w-md select-none"
+                onTouchStart={handleTouchStart}
+                onTouchEnd={handleTouchEnd}
+              >
                 <img
                   src={card.img}
                   alt={`MunyIQ ${card.tier} Tier Card`}
@@ -466,16 +486,8 @@ export default function Home() {
                 />
               </div>
 
-              {/* Tier selector */}
-              <div className="flex items-center gap-3 mt-8">
-                <button
-                  onClick={() => setActiveCard((p) => (p - 1 + MUNYIQ_CARDS.length) % MUNYIQ_CARDS.length)}
-                  className="w-8 h-8 rounded-full flex items-center justify-center transition-colors"
-                  style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", color: "var(--color-muted)" }}
-                  aria-label="Previous tier"
-                >
-                  <ChevronLeft size={15} />
-                </button>
+              {/* Tier selector — dots only, swipe to navigate on mobile */}
+              <div className="flex items-center justify-center gap-3 mt-8">
                 {MUNYIQ_CARDS.map((c, i) => (
                   <button
                     key={c.tier}
@@ -488,14 +500,6 @@ export default function Home() {
                     aria-label={`${c.tier} tier`}
                   />
                 ))}
-                <button
-                  onClick={() => setActiveCard((p) => (p + 1) % MUNYIQ_CARDS.length)}
-                  className="w-8 h-8 rounded-full flex items-center justify-center transition-colors"
-                  style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", color: "var(--color-muted)" }}
-                  aria-label="Next tier"
-                >
-                  <ChevronRight size={15} />
-                </button>
               </div>
             </div>
 
