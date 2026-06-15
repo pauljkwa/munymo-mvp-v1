@@ -83,43 +83,71 @@ const defaultForm: FormState = {
 
 function parseJsonImport(raw: string): Partial<FormState> | null {
   try {
-    const obj = JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+
+    // Support both the nested curation-prompt format { today: {...}, tomorrow: {...} }
+    // and the flat legacy format where all keys are at the top level.
+    // Also support a standalone { tomorrow: {...} } block (Game 1 special prompt).
+    const tomorrow = parsed.tomorrow ?? parsed;
+    const today = parsed.today ?? parsed;
+
     // Filter out analyst consensus from pre-game metrics — it belongs in Hindsight Spotlight only
     const CONSENSUS_PATTERN = /analyst\s*(consensus|rating|rec|recommendation)/i;
-    const rawMetrics = obj.nextResearchMetrics
-      ? Object.entries(obj.nextResearchMetrics as Record<string, string>)
-      : [];
+    const rawMetrics = tomorrow.researchMetrics
+      ? Object.entries(tomorrow.researchMetrics as Record<string, string>)
+      : (parsed.nextResearchMetrics
+          ? Object.entries(parsed.nextResearchMetrics as Record<string, string>)
+          : []);
     const filteredMetrics = rawMetrics.filter(([label]) => !CONSENSUS_PATTERN.test(label));
     const removedCount = rawMetrics.length - filteredMetrics.length;
     if (removedCount > 0) {
-      // We'll surface a warning via a returned flag so the caller can toast
-      (obj as Record<string, unknown>).__consensusRemoved = removedCount;
+      (parsed as Record<string, unknown>).__consensusRemoved = removedCount;
     }
     const metrics: MetricRow[] = filteredMetrics.length > 0
-      ? filteredMetrics.map(([label, value]) => ({ id: makeId(), label, value }))
+      ? filteredMetrics.map(([label, value]) => ({ id: makeId(), label, value: String(value) }))
       : [];
+
+    // Helper: read from nested tomorrow block first, then flat top-level fallback
+    const t = (nestedKey: string, flatKey?: string): unknown =>
+      tomorrow[nestedKey] !== undefined ? tomorrow[nestedKey] : parsed[flatKey ?? nestedKey];
+    const td = (nestedKey: string, flatKey?: string): unknown =>
+      today[nestedKey] !== undefined ? today[nestedKey] : parsed[flatKey ?? nestedKey];
+
+    // Validation question — nested under tomorrow.validationQuestion or flat keys
+    const vq = tomorrow.validationQuestion ?? {};
+    const questionType = vq.questionType ?? t("questionType", "nextQuestionType") ?? "";
+    const questionText = vq.questionText ?? t("questionText", "nextQuestionText") ?? "";
+    const questionOptions = vq.options ?? t("options", "nextQuestionOptions") ?? ["", ""];
+    const correctAnswer = vq.correctAnswer ?? t("correctAnswer", "nextCorrectAnswer") ?? "";
+
+    // lockoutTime field name varies: curation prompt uses lockoutTime, flat uses nextLockoutAt
+    const lockoutAt = String(t("lockoutTime", "nextLockoutAt") ?? "");
+
     return {
-      closeGameId: String(obj.closeGameId ?? ""),
-      winner: obj.winner ?? "",
-      companyAPerf: obj.companyAPerf !== undefined ? String(obj.companyAPerf) : "",
-      companyBPerf: obj.companyBPerf !== undefined ? String(obj.companyBPerf) : "",
-      resultSummary: obj.resultSummary ?? "",
-      hindsightSpotlight: obj.hindsightSpotlight ?? "",
-      nextGameDate: obj.nextGameDate ?? "",
-      nextExchange: obj.nextExchange ?? "NASDAQ",
-      nextCompanyAName: obj.nextCompanyAName ?? "",
-      nextCompanyATicker: obj.nextCompanyATicker ?? "",
-      nextCompanyBName: obj.nextCompanyBName ?? "",
-      nextCompanyBTicker: obj.nextCompanyBTicker ?? "",
-      nextSector: obj.nextSector ?? "",
-      nextPairingRationale: obj.nextPairingRationale ?? "",
-      nextLockoutAt: obj.nextLockoutAt ?? "",
-      nextResearchContent: obj.nextResearchContent ?? "",
+      // Today / close section
+      closeGameId: String(td("gameId", "closeGameId") ?? ""),
+      winner: (String(td("winner", "winner") ?? "") as "A" | "B" | ""),
+      companyAPerf: td("companyAPerf") !== undefined ? String(td("companyAPerf")) : "",
+      companyBPerf: td("companyBPerf") !== undefined ? String(td("companyBPerf")) : "",
+      resultSummary: String(td("resultSummary") ?? ""),
+      hindsightSpotlight: String(td("hindsightSpotlight") ?? ""),
+      // Tomorrow section
+      nextGameDate: String(t("gameDate", "nextGameDate") ?? ""),
+      nextExchange: String(t("exchange", "nextExchange") ?? "NASDAQ"),
+      nextCompanyAName: String(t("companyAName", "nextCompanyAName") ?? ""),
+      nextCompanyATicker: String(t("companyATicker", "nextCompanyATicker") ?? ""),
+      nextCompanyBName: String(t("companyBName", "nextCompanyBName") ?? ""),
+      nextCompanyBTicker: String(t("companyBTicker", "nextCompanyBTicker") ?? ""),
+      nextSector: String(t("sector", "nextSector") ?? ""),
+      nextPairingRationale: String(t("pairingRationale", "nextPairingRationale") ?? ""),
+      nextLockoutAt: lockoutAt,
+      nextResearchContent: String(t("researchContent", "nextResearchContent") ?? ""),
       metrics: metrics.length > 0 ? metrics : [{ id: makeId(), label: "", value: "" }],
-      nextQuestionType: obj.nextQuestionType ?? "",
-      nextQuestionText: obj.nextQuestionText ?? "",
-      nextQuestionOptions: obj.nextQuestionOptions ?? ["", ""],
-      nextCorrectAnswer: obj.nextCorrectAnswer ?? "",
+      // Validation question
+      nextQuestionType: String(questionType) as "multiple_choice" | "yes_no" | "true_false" | "",
+      nextQuestionText: String(questionText),
+      nextQuestionOptions: Array.isArray(questionOptions) ? questionOptions : ["", ""],
+      nextCorrectAnswer: String(correctAnswer),
     };
   } catch {
     return null;
