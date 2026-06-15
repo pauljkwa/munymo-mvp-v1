@@ -8,6 +8,7 @@ import {
   gameCommunityStats,
   gameResearch,
   leaderboardStats,
+  metricExplanations,
   playerPicks,
   streakRecords,
   users,
@@ -582,4 +583,37 @@ export async function getAuditLog(limit = 50, offset = 0) {
     .orderBy(desc(adminAuditLog.createdAt))
     .limit(limit)
     .offset(offset);
+}
+
+// ─── Metric Explanations ────────────────────────────────────────────────────────
+
+/** Normalise a metric label into a stable cache key */
+export function normaliseMetricKey(label: string): string {
+  return label.toLowerCase().trim().replace(/\s+/g, " ");
+}
+
+export async function getMetricExplanation(metricLabel: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const key = normaliseMetricKey(metricLabel);
+  const result = await db
+    .select()
+    .from(metricExplanations)
+    .where(eq(metricExplanations.metricKey, key))
+    .limit(1);
+  return result[0];
+}
+
+export async function upsertMetricExplanation(
+  metricLabel: string,
+  explanation: string,
+  aiGenerated = true
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const key = normaliseMetricKey(metricLabel);
+  await db
+    .insert(metricExplanations)
+    .values({ metricKey: key, metricLabel, explanation, aiGenerated })
+    .onDuplicateKeyUpdate({ set: { explanation, aiGenerated, updatedAt: new Date() } });
 }

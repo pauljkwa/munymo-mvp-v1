@@ -238,3 +238,16 @@
 - [x] Update vitest tests for Clerk-based logout
 - [ ] Save checkpoint
 - [ ] Push to GitHub
+
+## Phase 21: AI Metric Explanation System
+
+- [ ] Add metricExplanations table to drizzle/schema.ts (id, metricName normalised key, explanation text, createdAt, updatedAt)
+- [ ] Run pnpm db:push to migrate
+- [ ] Add getMetricExplanation and upsertMetricExplanation helpers to server/db.ts
+- [ ] Add metrics.getExplanation tRPC public procedure: check cache → if missing, call LLM to generate → store → return
+- [ ] Build MetricExplanationSheet component (bottom sheet on mobile, dialog on desktop)
+- [ ] Wire MetricExplanationSheet into research metrics display on DailyGame page
+- [ ] Wire MetricExplanationSheet into research metrics display on ArchiveGame page
+- [ ] Write vitest test for metrics.getExplanation procedure (mock LLM call)
+- [ ] Save checkpoint
+- [ ] Push to GitHub

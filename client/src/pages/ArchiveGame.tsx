@@ -3,6 +3,7 @@ import { useParams } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
 import { Link } from "wouter";
 import { ArrowLeft, Trophy, BookOpen, Users, Loader2, HelpCircle, Lightbulb } from "lucide-react";
+import { MetricExplanationSheet } from "@/components/MetricExplanationSheet";
 
 export default function ArchiveGame() {
   const { id } = useParams<{ id: string }>();
@@ -116,6 +117,36 @@ export default function ArchiveGame() {
             )}
             <div className="prose-munymo text-sm whitespace-pre-wrap">
               {research.content}
+            </div>
+          </div>
+        )}
+
+        {/* Key Metrics with explanations */}
+        {research?.metrics && Object.keys(research.metrics as Record<string, string>).length > 0 && (
+          <div className="card-glass p-6 mb-5 animate-fade-up delay-125">
+            <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--color-brand)" }}>
+              Key Metrics
+            </p>
+            <div className="rounded-lg overflow-hidden" style={{ border: "1px solid var(--color-border)" }}>
+              <table className="w-full text-sm">
+                <tbody>
+                  {Object.entries(research.metrics as Record<string, string>).map(([label, value], i, arr) => (
+                    <tr
+                      key={label}
+                      style={{
+                        borderBottom: i < arr.length - 1 ? "1px solid var(--color-border)" : undefined,
+                        background: i % 2 === 0 ? "var(--color-surface)" : "transparent",
+                      }}
+                    >
+                      <td className="px-4 py-2.5 font-medium" style={{ color: "var(--color-muted)" }}>
+                        <div>{label}</div>
+                        <MetricExplanationSheet metricLabel={label} />
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-mono font-semibold" style={{ color: "var(--color-foreground)" }}>{value}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}

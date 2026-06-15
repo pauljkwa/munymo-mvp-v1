@@ -5,6 +5,7 @@ import { useState, useEffect, useRef } from "react";
 import { Link } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
 import { CandlestickChart } from "@/components/CandlestickChart";
+import { MetricExplanationSheet } from "@/components/MetricExplanationSheet";
 import { toast } from "sonner";
 import {
   Brain,
@@ -610,7 +611,10 @@ export default function DailyGame() {
                               background: i % 2 === 0 ? "var(--color-surface)" : "transparent",
                             }}
                           >
-                            <td className="px-4 py-2.5 font-medium" style={{ color: "var(--color-muted)" }}>{label}</td>
+                            <td className="px-4 py-2.5 font-medium" style={{ color: "var(--color-muted)" }}>
+                              <div>{label}</div>
+                              <MetricExplanationSheet metricLabel={label} />
+                            </td>
                             <td className="px-4 py-2.5 text-right font-mono font-semibold" style={{ color: "var(--color-foreground)" }}>{value}</td>
                           </tr>
                         ))}
