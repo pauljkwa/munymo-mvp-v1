@@ -659,13 +659,13 @@ const adminRouter = router({
   endOfDay: adminProcedure
     .input(
       z.object({
-        // ── Close today's game ──
-        closeGameId: z.number(),
-        winner: z.enum(["A", "B"]),
-        companyAPerf: z.number(),
-        companyBPerf: z.number(),
-        resultSummary: z.string().min(1),
-        hindsightSpotlight: z.string().min(1),
+        // ── Close today's game (optional — omit for Game 1 / first game) ──
+        closeGameId: z.number().optional(),
+        winner: z.enum(["A", "B"]).optional(),
+        companyAPerf: z.number().optional(),
+        companyBPerf: z.number().optional(),
+        resultSummary: z.string().optional(),
+        hindsightSpotlight: z.string().optional(),
         // ── Tomorrow's game ──
         nextGameDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
         nextExchange: z.string().default("NASDAQ"),
@@ -690,42 +690,45 @@ const adminRouter = router({
       const db = await import("./db").then((m) => m.getDb());
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-      const game = await getGameById(input.closeGameId);
-      if (!game) throw new TRPCError({ code: "NOT_FOUND", message: "Game not found" });
-      if (game.status === "result_published") {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Result already published" });
-      }
-
-      // ── 1. Close today's game (same logic as publishResult) ──
-      await lockPicksForGame(input.closeGameId);
-      await snapshotResearch(input.closeGameId);
-      const question = await getValidationQuestion(input.closeGameId);
-      const picks = await getPicksForGame(input.closeGameId);
+      // ── 1. Close today's game (skipped if no closeGameId — Game 1 / first game) ──
+      let game: Awaited<ReturnType<typeof getGameById>> | null = null;
       const scoredPicks: Array<{ userId: number; predictionScore: number; validationScore: number; totalScore: number }> = [];
 
-      for (const pick of picks) {
-        if (!pick.finalSelection) continue;
-        const { predictionScore, validationScore } = calculateScore(
-          pick.finalSelection,
-          input.winner,
-          pick.validationAnswer,
-          question?.correctAnswer ?? ""
-        );
-        await insertDailyScore(pick.userId, input.closeGameId, predictionScore, validationScore);
-        scoredPicks.push({ userId: pick.userId, predictionScore, validationScore, totalScore: predictionScore + validationScore });
-        await upsertLeaderboardStat(pick.userId);
-        await updateStreakForPlayer(pick.userId, game.gameDate);
+      if (input.closeGameId) {
+        game = await getGameById(input.closeGameId);
+        if (!game) throw new TRPCError({ code: "NOT_FOUND", message: "Game not found" });
+        if (game.status === "result_published") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Result already published" });
+        }
+        await lockPicksForGame(input.closeGameId);
+        await snapshotResearch(input.closeGameId);
+        const question = await getValidationQuestion(input.closeGameId);
+        const picks = await getPicksForGame(input.closeGameId);
+
+        for (const pick of picks) {
+          if (!pick.finalSelection) continue;
+          const { predictionScore, validationScore } = calculateScore(
+            pick.finalSelection,
+            input.winner!,
+            pick.validationAnswer,
+            question?.correctAnswer ?? ""
+          );
+          await insertDailyScore(pick.userId, input.closeGameId, predictionScore, validationScore);
+          scoredPicks.push({ userId: pick.userId, predictionScore, validationScore, totalScore: predictionScore + validationScore });
+          await upsertLeaderboardStat(pick.userId);
+          await updateStreakForPlayer(pick.userId, game.gameDate);
+        }
+        await computeAndStoreCommunityStats(input.closeGameId);
+        await updateGame(input.closeGameId, {
+          status: "result_published",
+          winner: input.winner!,
+          companyAPerf: String(input.companyAPerf ?? 0),
+          companyBPerf: String(input.companyBPerf ?? 0),
+          resultSummary: input.resultSummary ?? "",
+          hindsightSpotlight: input.hindsightSpotlight ?? "",
+          publishedAt: new Date(),
+        });
       }
-      await computeAndStoreCommunityStats(input.closeGameId);
-      await updateGame(input.closeGameId, {
-        status: "result_published",
-        winner: input.winner,
-        companyAPerf: String(input.companyAPerf),
-        companyBPerf: String(input.companyBPerf),
-        resultSummary: input.resultSummary,
-        hindsightSpotlight: input.hindsightSpotlight,
-        publishedAt: new Date(),
-      });
 
       // ── 2. Create tomorrow's game ──
       await createGame({
@@ -766,32 +769,34 @@ const adminRouter = router({
         });
       }
 
-      await writeAuditLog(ctx.user.id, "end_of_day", "game", input.closeGameId, JSON.stringify({ winner: input.winner, nextGameDate: input.nextGameDate }));
+      await writeAuditLog(ctx.user.id, "end_of_day", "game", input.closeGameId ?? 0, JSON.stringify({ winner: input.winner, nextGameDate: input.nextGameDate }));
 
-      // ── 3. Send result emails ──
-      try {
-        const allUsers = await getAllUsers();
-        const userMap = new Map(allUsers.map((u) => [u.id, u]));
-        for (const scored of scoredPicks) {
-          const user = userMap.get(scored.userId);
-          if (!user?.email) continue;
-          const { subject, html } = buildResultPublishedEmail({
-            playerName: user.name,
-            companyAName: game.companyAName,
-            companyATicker: game.companyATicker,
-            companyBName: game.companyBName,
-            companyBTicker: game.companyBTicker,
-            winner: input.winner,
-            predictionScore: scored.predictionScore,
-            validationScore: scored.validationScore,
-            totalScore: scored.totalScore,
-            resultCommentary: input.resultSummary,
-            gameDate: game.gameDate,
-          });
-          await import("./email").then((m) => m.sendEmail({ to: user.email!, subject, html }));
+      // ── 3. Send result emails (only if a game was closed) ──
+      if (game && scoredPicks.length > 0) {
+        try {
+          const allUsers = await getAllUsers();
+          const userMap = new Map(allUsers.map((u) => [u.id, u]));
+          for (const scored of scoredPicks) {
+            const user = userMap.get(scored.userId);
+            if (!user?.email) continue;
+            const { subject, html } = buildResultPublishedEmail({
+              playerName: user.name,
+              companyAName: game.companyAName,
+              companyATicker: game.companyATicker,
+              companyBName: game.companyBName,
+              companyBTicker: game.companyBTicker,
+              winner: input.winner!,
+              predictionScore: scored.predictionScore,
+              validationScore: scored.validationScore,
+              totalScore: scored.totalScore,
+              resultCommentary: input.resultSummary ?? "",
+              gameDate: game.gameDate,
+            });
+            await import("./email").then((m) => m.sendEmail({ to: user.email!, subject, html }));
+          }
+        } catch (err) {
+          console.warn("[Email] End-of-day result notifications failed:", err);
         }
-      } catch (err) {
-        console.warn("[Email] End-of-day result notifications failed:", err);
       }
 
       return { success: true, nextGameId: nextGame?.id };

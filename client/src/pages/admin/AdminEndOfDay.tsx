@@ -253,7 +253,9 @@ export default function AdminEndOfDay() {
   }
 
   function handleSubmit() {
-    if (!form.closeGameId || !form.winner || !form.resultSummary || !form.hindsightSpotlight) {
+    // Close section is only required when there are active games to close
+    const hasActiveGame = activeGames.length > 0;
+    if (hasActiveGame && (!form.closeGameId || !form.winner || !form.resultSummary || !form.hindsightSpotlight)) {
       toast.error("Please complete all required fields in the 'Close Today's Game' section.");
       return;
     }
@@ -268,12 +270,14 @@ export default function AdminEndOfDay() {
     });
 
     endOfDay.mutate({
-      closeGameId: parseInt(form.closeGameId),
-      winner: form.winner as "A" | "B",
-      companyAPerf: parseFloat(form.companyAPerf) || 0,
-      companyBPerf: parseFloat(form.companyBPerf) || 0,
-      resultSummary: form.resultSummary,
-      hindsightSpotlight: form.hindsightSpotlight,
+      ...(hasActiveGame && form.closeGameId ? {
+        closeGameId: parseInt(form.closeGameId),
+        winner: form.winner as "A" | "B",
+        companyAPerf: parseFloat(form.companyAPerf) || 0,
+        companyBPerf: parseFloat(form.companyBPerf) || 0,
+        resultSummary: form.resultSummary,
+        hindsightSpotlight: form.hindsightSpotlight,
+      } : {}),
       nextGameDate: form.nextGameDate,
       nextExchange: form.nextExchange,
       nextCompanyAName: form.nextCompanyAName,
