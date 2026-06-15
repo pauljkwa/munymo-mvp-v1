@@ -8,6 +8,7 @@ import superjson from "superjson";
 import App from "./App";
 import "./index.css";
 
+// Production build — uses VITE_CLERK_PUBLISHABLE_KEY from environment
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string;
 
 const queryClient = new QueryClient();
