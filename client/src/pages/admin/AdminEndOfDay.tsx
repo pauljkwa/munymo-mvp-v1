@@ -121,7 +121,19 @@ function parseJsonImport(raw: string): Partial<FormState> | null {
     const correctAnswer = vq.correctAnswer ?? t("correctAnswer", "nextCorrectAnswer") ?? "";
 
     // lockoutTime field name varies: curation prompt uses lockoutTime, flat uses nextLockoutAt
-    const lockoutAt = String(t("lockoutTime", "nextLockoutAt") ?? "");
+    // Convert UTC ISO string to local datetime-local format (YYYY-MM-DDTHH:MM) for the date/time inputs
+    const rawLockout = String(t("lockoutTime", "nextLockoutAt") ?? "");
+    let lockoutAt = "";
+    if (rawLockout) {
+      try {
+        const d = new Date(rawLockout);
+        // Format as local time YYYY-MM-DDTHH:MM
+        const pad = (n: number) => String(n).padStart(2, "0");
+        lockoutAt = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      } catch {
+        lockoutAt = rawLockout;
+      }
+    }
 
     return {
       // Today / close section
@@ -502,8 +514,31 @@ export default function AdminEndOfDay() {
                 <Input placeholder="Technology" value={form.nextSector} onChange={(e) => set("nextSector", e.target.value)} />
               </div>
               <div className="space-y-1.5">
-                <Label>Lockout Time</Label>
-                <Input type="datetime-local" value={form.nextLockoutAt} onChange={(e) => set("nextLockoutAt", e.target.value ? new Date(e.target.value).toISOString() : "")} />
+                <Label>Lockout Time <span className="text-xs text-muted-foreground">(your local time)</span></Label>
+                <div className="flex gap-2">
+                  <Input
+                    type="date"
+                    className="flex-1"
+                    value={form.nextLockoutAt ? form.nextLockoutAt.slice(0, 10) : ""}
+                    onChange={(e) => {
+                      const datePart = e.target.value;
+                      const timePart = form.nextLockoutAt ? form.nextLockoutAt.slice(11, 16) : "21:00";
+                      if (datePart) set("nextLockoutAt", `${datePart}T${timePart}`);
+                      else set("nextLockoutAt", "");
+                    }}
+                  />
+                  <Input
+                    type="time"
+                    className="w-28"
+                    value={form.nextLockoutAt ? form.nextLockoutAt.slice(11, 16) : ""}
+                    onChange={(e) => {
+                      const timePart = e.target.value;
+                      const datePart = form.nextLockoutAt ? form.nextLockoutAt.slice(0, 10) : form.nextGameDate;
+                      if (timePart && datePart) set("nextLockoutAt", `${datePart}T${timePart}`);
+                    }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">NASDAQ open = 21:00 Perth · 13:00 UTC · 09:00 ET</p>
               </div>
             </div>
 
