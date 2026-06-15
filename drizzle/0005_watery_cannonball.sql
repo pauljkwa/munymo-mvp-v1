@@ -1,0 +1,1 @@
+ALTER TABLE `player_picks` ADD CONSTRAINT `player_picks_user_game_unique` UNIQUE(`userId`,`gameId`);

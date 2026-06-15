@@ -8,6 +8,7 @@ import {
   mysqlTable,
   text,
   timestamp,
+  uniqueIndex,
   varchar,
 } from "drizzle-orm/mysql-core";
 
@@ -142,21 +143,27 @@ export type InsertValidationQuestion =
 
 // ─── Player Picks ─────────────────────────────────────────────────────────────
 
-export const playerPicks = mysqlTable("player_picks", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
-  gameId: int("gameId").notNull(),
-  gutSelection: mysqlEnum("gutSelection", ["A", "B"]), // null until submitted
-  gutSubmittedAt: timestamp("gutSubmittedAt"),
-  finalSelection: mysqlEnum("finalSelection", ["A", "B"]), // null until submitted
-  finalSubmittedAt: timestamp("finalSubmittedAt"),
-  validationAnswer: varchar("validationAnswer", { length: 256 }),
-  validationAnswerTimeMs: int("validationAnswerTimeMs"), // ms from question display to answer submit
-  validationSubmittedAt: timestamp("validationSubmittedAt"),
-  isLocked: boolean("isLocked").default(false).notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+export const playerPicks = mysqlTable(
+  "player_picks",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").notNull(),
+    gameId: int("gameId").notNull(),
+    gutSelection: mysqlEnum("gutSelection", ["A", "B"]), // null until submitted
+    gutSubmittedAt: timestamp("gutSubmittedAt"),
+    finalSelection: mysqlEnum("finalSelection", ["A", "B"]), // null until submitted
+    finalSubmittedAt: timestamp("finalSubmittedAt"),
+    validationAnswer: varchar("validationAnswer", { length: 256 }),
+    validationAnswerTimeMs: int("validationAnswerTimeMs"), // ms from question display to answer submit
+    validationSubmittedAt: timestamp("validationSubmittedAt"),
+    isLocked: boolean("isLocked").default(false).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  (table) => ({
+    userGameUnique: uniqueIndex("player_picks_user_game_unique").on(table.userId, table.gameId),
+  })
+);
 
 export type PlayerPick = typeof playerPicks.$inferSelect;
 export type InsertPlayerPick = typeof playerPicks.$inferInsert;

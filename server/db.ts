@@ -316,8 +316,7 @@ export async function upsertGutSelection(userId: number, gameId: number, selecti
 export async function upsertFinalSelection(
   userId: number,
   gameId: number,
-  selection: "A" | "B",
-  validationAnswer: string
+  selection: "A" | "B"
 ) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -329,15 +328,11 @@ export async function upsertFinalSelection(
       gameId,
       finalSelection: selection,
       finalSubmittedAt: now,
-      validationAnswer,
-      validationSubmittedAt: now,
     })
     .onDuplicateKeyUpdate({
       set: {
         finalSelection: selection,
         finalSubmittedAt: now,
-        validationAnswer,
-        validationSubmittedAt: now,
       },
     });
 }

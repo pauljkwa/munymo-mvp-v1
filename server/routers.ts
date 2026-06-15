@@ -215,7 +215,7 @@ const picksRouter = router({
         });
       }
       // Store final selection without validation answer (submitted separately via timed modal)
-      await upsertFinalSelection(ctx.user.id, input.gameId, input.selection, "");
+      await upsertFinalSelection(ctx.user.id, input.gameId, input.selection);
       return { success: true };
     }),
 
