@@ -2,6 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { createChart, ColorType, CandlestickSeries, type Time } from "lightweight-charts";
 import { trpc } from "@/lib/trpc";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type Range = "1d" | "5d" | "1mo" | "3mo" | "6mo" | "1y";
 
@@ -108,22 +115,19 @@ export function CandlestickChart({ ticker, companyName, accentColor = "#009050" 
             </span>
           )}
         </div>
-        {/* Range selector */}
-        <div className="flex gap-1">
-          {RANGES.map((r) => (
-            <button
-              key={r.value}
-              onClick={() => setRange(r.value)}
-              className={`px-2 py-0.5 text-xs font-medium rounded transition-colors ${
-                range === r.value
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-            >
-              {r.label}
-            </button>
-          ))}
-        </div>
+        {/* Range selector — dropdown to avoid overflow on mobile */}
+        <Select value={range} onValueChange={(v) => setRange(v as Range)}>
+          <SelectTrigger className="h-7 w-20 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {RANGES.map((r) => (
+              <SelectItem key={r.value} value={r.value} className="text-xs">
+                {r.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Chart area */}

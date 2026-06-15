@@ -92,6 +92,59 @@ function ValidationModal({
       ? ["Yes", "No"]
       : ["True", "False"];
 
+  // Result phase: full-screen takeover so it can't be missed or accidentally dismissed
+  if (phase === "result" && result) {
+    const isCorrect = result.isCorrect;
+    return (
+      <div
+        className="fixed inset-0 z-50 flex flex-col items-center justify-center p-8"
+        style={{
+          background: isCorrect ? "oklch(0.28 0.12 145)" : "oklch(0.28 0.12 25)",
+          color: "#fff",
+        }}
+      >
+        <div className="text-center max-w-sm">
+          {isCorrect ? (
+            <CheckCircle2 size={80} className="mx-auto mb-6" style={{ color: "oklch(0.85 0.18 145)" }} />
+          ) : (
+            <XCircle size={80} className="mx-auto mb-6" style={{ color: "oklch(0.85 0.18 25)" }} />
+          )}
+          <h2 className="font-display text-4xl font-bold mb-4">
+            {isCorrect ? "Correct!" : "Incorrect"}
+          </h2>
+          {isCorrect ? (
+            <p className="text-lg mb-8" style={{ color: "oklch(0.9 0.06 145)" }}>
+              Well done — your research paid off. The 20% validation bonus has been added to your score.
+            </p>
+          ) : (
+            <div className="mb-8">
+              <p className="text-base mb-4" style={{ color: "oklch(0.9 0.06 25)" }}>
+                Not quite. The correct answer was:
+              </p>
+              <div
+                className="inline-block px-6 py-3 rounded-xl font-bold text-lg"
+                style={{ background: "oklch(0.2 0.1 25)", color: "#fff", border: "1px solid oklch(0.5 0.15 25)" }}
+              >
+                {result.correctAnswer}
+              </div>
+            </div>
+          )}
+          <button
+            className="w-full py-4 rounded-2xl font-bold text-lg transition-all active:scale-95"
+            style={{
+              background: "oklch(1 0 0 / 0.2)",
+              color: "#fff",
+              border: "2px solid oklch(1 0 0 / 0.4)",
+            }}
+            onClick={onClose}
+          >
+            Continue →
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     // Overlay — pointer-events blocked to prevent navigation
     <div
@@ -211,49 +264,7 @@ function ValidationModal({
           </>
         )}
 
-        {/* ── Phase: Result ── */}
-        {phase === "result" && result && (
-          <>
-            <div className="text-center mb-6">
-              {result.isCorrect ? (
-                <CheckCircle2 size={48} className="mx-auto mb-4" style={{ color: "#fff" }} />
-              ) : (
-                <XCircle size={48} className="mx-auto mb-4" style={{ color: "#fff" }} />
-              )}
-              <h3 className="font-display text-2xl mb-2" style={{ color: "#fff" }}>
-                {result.isCorrect ? "Correct!" : "Incorrect"}
-              </h3>
-              {result.isCorrect ? (
-                <p className="text-sm" style={{ color: "oklch(0.9 0.05 145)" }}>
-                  Well done — your research paid off. The 20% validation score has been added.
-                </p>
-              ) : (
-                <div>
-                  <p className="text-sm mb-3" style={{ color: "oklch(0.9 0.05 25)" }}>
-                    Not quite — the correct answer was:
-                  </p>
-                  <div
-                    className="inline-block px-4 py-2 rounded-lg font-bold text-sm"
-                    style={{ background: "oklch(0.25 0.1 25)", color: "#fff" }}
-                  >
-                    {result.correctAnswer}
-                  </div>
-                </div>
-              )}
-            </div>
-            <button
-              className="w-full py-3 rounded-xl font-semibold text-sm transition-all"
-              style={{
-                background: "oklch(1 0 0 / 0.15)",
-                color: "#fff",
-                border: "1px solid oklch(1 0 0 / 0.3)",
-              }}
-              onClick={onClose}
-            >
-              Continue
-            </button>
-          </>
-        )}
+        {/* Result phase is now handled as a full-screen early return above */}
       </div>
     </div>
   );
@@ -591,60 +602,84 @@ export default function DailyGame() {
                 </p>
               )}
 
-              {/* Research Metrics Table */}
-              {research?.metrics && Object.keys(research.metrics as Record<string, string>).length > 0 && (
-                <div className="mt-5">
-                  <p
-                    className="text-xs font-semibold uppercase tracking-wider mb-3"
-                    style={{ color: "var(--color-brand)" }}
-                  >
-                    Key Metrics
-                  </p>
-                  <div className="rounded-lg overflow-hidden" style={{ border: "1px solid var(--color-border)" }}>
-                    <table className="w-full text-sm">
-                      <tbody>
-                        {Object.entries(research.metrics as Record<string, string>).map(([label, value], i, arr) => (
-                          <tr
-                            key={label}
-                            style={{
-                              borderBottom: i < arr.length - 1 ? "1px solid var(--color-border)" : undefined,
-                              background: i % 2 === 0 ? "var(--color-surface)" : "transparent",
-                            }}
-                          >
-                            <td className="px-4 py-2.5 font-medium" style={{ color: "var(--color-muted)" }}>
-                              <div>{label}</div>
-                              <MetricExplanationSheet metricLabel={label} />
-                            </td>
-                            <td className="px-4 py-2.5 text-right font-mono font-semibold" style={{ color: "var(--color-foreground)" }}>{value}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
+              {/* Company Cards: metrics + chart side by side */}
+              {research?.metrics && (() => {
+                // Split flat metrics array into per-company groups by ticker prefix
+                const allMetrics = Object.entries(research.metrics as Record<string, string>);
+                const tickerA = (game.companyATicker ?? "").toUpperCase();
+                const tickerB = (game.companyBTicker ?? "").toUpperCase();
 
-              {/* Candlestick Charts */}
-              {game.companyATicker && game.companyBTicker && (
-                <div className="mt-6 space-y-4">
-                  <p
-                    className="text-xs font-semibold uppercase tracking-wider"
-                    style={{ color: "var(--color-brand)" }}
-                  >
-                    Price Charts
-                  </p>
-                  <CandlestickChart
-                    ticker={game.companyATicker}
-                    companyName={game.companyAName}
-                    accentColor="#009050"
-                  />
-                  <CandlestickChart
-                    ticker={game.companyBTicker}
-                    companyName={game.companyBName}
-                    accentColor="#1d4ed8"
-                  />
-                </div>
-              )}
+                // Match labels that start with the ticker followed by a space, dash, or em-dash
+                const matchesTicker = (label: string, ticker: string) => {
+                  const upper = label.toUpperCase();
+                  return (
+                    upper.startsWith(ticker + " ") ||
+                    upper.startsWith(ticker + "—") ||
+                    upper.startsWith(ticker + "-") ||
+                    upper.startsWith(ticker + ":") ||
+                    upper === ticker
+                  );
+                };
+
+                let metricsA = allMetrics.filter(([label]) => matchesTicker(label, tickerA));
+                let metricsB = allMetrics.filter(([label]) => matchesTicker(label, tickerB));
+
+                // Fallback: if ticker matching fails (e.g. labels don't include ticker prefix),
+                // split the list in half — first half to A, second half to B
+                if (metricsA.length === 0 && metricsB.length === 0 && allMetrics.length > 0) {
+                  const mid = Math.ceil(allMetrics.length / 2);
+                  metricsA = allMetrics.slice(0, mid);
+                  metricsB = allMetrics.slice(mid);
+                }
+
+                const CompanyCard = ({ ticker, companyName, metrics, accentColor }: { ticker: string; companyName: string; metrics: [string, string][]; accentColor: string }) => (
+                  <div className="rounded-xl overflow-hidden flex flex-col" style={{ border: "1px solid var(--color-border)", background: "var(--color-surface)" }}>
+                    {/* Card header */}
+                    <div className="px-4 py-3 flex items-center gap-2" style={{ borderBottom: "1px solid var(--color-border)", background: "var(--color-surface-raised)" }}>
+                      <span className="ticker-chip" style={{ fontSize: "0.65rem" }}>{ticker}</span>
+                      <span className="text-xs font-semibold truncate" style={{ color: "var(--color-foreground)" }}>{companyName}</span>
+                    </div>
+                    {/* Metrics rows */}
+                    {metrics.length > 0 && (
+                      <div className="divide-y" style={{ borderColor: "var(--color-border)" }}>
+                        {metrics.map(([label, value]) => {
+                          // Strip ticker prefix from label for cleaner display
+                          const shortLabel = label.replace(new RegExp(`^${ticker}\\s*[—\\-]\\s*`, "i"), "");
+                          return (
+                            <div key={label} className="px-3 py-2">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="text-xs font-medium leading-tight" style={{ color: "var(--color-muted)" }}>{shortLabel}</p>
+                                  <MetricExplanationSheet metricLabel={label} />
+                                </div>
+                                <span className="text-xs font-mono font-bold shrink-0" style={{ color: "var(--color-foreground)" }}>{value}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {/* Chart at bottom of card */}
+                    {ticker && (
+                      <div className="mt-auto">
+                        <CandlestickChart ticker={ticker} companyName={companyName} accentColor={accentColor} />
+                      </div>
+                    )}
+                  </div>
+                );
+
+                return (
+                  <div className="mt-5">
+                    <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--color-brand)" }}>
+                      Key Metrics &amp; Charts
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <CompanyCard ticker={tickerA} companyName={game.companyAName ?? ""} metrics={metricsA} accentColor="#009050" />
+                      <CompanyCard ticker={tickerB} companyName={game.companyBName ?? ""} metrics={metricsB} accentColor="#1d4ed8" />
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Validation question hint */}
