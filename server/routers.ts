@@ -809,6 +809,19 @@ const adminRouter = router({
     return getAllUsers();
   }),
 
+  resetPlayerPick: adminProcedure
+    .input(z.object({ userId: z.number(), gameId: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = await import("./db").then((m) => m.getDb());
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const { playerPicks } = await import("../drizzle/schema.js");
+      const { and, eq } = await import("drizzle-orm");
+      await db.delete(playerPicks).where(
+        and(eq(playerPicks.userId, input.userId), eq(playerPicks.gameId, input.gameId))
+      );
+      return { success: true };
+    }),
+
   listAllGames: adminProcedure
     .input(z.object({ limit: z.number().default(50), offset: z.number().default(0) }))
     .query(async ({ input }) => {

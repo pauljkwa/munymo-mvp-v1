@@ -1,13 +1,21 @@
 import { trpc } from "@/lib/trpc";
 import AdminLayout from "@/components/AdminLayout";
 import { toast } from "sonner";
-import { Loader2, UserCheck, UserX } from "lucide-react";
+import { useState } from "react";
+import { Loader2, UserCheck, RotateCcw } from "lucide-react";
 
 export default function AdminPlayers() {
   const { data: players, isLoading, refetch } = trpc.admin.listPlayers.useQuery();
+  const { data: games } = trpc.admin.listAllGames.useQuery({ limit: 50, offset: 0 });
+  const [selectedGameId, setSelectedGameId] = useState<number | null>(null);
 
   const setAway = trpc.admin.setPlayerAwayStatus.useMutation({
     onSuccess: () => { toast.success("Player status updated."); refetch(); },
+    onError: (e: { message: string }) => toast.error(e.message),
+  });
+
+  const resetPick = trpc.admin.resetPlayerPick.useMutation({
+    onSuccess: () => toast.success("Player pick reset — they can replay this game."),
     onError: (e: { message: string }) => toast.error(e.message),
   });
 
@@ -17,9 +25,28 @@ export default function AdminPlayers() {
         <h1 className="font-display text-2xl mb-2" style={{ color: "var(--color-foreground)" }}>
           Player Management
         </h1>
-        <p className="text-sm mb-6" style={{ color: "var(--color-muted)" }}>
-          Set Away Status to preserve a player's streak while they are absent. Missing Status breaks the streak.
+        <p className="text-sm mb-4" style={{ color: "var(--color-muted)" }}>
+          Set Away Status to preserve a player's streak while they are absent. Use Reset Pick to let a player replay a specific game (for testing).
         </p>
+
+        {/* Game selector for reset */}
+        <div className="card-glass p-4 mb-6 flex items-center gap-3 flex-wrap">
+          <span className="text-sm font-medium" style={{ color: "var(--color-foreground)" }}>Reset pick for game:</span>
+          <select
+            value={selectedGameId ?? ""}
+            onChange={e => setSelectedGameId(e.target.value ? Number(e.target.value) : null)}
+            className="text-sm border rounded px-2 py-1"
+            style={{ background: "var(--color-surface)", color: "var(--color-foreground)", borderColor: "var(--color-border)" }}
+          >
+            <option value="">— select a game —</option>
+            {(games ?? []).map((g: NonNullable<typeof games>[number]) => (
+              <option key={g.id} value={g.id}>
+                {g.gameDate} · {g.companyATicker} vs {g.companyBTicker}
+              </option>
+            ))}
+          </select>
+          {!selectedGameId && <span className="text-xs" style={{ color: "var(--color-subtle)" }}>Select a game first, then click Reset on a player row.</span>}
+        </div>
 
         {isLoading ? (
           <div className="flex justify-center py-16">
@@ -77,6 +104,21 @@ export default function AdminPlayers() {
                         >
                           Active
                         </button>
+                        {selectedGameId && (
+                          <button
+                            onClick={() => {
+                              if (confirm(`Reset ${player.name ?? player.email}'s pick for this game? They will be able to replay.`)) {
+                                resetPick.mutate({ userId: player.id, gameId: selectedGameId });
+                              }
+                            }}
+                            disabled={resetPick.isPending}
+                            className="btn-ghost text-xs py-1 px-2"
+                            title="Reset pick so player can replay"
+                            style={{ color: "var(--color-error)" }}
+                          >
+                            <RotateCcw size={13} /> Reset Pick
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
