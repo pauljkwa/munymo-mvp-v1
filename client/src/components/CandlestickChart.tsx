@@ -39,12 +39,17 @@ export function CandlestickChart({ ticker, companyName, accentColor = "#009050" 
   useEffect(() => {
     if (!chartContainerRef.current || !data?.candles?.length) return;
 
+    const container = chartContainerRef.current;
+
     const isDark = document.documentElement.classList.contains("dark");
     const bg = isDark ? "#0f172a" : "#ffffff";
     const textColor = isDark ? "#94a3b8" : "#64748b";
     const gridColor = isDark ? "#1e293b" : "#f1f5f9";
 
-    const chart = createChart(chartContainerRef.current, {
+    // Use actual container width, falling back to a sensible default if not yet laid out
+    const initialWidth = container.clientWidth > 0 ? container.clientWidth : 320;
+
+    const chart = createChart(container, {
       layout: {
         background: { type: ColorType.Solid, color: bg },
         textColor,
@@ -62,7 +67,7 @@ export function CandlestickChart({ ticker, companyName, accentColor = "#009050" 
         timeVisible: range === "1d" || range === "5d",
         secondsVisible: false,
       },
-      width: chartContainerRef.current.clientWidth,
+      width: initialWidth,
       height: 280,
     });
 
@@ -89,14 +94,26 @@ export function CandlestickChart({ ticker, companyName, accentColor = "#009050" 
     candleSeries.setData(formattedCandles);
     chart.timeScale().fitContent();
 
+    // ResizeObserver keeps chart in sync with container width changes (grid layout, orientation)
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) {
+        const w = entry.contentRect.width;
+        if (w > 0) chart.applyOptions({ width: w });
+      }
+    });
+    ro.observe(container);
+
+    // Also handle window resize as a fallback
     const handleResize = () => {
-      if (chartContainerRef.current) {
-        chart.applyOptions({ width: chartContainerRef.current.clientWidth });
+      if (container.clientWidth > 0) {
+        chart.applyOptions({ width: container.clientWidth });
       }
     };
     window.addEventListener("resize", handleResize);
 
     return () => {
+      ro.disconnect();
       window.removeEventListener("resize", handleResize);
       chart.remove();
     };

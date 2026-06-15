@@ -2,15 +2,14 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import AdminLayout from "@/components/AdminLayout";
 import { Link } from "wouter";
+import { toast } from "sonner";
 import {
   Plus,
-  Trophy,
-  Clock,
   CheckCircle2,
-  XCircle,
   Loader2,
   AlertCircle,
   ArrowRight,
+  RotateCcw,
 } from "lucide-react";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
@@ -25,6 +24,14 @@ export default function AdminDashboard() {
   const { user } = useAuth();
   const { data: games, isLoading } = trpc.admin.listAllGames.useQuery({ limit: 20, offset: 0 });
 
+  const resetMyPick = trpc.admin.resetPlayerPick.useMutation({
+    onSuccess: () => toast.success("Your pick has been reset — you can replay the game."),
+    onError: (e: { message: string }) => toast.error(e.message),
+  });
+
+  // Find the current active game to reset pick for
+  const activeGame = games?.find((g: NonNullable<typeof games>[number]) => g.status === "active" || g.status === "locked");
+
   return (
     <AdminLayout>
       <div className="max-w-4xl">
@@ -38,7 +45,7 @@ export default function AdminDashboard() {
               Manage daily games, results, and players.
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Link href="/admin/end-of-day" className="btn-brand" style={{ background: "var(--color-success)", borderColor: "var(--color-success)" }}>
               <CheckCircle2 size={16} /> End of Day
             </Link>
@@ -47,6 +54,27 @@ export default function AdminDashboard() {
             </Link>
           </div>
         </div>
+
+        {/* Testing Tools */}
+        {activeGame && user && (
+          <div className="card-glass p-4 mb-6 flex items-center gap-3 flex-wrap" style={{ borderColor: "var(--color-subtle)" }}>
+            <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-subtle)" }}>Testing</span>
+            <button
+              onClick={() => {
+                if (user?.id && activeGame?.id) {
+                  resetMyPick.mutate({ userId: user.id as unknown as number, gameId: activeGame.id });
+                }
+              }}
+              disabled={resetMyPick.isPending}
+              className="btn-ghost text-xs py-1 px-3 flex items-center gap-1"
+              style={{ color: "var(--color-error)" }}
+            >
+              <RotateCcw size={13} />
+              Reset My Pick ({activeGame.companyATicker} vs {activeGame.companyBTicker})
+            </button>
+            <span className="text-xs" style={{ color: "var(--color-subtle)" }}>Clears your pick so you can replay. For full player management, go to <Link href="/admin/players" style={{ color: "var(--color-brand)" }}>Players</Link>.</span>
+          </div>
+        )}
 
         {/* Games list */}
         {isLoading ? (
