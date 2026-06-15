@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -148,6 +148,31 @@ export async function getTodayGame(gameDate: string) {
     .select()
     .from(dailyGames)
     .where(eq(dailyGames.gameDate, gameDate))
+    .limit(1);
+  return result[0];
+}
+
+/**
+ * Returns the current playable game:
+ * - Any active/locked game whose gameDate is today OR in the future (up to next trading day)
+ * - This allows a game to become visible the afternoon before its trading date
+ * - Returns the soonest upcoming game so players can start picking early
+ */
+export async function getActiveOrUpcomingGame() {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db
+    .select()
+    .from(dailyGames)
+    .where(
+      and(
+        or(
+          eq(dailyGames.status, "active"),
+          eq(dailyGames.status, "locked")
+        )
+      )
+    )
+    .orderBy(asc(dailyGames.gameDate))
     .limit(1);
   return result[0];
 }

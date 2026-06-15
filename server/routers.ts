@@ -25,6 +25,7 @@ import {
   getPlayerScoreForGame,
   getPlayerScoreHistory,
   getResearchByGameId,
+  getActiveOrUpcomingGame,
   getStreakForUser,
   getTodayGame,
   getValidationQuestion,
@@ -83,8 +84,10 @@ async function assertNotLocked(gameId: number) {
 
 const gamesRouter = router({
   getToday: publicProcedure.query(async () => {
-    const game = await getTodayGame(todayUTC());
-    if (!game || game.status === "draft" || game.status === "cancelled") return null;
+    // Returns the nearest active/locked game — allows game to be visible
+    // from the afternoon before trading day through to lockout
+    const game = await getActiveOrUpcomingGame();
+    if (!game) return null;
     return game;
   }),
 
