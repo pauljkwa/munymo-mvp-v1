@@ -44,8 +44,8 @@ export default function TermsOfUse() {
 
       <LegalSection title="4. Your Account">
         <p>
-          Munymo uses Manus OAuth for authentication. You are responsible for maintaining the
-          confidentiality of your account credentials and for all activity that occurs under your
+          Munymo uses Google sign-in for authentication. You are responsible for maintaining the
+          security of your Google account and for all activity that occurs under your Munymo
           account. If you suspect unauthorised access, please notify us immediately.
         </p>
         <p>

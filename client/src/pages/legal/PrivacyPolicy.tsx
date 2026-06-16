@@ -9,9 +9,9 @@ export default function PrivacyPolicy() {
     >
       <LegalSection title="1. What We Collect">
         <p>
-          When you sign in to Munymo via Manus OAuth, we receive your name and a unique identifier
-          associated with your Manus account. We do not receive your password — that stays between
-          you and Manus.
+          When you sign in to Munymo via Google, we receive your name, email address, and a unique
+          identifier associated with your Google account. We do not receive your password — that
+          stays between you and Google.
         </p>
         <p>
           As you use the platform, we record your game activity: the predictions you make, the
