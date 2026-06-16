@@ -99,9 +99,9 @@ const emailWrapper = (content: string) => `
           <tr>
             <td style="padding:0 0 28px 0;text-align:center;">
               <a href="${BASE_URL}" style="text-decoration:none;">
-                <span style="font-family:Georgia,'Times New Roman',serif;font-size:30px;font-weight:700;color:${DEEP_GREEN};letter-spacing:0.12em;">MUNYMO</span>
+                <img src="${BASE_URL}/manus-storage/munymo-logo-cropped_75fe3c86.png" alt="Munymo" width="180" height="39" style="display:inline-block;border:0;" />
               </a>
-              <p style="margin:4px 0 0 0;font-size:11px;font-weight:600;letter-spacing:0.18em;color:${TEXT_LABEL};text-transform:uppercase;">Daily Stock Prediction Game</p>
+              <p style="margin:8px 0 0 0;font-size:11px;font-weight:600;letter-spacing:0.18em;color:${TEXT_LABEL};text-transform:uppercase;">Daily Stock Prediction Game</p>
             </td>
           </tr>
           <!-- Content card -->

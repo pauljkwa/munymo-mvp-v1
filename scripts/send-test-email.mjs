@@ -3,6 +3,7 @@ import { Resend } from "resend";
 const resend = new Resend(process.env.RESEND_API_KEY);
 const CLERK_SECRET_KEY = process.env.CLERK_SECRET_KEY;
 const BASE_URL = "https://munymo.com";
+const LOGO_URL = `${BASE_URL}/manus-storage/munymo-logo-cropped_75fe3c86.png`;
 
 // Brand colours matching the site
 const BRAND_GREEN = "#009050";
@@ -31,9 +32,9 @@ const emailWrapper = (content) => `
           <tr>
             <td style="padding:0 0 28px 0;text-align:center;">
               <a href="${BASE_URL}" style="text-decoration:none;">
-                <span style="font-family:Georgia,'Times New Roman',serif;font-size:30px;font-weight:700;color:${DEEP_GREEN};letter-spacing:0.12em;">MUNYMO</span>
+                <img src="${LOGO_URL}" alt="Munymo" width="180" height="39" style="display:inline-block;border:0;" />
               </a>
-              <p style="margin:4px 0 0 0;font-size:11px;font-weight:600;letter-spacing:0.18em;color:${TEXT_LABEL};text-transform:uppercase;">Daily Stock Prediction Game</p>
+              <p style="margin:8px 0 0 0;font-size:11px;font-weight:600;letter-spacing:0.18em;color:${TEXT_LABEL};text-transform:uppercase;">Daily Stock Prediction Game</p>
             </td>
           </tr>
           <tr>
@@ -86,10 +87,15 @@ const tokenRes = await fetch("https://api.clerk.com/v1/sign_in_tokens", {
 const tokenData = await tokenRes.json();
 const clerkTicketUrl = tokenData.url;
 
-// Append redirect to results page after sign-in
+// Append redirect to game page after sign-in
 const magicLink = clerkTicketUrl
-  ? `${clerkTicketUrl}&redirect_url=${encodeURIComponent(BASE_URL + "/results")}`
-  : `${BASE_URL}/results`;
+  ? `${clerkTicketUrl}&redirect_url=${encodeURIComponent(BASE_URL + "/game")}`
+  : `${BASE_URL}/game`;
+
+// Separate link for yesterday's result
+const resultLink = clerkTicketUrl
+  ? `${clerkTicketUrl}&redirect_url=${encodeURIComponent(BASE_URL + "/game/1/result")}`
+  : `${BASE_URL}/game/1/result`;
 
 console.log("Magic link:", magicLink);
 
@@ -124,7 +130,7 @@ const html = emailWrapper(`
     See the full result, Hindsight Spotlight, and how the crowd voted — all on the site.
   </p>
   <div style="text-align:center;margin-bottom:8px;">
-    ${greenButton(magicLink, "See Yesterday's Result →")}
+    ${greenButton(resultLink, "See Yesterday's Result →")}
   </div>
 
   ${divider}
