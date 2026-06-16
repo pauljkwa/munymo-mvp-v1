@@ -12,6 +12,8 @@ import {
   ArrowLeft,
   Loader2,
   Users,
+  Lightbulb,
+  FileText,
 } from "lucide-react";
 
 export default function GameResult() {
@@ -57,13 +59,25 @@ export default function GameResult() {
   }
 
   const winner = game.winner;
-  const winnerName = winner === "A" ? game.companyAName : game.companyBName;
+  const winnerName   = winner === "A" ? game.companyAName   : game.companyBName;
   const winnerTicker = winner === "A" ? game.companyATicker : game.companyBTicker;
+  const loserTicker  = winner === "A" ? game.companyBTicker : game.companyATicker;
 
-  const gutCorrect = myPick?.gutSelection === winner;
-  const finalCorrect = myPick?.finalSelection === winner;
+  const gutCorrect       = myPick?.gutSelection === winner;
+  const finalCorrect     = myPick?.finalSelection === winner;
   const validationCorrect =
     validationQ && myPick?.validationAnswer === validationQ.correctAnswer;
+
+  const gutPctA    = parseFloat(communityStats?.gutPctA   ?? "50");
+  const finalPctA  = parseFloat(communityStats?.finalPctA ?? "50");
+  const gutPctB    = 100 - gutPctA;
+  const finalPctB  = 100 - finalPctA;
+
+  const scoreColour =
+    !myScore ? "var(--color-subtle)"
+    : myScore.totalScore >= 80 ? "var(--color-success)"
+    : myScore.totalScore >= 50 ? "var(--color-warning)"
+    : "var(--color-danger)";
 
   return (
     <PublicLayout>
@@ -72,17 +86,17 @@ export default function GameResult() {
           <ArrowLeft size={14} /> Back to Today's Game
         </Link>
 
-        {/* Winner banner */}
+        {/* ── Winner banner ── */}
         <div
           className="card-glass p-8 text-center mb-6 animate-fade-up"
           style={{
             borderColor: "var(--color-brand)",
-            boxShadow: "0 0 0 1px var(--color-brand), 0 16px 48px oklch(0.78 0.14 75 / 0.15)",
+            boxShadow: "0 0 0 1px var(--color-brand), 0 16px 48px oklch(0.35 0.10 160 / 0.12)",
           }}
         >
           <Trophy size={40} className="mx-auto mb-4" style={{ color: "var(--color-brand)" }} />
           <p className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: "var(--color-brand)" }}>
-            Today's Winner
+            {game.gameDate} — Winner
           </p>
           <div className="ticker-chip mx-auto mb-2">{winnerTicker}</div>
           <h2 className="font-display text-2xl" style={{ color: "var(--color-foreground)" }}>
@@ -93,9 +107,12 @@ export default function GameResult() {
               {game.sector}
             </p>
           )}
+          <p className="text-sm mt-2" style={{ color: "var(--color-muted)" }}>
+            defeated <span className="font-semibold">{loserTicker}</span>
+          </p>
         </div>
 
-        {/* Player result */}
+        {/* ── Player result (played) ── */}
         {isAuthenticated && myPick && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 animate-fade-up delay-75">
             {/* Gut */}
@@ -132,7 +149,7 @@ export default function GameResult() {
                   <CheckCircle2 size={12} /> Correct
                 </span>
               ) : (
-                <span className="text-xs flex items-center justify-center gap-1" style={{ color: "var(--color-error)" }}>
+                <span className="text-xs flex items-center justify-center gap-1" style={{ color: "var(--color-danger)" }}>
                   <XCircle size={12} /> Incorrect
                 </span>
               )}
@@ -141,19 +158,13 @@ export default function GameResult() {
             {/* Score */}
             <div
               className="card-glass p-5 text-center"
-              style={{
-                borderColor: "var(--color-brand)",
-                background: "oklch(0.18 0.02 75 / 0.6)",
-              }}
+              style={{ borderColor: "var(--color-brand)" }}
             >
               <Trophy size={18} className="mx-auto mb-2" style={{ color: "var(--color-brand)" }} />
               <p className="text-xs uppercase tracking-wider mb-1" style={{ color: "var(--color-subtle)" }}>
                 Daily Score
               </p>
-              <p
-                className="font-display text-3xl font-bold"
-                style={{ color: "var(--color-brand)" }}
-              >
+              <p className="font-display text-3xl font-bold" style={{ color: scoreColour }}>
                 {myScore?.totalScore ?? "—"}
               </p>
               {myScore && (
@@ -165,7 +176,19 @@ export default function GameResult() {
           </div>
         )}
 
-        {/* Validation result */}
+        {/* ── Didn't play state ── */}
+        {isAuthenticated && !myPick && (
+          <div className="card-glass p-5 mb-6 text-center animate-fade-up delay-75" style={{ borderColor: "var(--color-border)" }}>
+            <p className="text-sm font-medium mb-1" style={{ color: "var(--color-foreground)" }}>
+              You didn't play this game
+            </p>
+            <p className="text-xs" style={{ color: "var(--color-muted)" }}>
+              No score recorded — but you can still read the full debrief below.
+            </p>
+          </div>
+        )}
+
+        {/* ── Validation question result ── */}
         {validationQ && myPick?.validationAnswer && (
           <div className="card-glass p-5 mb-6 animate-fade-up delay-100">
             <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--color-brand)" }}>
@@ -174,7 +197,7 @@ export default function GameResult() {
             <p className="text-sm font-medium mb-3" style={{ color: "var(--color-foreground)" }}>
               {validationQ.questionText}
             </p>
-            <div className="flex items-center gap-3 text-sm">
+            <div className="flex flex-wrap items-center gap-3 text-sm">
               <span style={{ color: "var(--color-muted)" }}>
                 Your answer: <strong>{myPick.validationAnswer}</strong>
               </span>
@@ -185,67 +208,120 @@ export default function GameResult() {
               {validationCorrect ? (
                 <CheckCircle2 size={15} style={{ color: "var(--color-success)" }} />
               ) : (
-                <XCircle size={15} style={{ color: "var(--color-error)" }} />
+                <XCircle size={15} style={{ color: "var(--color-danger)" }} />
               )}
             </div>
           </div>
         )}
 
-        {/* Commentary */}
-        {game.resultCommentary && (
+        {/* ── Community stats ── */}
+        {communityStats && (
           <div className="card-glass p-6 mb-6 animate-fade-up delay-150">
-            <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--color-brand)" }}>
-              Educational Commentary
+            <div className="flex items-center gap-2 mb-5">
+              <Users size={16} style={{ color: "var(--color-brand)" }} />
+              <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-brand)" }}>
+                How the Crowd Voted
+              </p>
+            </div>
+
+            {/* Gut picks */}
+            <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--color-subtle)" }}>
+              Gut Picks
             </p>
+            <div className="flex items-center gap-3 mb-1">
+              <span className="text-xs w-12 text-right font-semibold" style={{ color: "var(--color-foreground)" }}>
+                {game.companyATicker}
+              </span>
+              <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: "var(--color-surface-raised)" }}>
+                <div
+                  className="h-full rounded-full transition-all duration-700"
+                  style={{ width: `${gutPctA}%`, background: "var(--color-brand)" }}
+                />
+              </div>
+              <span className="text-xs w-10 font-semibold" style={{ color: "var(--color-foreground)" }}>
+                {gutPctA.toFixed(1)}%
+              </span>
+            </div>
+            <div className="flex items-center gap-3 mb-5">
+              <span className="text-xs w-12 text-right font-semibold" style={{ color: "var(--color-foreground)" }}>
+                {game.companyBTicker}
+              </span>
+              <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: "var(--color-surface-raised)" }}>
+                <div
+                  className="h-full rounded-full transition-all duration-700"
+                  style={{ width: `${gutPctB}%`, background: "var(--color-gold)" }}
+                />
+              </div>
+              <span className="text-xs w-10 font-semibold" style={{ color: "var(--color-foreground)" }}>
+                {gutPctB.toFixed(1)}%
+              </span>
+            </div>
+
+            {/* Final picks */}
+            <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--color-subtle)" }}>
+              Final Picks
+            </p>
+            <div className="flex items-center gap-3 mb-1">
+              <span className="text-xs w-12 text-right font-semibold" style={{ color: "var(--color-foreground)" }}>
+                {game.companyATicker}
+              </span>
+              <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: "var(--color-surface-raised)" }}>
+                <div
+                  className="h-full rounded-full transition-all duration-700"
+                  style={{ width: `${finalPctA}%`, background: "var(--color-brand)" }}
+                />
+              </div>
+              <span className="text-xs w-10 font-semibold" style={{ color: "var(--color-foreground)" }}>
+                {finalPctA.toFixed(1)}%
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-xs w-12 text-right font-semibold" style={{ color: "var(--color-foreground)" }}>
+                {game.companyBTicker}
+              </span>
+              <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: "var(--color-surface-raised)" }}>
+                <div
+                  className="h-full rounded-full transition-all duration-700"
+                  style={{ width: `${finalPctB}%`, background: "var(--color-gold)" }}
+                />
+              </div>
+              <span className="text-xs w-10 font-semibold" style={{ color: "var(--color-foreground)" }}>
+                {finalPctB.toFixed(1)}%
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* ── Result Summary (what happened) ── */}
+        {(game.resultSummary || game.resultCommentary) && (
+          <div className="card-glass p-6 mb-6 animate-fade-up delay-200">
+            <div className="flex items-center gap-2 mb-3">
+              <FileText size={16} style={{ color: "var(--color-brand)" }} />
+              <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-brand)" }}>
+                What Happened
+              </p>
+            </div>
             <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "var(--color-muted)" }}>
-              {game.resultCommentary}
+              {game.resultSummary || game.resultCommentary}
             </p>
           </div>
         )}
 
-        {/* Community stats */}
-        {communityStats && (
-          <div className="card-glass p-6 animate-fade-up delay-200">
-            <div className="flex items-center gap-2 mb-4">
-              <Users size={16} style={{ color: "var(--color-brand)" }} />
-              <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-brand)" }}>
-                Community Stats
+        {/* ── Hindsight Spotlight ── */}
+        {game.hindsightSpotlight && (
+          <div
+            className="card-glass p-6 mb-6 animate-fade-up delay-200"
+            style={{ borderColor: "var(--color-gold)", background: "var(--color-gold-muted)" }}
+          >
+            <div className="flex items-center gap-2 mb-3">
+              <Lightbulb size={16} style={{ color: "var(--color-gold)" }} />
+              <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-gold)" }}>
+                Hindsight Spotlight
               </p>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs mb-1" style={{ color: "var(--color-subtle)" }}>
-                  Gut picks for {game.companyATicker}
-                </p>
-                <div className="h-2 rounded-full overflow-hidden" style={{ background: "var(--color-surface-raised)" }}>
-                  <div
-                    className="h-full rounded-full"
-                    style={{
-                      width: `${parseFloat(communityStats.gutPctA ?? '50')}%`, background: "var(--color-brand)",
-                    }}
-                  />
-                </div>
-                <p className="text-xs mt-1" style={{ color: "var(--color-muted)" }}>
-                  {parseFloat(communityStats.gutPctA ?? '50').toFixed(1)}%
-                </p>
-              </div>
-              <div>
-                <p className="text-xs mb-1" style={{ color: "var(--color-subtle)" }}>
-                  Final picks for {game.companyATicker}
-                </p>
-                <div className="h-2 rounded-full overflow-hidden" style={{ background: "var(--color-surface-raised)" }}>
-                  <div
-                    className="h-full rounded-full"
-                    style={{
-                      width: `${parseFloat(communityStats.finalPctA ?? '50')}%`, background: "var(--color-brand)",
-                    }}
-                  />
-                </div>
-                <p className="text-xs mt-1" style={{ color: "var(--color-muted)" }}>
-                  {parseFloat(communityStats.finalPctA ?? '50').toFixed(1)}%
-                </p>
-              </div>
-            </div>
+            <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "var(--color-foreground)" }}>
+              {game.hindsightSpotlight}
+            </p>
           </div>
         )}
 
