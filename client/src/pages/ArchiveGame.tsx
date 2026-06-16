@@ -76,7 +76,7 @@ export default function ArchiveGame() {
             className="card-glass p-5 mb-5 flex items-center gap-4 animate-fade-up delay-75"
             style={{
               borderColor: "var(--color-brand)",
-              background: "oklch(0.18 0.02 75 / 0.5)",
+              background: "var(--color-success-muted)",
             }}
           >
             <Trophy size={24} style={{ color: "var(--color-brand)" }} />
