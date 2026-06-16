@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { calculateScore, checkLockout, computeNewStreak, isQualified } from "./scoring";
+import { hashEndpoint } from "./push";
 import {
   broadcastEmail,
   buildGameAvailableEmail,
@@ -861,6 +862,41 @@ const adminRouter = router({
         } catch (err) {
           console.warn("[Email] End-of-day result notifications failed:", err);
         }
+
+        // ── 4. Send push notifications to all subscribed users ──
+        try {
+          const { sendPushToAll } = await import("./push");
+          const winnerTicker = input.winner === "A" ? game.companyATicker : game.companyBTicker;
+          const loserTicker = input.winner === "A" ? game.companyBTicker : game.companyATicker;
+          const pushResult = await sendPushToAll({
+            title: `Results are in: ${winnerTicker} beats ${loserTicker}`,
+            body: input.resultSummary
+              ? input.resultSummary.slice(0, 120) + (input.resultSummary.length > 120 ? "…" : "")
+              : `See how the community voted and check your score.`,
+            url: `/game/${game.id}/result`,
+            tag: `munymo-result-${game.id}`,
+          });
+          console.log(`[Push] Result notifications: ${pushResult.sent} sent, ${pushResult.expired} expired, ${pushResult.errors} errors`);
+        } catch (err) {
+          console.warn("[Push] End-of-day push notifications failed:", err);
+        }
+      }
+
+      // ── 5. Send push notification for new game availability ──
+      if (nextGame) {
+        try {
+          const { sendPushToAll } = await import("./push");
+          await sendPushToAll({
+            title: `Today's game is live: ${input.nextCompanyATicker} vs ${input.nextCompanyBTicker}`,
+            body: input.nextSector
+              ? `${input.nextCompanyAName} vs ${input.nextCompanyBName} — ${input.nextSector}. Make your pick before lockout!`
+              : `${input.nextCompanyAName} vs ${input.nextCompanyBName}. Make your pick before lockout!`,
+            url: `/game`,
+            tag: `munymo-game-${nextGame.id}`,
+          });
+        } catch (err) {
+          console.warn("[Push] New game push notification failed:", err);
+        }
       }
 
       return { success: true, nextGameId: nextGame?.id };
@@ -1052,8 +1088,94 @@ const metricsRouter = router({
     }),
 });
 
-// ─── App Router ───────────────────────────────────────────────────────────────
+// ─── Push Notifications Router ──────────────────────────────────────────────
 
+const pushRouter = router({
+  /** Subscribe this device to push notifications */
+  subscribe: protectedProcedure
+    .input(
+      z.object({
+        endpoint: z.string().url(),
+        p256dh: z.string(),
+        auth: z.string(),
+        userAgent: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const db = await import("./db").then((m) => m.getDb());
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const { pushSubscriptions } = await import("../drizzle/schema");
+      const { eq, and } = await import("drizzle-orm");
+      const endpointHash = hashEndpoint(input.endpoint);
+      // Upsert: update if same device re-subscribes (keys may rotate)
+      const existing = await db
+        .select({ id: pushSubscriptions.id })
+        .from(pushSubscriptions)
+        .where(
+          and(
+            eq(pushSubscriptions.userId, ctx.user.id),
+            eq(pushSubscriptions.endpointHash, endpointHash)
+          )
+        )
+        .limit(1);
+      if (existing.length > 0) {
+        await db
+          .update(pushSubscriptions)
+          .set({ p256dh: input.p256dh, auth: input.auth, userAgent: input.userAgent })
+          .where(eq(pushSubscriptions.id, existing[0].id));
+      } else {
+        await db.insert(pushSubscriptions).values({
+          userId: ctx.user.id,
+          endpoint: input.endpoint,
+          endpointHash,
+          p256dh: input.p256dh,
+          auth: input.auth,
+          userAgent: input.userAgent,
+        });
+      }
+      return { ok: true };
+    }),
+
+  /** Unsubscribe this device */
+  unsubscribe: protectedProcedure
+    .input(z.object({ endpoint: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await import("./db").then((m) => m.getDb());
+      if (!db) return { ok: true };
+      const { pushSubscriptions } = await import("../drizzle/schema");
+      const { eq, and } = await import("drizzle-orm");
+      const endpointHash = hashEndpoint(input.endpoint);
+      await db
+        .delete(pushSubscriptions)
+        .where(
+          and(
+            eq(pushSubscriptions.userId, ctx.user.id),
+            eq(pushSubscriptions.endpointHash, endpointHash)
+          )
+        );
+      return { ok: true };
+    }),
+
+  /** Check if this user has any active push subscriptions */
+  status: protectedProcedure.query(async ({ ctx }) => {
+    const db = await import("./db").then((m) => m.getDb());
+    if (!db) return { subscribed: false, count: 0 };
+    const { pushSubscriptions } = await import("../drizzle/schema");
+    const { eq } = await import("drizzle-orm");
+    const subs = await db
+      .select({ id: pushSubscriptions.id })
+      .from(pushSubscriptions)
+      .where(eq(pushSubscriptions.userId, ctx.user.id));
+    return { subscribed: subs.length > 0, count: subs.length };
+  }),
+
+  /** VAPID public key — needed by the browser to subscribe */
+  vapidPublicKey: publicProcedure.query(() => {
+    return { key: process.env.VAPID_PUBLIC_KEY ?? "" };
+  }),
+});
+
+// ─── App Router ───────────────────────────────────────────────────────────────
 export const appRouter = router({
   system: systemRouter,
   auth: router({
@@ -1070,7 +1192,7 @@ export const appRouter = router({
   streaks: streaksRouter,
   admin: adminRouter,
   dashboard: dashboardRouter,
-  metrics: metricsRouter,
+    metrics: metricsRouter,
+  push: pushRouter,
 });
-
 export type AppRouter = typeof appRouter;

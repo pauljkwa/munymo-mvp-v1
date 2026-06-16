@@ -294,6 +294,42 @@ export const metricExplanations = mysqlTable("metric_explanations", {
 export type MetricExplanation = typeof metricExplanations.$inferSelect;
 export type InsertMetricExplanation = typeof metricExplanations.$inferInsert;
 
+// ─── Push Subscriptions ─────────────────────────────────────────────────────
+
+/**
+ * Web Push API subscriptions stored per user per device.
+ * Each device has a unique endpoint URL. A user may have multiple devices.
+ * endpoint is the unique identifier — used to deduplicate and clean up expired subs.
+ */
+export const pushSubscriptions = mysqlTable(
+  "push_subscriptions",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").notNull(),
+    // The push service endpoint URL (unique per device/browser)
+    // Stored as text but we use endpointHash for deduplication
+    endpoint: text("endpoint").notNull(),
+    // SHA-256 hash of endpoint for unique index (text can't be indexed directly)
+    endpointHash: varchar("endpointHash", { length: 64 }).notNull(),
+    // Encryption keys from the browser's PushSubscription object
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    // User agent hint for display purposes
+    userAgent: varchar("userAgent", { length: 512 }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  (table) => ({
+    userEndpointUnique: uniqueIndex("push_subscriptions_user_endpoint_unique").on(
+      table.userId,
+      table.endpointHash
+    ),
+  })
+);
+
+export type PushSubscription = typeof pushSubscriptions.$inferSelect;
+export type InsertPushSubscription = typeof pushSubscriptions.$inferInsert;
+
 // ─── Admin Audit Log ──────────────────────────────────────────────────────────
 
 export const adminAuditLog = mysqlTable("admin_audit_log", {

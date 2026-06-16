@@ -269,3 +269,21 @@
 - [x] Write AGENT cron prompt (freshness rules, API integration, autonomous JSON generation)
 - [ ] Save checkpoint and ask user to publish
 - [ ] Register AGENT cron at 0 15 20 * * 1-5 UTC (4:15 AM Perth Mon-Fri)
+
+## Phase 24: Web Push Notifications
+
+- [x] Install web-push npm package and generate VAPID key pair
+- [x] Add VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VITE_VAPID_PUBLIC_KEY secrets
+- [x] Add push_subscriptions table to drizzle/schema.ts (userId, endpoint, endpointHash, p256dh, auth, userAgent)
+- [x] Run pnpm db:push to migrate schema
+- [x] Create server/push.ts — sendPushToUsers() and sendPushToAll() helpers using web-push
+- [x] Add push tRPC router (subscribe, unsubscribe, status, vapidPublicKey procedures)
+- [x] Create client/public/sw.js — service worker handling push events and notification clicks
+- [x] Create usePushNotifications hook — manages SW registration, permission, subscribe/unsubscribe
+- [x] Create NotificationSettings component — full and compact variants, handles all edge cases (iOS, denied, unsupported)
+- [x] Add Notifications section to PlayerProfile page
+- [x] Integrate push notifications into endOfDay procedure — result notification + new game notification
+- [x] Write vitest tests for hashEndpoint utility (4 tests passing)
+- [x] Fix cron schedule timing (was 8:15 PM Perth, corrected to 4:15 AM Perth)
+- [ ] Save checkpoint
+- [ ] Push to GitHub

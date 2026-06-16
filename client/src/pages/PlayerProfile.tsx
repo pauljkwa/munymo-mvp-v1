@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   XCircle,
 } from "lucide-react";
+import { NotificationSettings } from "@/components/NotificationSettings";
 
 export default function PlayerProfile() {
   const { isAuthenticated, user, loading } = useAuth();
@@ -119,6 +120,16 @@ export default function PlayerProfile() {
             </div>
           </div>
         )}
+
+        {/* Notification settings */}
+        <div className="animate-fade-up delay-125 mb-8">
+          <h2 className="font-display text-lg mb-4" style={{ color: "var(--color-foreground)" }}>
+            Notifications
+          </h2>
+          <div className="card-glass p-5">
+            <NotificationSettings />
+          </div>
+        </div>
 
         {/* Score history */}
         <div className="animate-fade-up delay-150">
