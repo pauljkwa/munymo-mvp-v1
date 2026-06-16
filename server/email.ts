@@ -38,6 +38,9 @@ export type ResultPublishedData = {
   totalScore: number;
   resultCommentary?: string | null;
   gameDate: string;
+  /** Token for "See Full Result" CTA → /game/:id/result */
+  resultMagicLink?: string | null;
+  /** Token for "Play Today's Game" CTA → /game */
   magicLink?: string | null;
 };
 
@@ -53,6 +56,9 @@ export type MissedGameData = {
   nextCompanyATicker?: string | null;
   nextCompanyBName?: string | null;
   nextCompanyBTicker?: string | null;
+  /** Token for "See Yesterday's Result" CTA → /game/:id/result */
+  resultMagicLink?: string | null;
+  /** Token for "Play Today's Game" CTA → /game */
   magicLink?: string | null;
 };
 
@@ -194,7 +200,8 @@ export function buildResultPublishedEmail(data: ResultPublishedData): { subject:
   const winnerTicker = data.winner === "A" ? data.companyATicker : data.companyBTicker;
   const greeting     = data.playerName ? `Hi ${data.playerName},` : "Hi,";
   const scoreColour  = data.totalScore >= 80 ? "#009050" : data.totalScore >= 50 ? "#b07d00" : "#c0392b";
-  const ctaUrl       = data.magicLink ?? `${BASE_URL}/game`;
+  const resultUrl = data.resultMagicLink ?? `${BASE_URL}/game`;
+  const playUrl   = data.magicLink        ?? `${BASE_URL}/game`;
 
   const subject = `Munymo result: ${winnerTicker} wins — your score is ${data.totalScore}`;
 
@@ -232,8 +239,11 @@ export function buildResultPublishedEmail(data: ResultPublishedData): { subject:
     <p style="margin:0 0 20px 0;font-size:14px;color:${TEXT_MUTED};line-height:1.6;">
       See the full result breakdown, Hindsight Spotlight, and how the crowd voted — all on the site.
     </p>
+    <div style="text-align:center;margin-bottom:12px;">
+      ${greenButton(resultUrl, "View Full Results →")}
+    </div>
     <div style="text-align:center;">
-      ${greenButton(ctaUrl, "View Full Results →")}
+      ${greenButton(playUrl, "Play Today's Game →")}
     </div>
   `);
 
@@ -247,7 +257,8 @@ export function buildMissedGameEmail(data: MissedGameData): { subject: string; h
   const winnerTicker = data.winner === "A" ? data.companyATicker : data.companyBTicker;
   const loserTicker  = data.winner === "A" ? data.companyBTicker : data.companyATicker;
   const greeting     = data.playerName ? `Hi ${data.playerName},` : "Hi,";
-  const ctaUrl       = data.magicLink ?? `${BASE_URL}/game`;
+  const resultUrl = data.resultMagicLink ?? `${BASE_URL}/game`;
+  const playUrl   = data.magicLink        ?? `${BASE_URL}/game`;
 
   const subject = `You missed it — ${winnerTicker} beat ${loserTicker} on ${data.gameDate}`;
 
@@ -295,7 +306,7 @@ export function buildMissedGameEmail(data: MissedGameData): { subject: string; h
       See the full result, Hindsight Spotlight, and crowd vote breakdown on the site.
     </p>
     <div style="text-align:center;margin-bottom:8px;">
-      ${greenButton(ctaUrl, "See Yesterday's Result →")}
+      ${greenButton(resultUrl, "See Yesterday's Result →")}
     </div>
 
     ${nextGameBlock}
@@ -305,7 +316,7 @@ export function buildMissedGameEmail(data: MissedGameData): { subject: string; h
       Don't miss today's matchup — make your pick before lockout.
     </p>
     <div style="text-align:center;">
-      ${greenButton(ctaUrl, "Play Today's Game →")}
+      ${greenButton(playUrl, "Play Today's Game →")}
     </div>
   `);
 

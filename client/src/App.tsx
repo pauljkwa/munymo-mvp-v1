@@ -24,6 +24,7 @@ import TermsOfUse from "./pages/legal/TermsOfUse";
 import PrivacyPolicy from "./pages/legal/PrivacyPolicy";
 import Disclaimer from "./pages/legal/Disclaimer";
 import ResponsibleGaming from "./pages/legal/ResponsibleGaming";
+import EmailLanding from "./pages/EmailLanding";
 
 function Router() {
   return (
@@ -52,6 +53,7 @@ function Router() {
       <Route path="/admin/audit" component={AdminAuditLog} />
       <Route path="/admin/end-of-day" component={AdminEndOfDay} />
 
+      <Route path="/email-landing" component={EmailLanding} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

@@ -8,6 +8,7 @@ import {
 } from "./email";
 import { z } from "zod";
 import { COOKIE_NAME } from "@shared/const";
+import { ENV } from "./_core/env";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
@@ -785,11 +786,37 @@ const adminRouter = router({
           const nextTicker = nextGame ? { a: input.nextCompanyATicker, b: input.nextCompanyBTicker, aName: input.nextCompanyAName, bName: input.nextCompanyBName } : null;
           let emailsSent = 0;
           let emailsFailed = 0;
+
+          // Helper: generate a Clerk sign-in token magic link for a given destination
+          const createMagicLink = async (clerkId: string | null, destination: string): Promise<string | null> => {
+            if (!clerkId || !ENV.clerkSecretKey) return null;
+            try {
+              const res = await fetch("https://api.clerk.com/v1/sign_in_tokens", {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${ENV.clerkSecretKey}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ user_id: clerkId, expires_in_seconds: 86400 }),
+              });
+              const data = await res.json() as { url?: string };
+              if (!data.url) return null;
+              const landingUrl = `https://munymo.com/email-landing?to=${encodeURIComponent(destination)}`;
+              return `${data.url}&redirect_url=${encodeURIComponent(landingUrl)}`;
+            } catch { return null; }
+          };
+
           for (const user of allUsers) {
             if (!user.email) continue;
             const scored = scoredMap.get(user.id);
             let subject: string;
             let html: string;
+
+            // Generate two separate magic links — one per CTA
+            const resultDest = `/game/${game.id}/result`;
+            const playDest   = `/game`;
+            const [resultMagicLink, playMagicLink] = await Promise.all([
+              createMagicLink(user.clerkId, resultDest),
+              createMagicLink(user.clerkId, playDest),
+            ]);
+
             if (scored) {
               // User played — send score result
               ({ subject, html } = buildResultPublishedEmail({
@@ -804,6 +831,8 @@ const adminRouter = router({
                 totalScore: scored.totalScore,
                 resultCommentary: input.resultSummary ?? "",
                 gameDate: game.gameDate,
+                resultMagicLink,
+                magicLink: playMagicLink,
               }));
             } else {
               // User didn't play — send re-engagement email with result + next game teaser
@@ -819,6 +848,8 @@ const adminRouter = router({
                 nextCompanyATicker: nextTicker?.a ?? null,
                 nextCompanyBName: nextTicker?.bName ?? null,
                 nextCompanyBTicker: nextTicker?.b ?? null,
+                resultMagicLink,
+                magicLink: playMagicLink,
               }));
             }
             const result = await import("./email").then((m) => m.sendEmail({ to: user.email!, subject, html }));
