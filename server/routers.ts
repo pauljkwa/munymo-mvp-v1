@@ -787,7 +787,9 @@ const adminRouter = router({
           let emailsSent = 0;
           let emailsFailed = 0;
 
-          // Helper: generate a Clerk sign-in token magic link for a given destination
+          // Helper: generate a Clerk sign-in token and return a /api/magic wrapper URL.
+          // The wrapper checks token validity server-side before forwarding to Clerk,
+          // so expired/used tokens show our custom fallback instead of Clerk's error screen.
           const createMagicLink = async (clerkId: string | null, destination: string): Promise<string | null> => {
             if (!clerkId || !ENV.clerkSecretKey) return null;
             try {
@@ -796,10 +798,10 @@ const adminRouter = router({
                 headers: { "Authorization": `Bearer ${ENV.clerkSecretKey}`, "Content-Type": "application/json" },
                 body: JSON.stringify({ user_id: clerkId, expires_in_seconds: 86400 }),
               });
-              const data = await res.json() as { url?: string };
-              if (!data.url) return null;
-              const landingUrl = `https://munymo.com/email-landing?to=${encodeURIComponent(destination)}`;
-              return `${data.url}&redirect_url=${encodeURIComponent(landingUrl)}`;
+              const data = await res.json() as { id?: string; url?: string };
+              if (!data.id) return null;
+              // Wrap in our own redirect endpoint — token ID + destination, not the raw Clerk URL
+              return `https://munymo.com/api/magic?token=${encodeURIComponent(data.id)}&to=${encodeURIComponent(destination)}`;
             } catch { return null; }
           };
 
