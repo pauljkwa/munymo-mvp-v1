@@ -136,8 +136,8 @@ function parseJsonImport(raw: string): Partial<FormState> | null {
     }
 
     return {
-      // Today / close section
-      closeGameId: String(td("gameId", "closeGameId") ?? ""),
+      // Today / close section — treat null/missing gameId as empty so the UI auto-selects the active game
+      closeGameId: (td("gameId", "closeGameId") != null && String(td("gameId", "closeGameId")) !== "null") ? String(td("gameId", "closeGameId")) : "",
       winner: (String(td("winner", "winner") ?? "") as "A" | "B" | ""),
       companyAPerf: td("companyAPerf") !== undefined ? String(td("companyAPerf")) : "",
       companyBPerf: td("companyBPerf") !== undefined ? String(td("companyBPerf")) : "",
@@ -203,7 +203,11 @@ export default function AdminEndOfDay() {
       return;
     }
     setJsonError("");
-    setForm((prev) => ({ ...prev, ...parsed }));
+    // If gameId was null in the JSON and there's exactly one active/locked game, auto-select it
+    const autoGameId = (!parsed.closeGameId && activeGames.length === 1)
+      ? String(activeGames[0].id)
+      : parsed.closeGameId;
+    setForm((prev) => ({ ...prev, ...parsed, closeGameId: autoGameId ?? "" }));
     setShowJsonPanel(false);
     setJsonInput("");
     const removed = obj?.__consensusRemoved as number | undefined;
