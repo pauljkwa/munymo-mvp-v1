@@ -117,11 +117,22 @@ Format: `YYYY-MM-DDTHH:MM:SS.000Z` (full ISO 8601 UTC)
 
 ## Step 7 — POST the Curation JSON
 
-POST the following JSON structure to:
+You are running as an AGENT cron. Two environment variables are automatically available to you:
+- `$SCHEDULED_TASK_ENDPOINT_BASE` — the base URL of the Munymo site (e.g. `https://munymo.com`)
+- `$SCHEDULED_TASK_COOKIE` — the authentication cookie value
 
+Use the shell tool to POST the JSON via curl:
+
+```sh
+curl -s -X POST "$SCHEDULED_TASK_ENDPOINT_BASE/api/scheduled/daily-curation" \
+  -H "Content-Type: application/json" \
+  -H "Cookie: app_session_id=$SCHEDULED_TASK_COOKIE" \
+  -d '<your JSON here>'
 ```
-https://munymo.com/api/scheduled/daily-curation
-```
+
+Do NOT use Python requests or any other HTTP library — use curl only.
+
+The JSON structure to POST:
 
 ```json
 {

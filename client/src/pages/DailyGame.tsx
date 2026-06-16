@@ -836,6 +836,66 @@ export default function DailyGame() {
           </div>
         )}
       </div>
+
+      {/* Floating Lockout Countdown Footer */}
+      {lockoutTime && !isLocked && step !== "submitted" && (
+        <LockoutCountdown lockoutTime={lockoutTime} />
+      )}
     </PublicLayout>
+  );
+}
+
+// ─── Lockout Countdown Footer ─────────────────────────────────────────────────
+
+function LockoutCountdown({ lockoutTime }: { lockoutTime: Date }) {
+  const [timeLeft, setTimeLeft] = useState(() => lockoutTime.getTime() - Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const remaining = lockoutTime.getTime() - Date.now();
+      setTimeLeft(remaining);
+      if (remaining <= 0) clearInterval(interval);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [lockoutTime]);
+
+  if (timeLeft <= 0) return null;
+
+  const totalSeconds = Math.floor(timeLeft / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+
+  const isUrgent = timeLeft < 30 * 60 * 1000;   // under 30 min → amber
+  const isCritical = timeLeft < 5 * 60 * 1000;  // under 5 min → red
+
+  const bgColor = isCritical
+    ? "oklch(0.45 0.2 25)"
+    : isUrgent
+    ? "oklch(0.45 0.15 60)"
+    : "var(--color-primary)";
+
+  return (
+    <div
+      className="fixed bottom-0 left-0 right-0 z-40 flex items-center justify-center gap-3 px-4 py-3 shadow-[0_-2px_16px_rgba(0,0,0,0.15)]"
+      style={{ background: bgColor, transition: "background 1s ease" }}
+    >
+      <Timer size={15} className="shrink-0" style={{ color: "rgba(255,255,255,0.8)" }} />
+      <span className="text-white text-sm font-medium" style={{ opacity: 0.9 }}>
+        Locks in
+      </span>
+      <span
+        className="text-white font-mono font-bold text-base tabular-nums"
+        style={{ letterSpacing: "0.1em" }}
+      >
+        {hours > 0 ? `${pad(hours)}:` : ""}{pad(minutes)}:{pad(seconds)}
+      </span>
+      {isCritical && (
+        <span className="text-white text-xs font-semibold animate-pulse" style={{ opacity: 0.9 }}>
+          — Make your pick now!
+        </span>
+      )}
+    </div>
   );
 }
