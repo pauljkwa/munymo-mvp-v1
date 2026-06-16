@@ -5,6 +5,7 @@ import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerMagicLinkRedirect } from "./magicLinkRedirect";
+import { registerScheduledCuration } from "./scheduledCuration";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
@@ -38,6 +39,7 @@ async function startServer() {
   registerStorageProxy(app);
   registerOAuthRoutes(app);
   registerMagicLinkRedirect(app);
+  registerScheduledCuration(app);
   // tRPC API
   app.use(
     "/api/trpc",
