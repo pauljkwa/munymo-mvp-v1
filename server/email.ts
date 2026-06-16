@@ -217,6 +217,97 @@ export function buildResultPublishedEmail(data: ResultPublishedData): { subject:
   return { subject, html };
 }
 
+// ─── Template: Missed Game (re-engagement) ──────────────────────────────────
+
+export type MissedGameData = {
+  playerName: string | null;
+  companyAName: string;
+  companyATicker: string;
+  companyBName: string;
+  companyBTicker: string;
+  winner: "A" | "B";
+  resultCommentary?: string | null;
+  gameDate: string;
+  nextCompanyAName?: string | null;
+  nextCompanyATicker?: string | null;
+  nextCompanyBName?: string | null;
+  nextCompanyBTicker?: string | null;
+};
+
+export function buildMissedGameEmail(data: MissedGameData): { subject: string; html: string } {
+  const winnerName = data.winner === "A" ? data.companyAName : data.companyBName;
+  const winnerTicker = data.winner === "A" ? data.companyATicker : data.companyBTicker;
+  const loserTicker = data.winner === "A" ? data.companyBTicker : data.companyATicker;
+  const greeting = data.playerName ? `Hi ${data.playerName},` : "Hi,";
+
+  const subject = `You missed it — ${winnerTicker} beat ${loserTicker} on ${data.gameDate}`;
+
+  const commentaryBlock = data.resultCommentary
+    ? `${divider}
+       <p style="margin:0 0 8px 0;">${label("What happened")}</p>
+       <p style="margin:0;font-size:14px;color:#a09e98;line-height:1.7;font-style:italic;">${data.resultCommentary}</p>`
+    : "";
+
+  const nextGameBlock = (data.nextCompanyATicker && data.nextCompanyBTicker)
+    ? `${divider}
+       <p style="margin:0 0 12px 0;">${label("Up next")}</p>
+       <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px 0;">
+         <tr>
+           <td width="45%" style="background-color:#1a1a26;border:1px solid #2a2a3a;border-radius:8px;padding:16px;text-align:center;">
+             <p style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#c9a84c;font-family:Georgia,serif;">${data.nextCompanyATicker}</p>
+             <p style="margin:0;font-size:12px;color:#6b6b7a;">${data.nextCompanyAName}</p>
+           </td>
+           <td width="10%" style="text-align:center;">
+             <span style="font-size:16px;color:#6b6b7a;font-weight:700;">VS</span>
+           </td>
+           <td width="45%" style="background-color:#1a1a26;border:1px solid #2a2a3a;border-radius:8px;padding:16px;text-align:center;">
+             <p style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#c9a84c;font-family:Georgia,serif;">${data.nextCompanyBTicker}</p>
+             <p style="margin:0;font-size:12px;color:#6b6b7a;">${data.nextCompanyBName}</p>
+           </td>
+         </tr>
+       </table>`
+    : "";
+
+  const html = emailWrapper(`
+    <p style="margin:0 0 20px 0;font-size:15px;color:#e8e6e0;">${greeting}</p>
+    <h1 style="margin:0 0 8px 0;font-family:Georgia,'Times New Roman',serif;font-size:24px;font-weight:700;color:#e8e6e0;">
+      You missed yesterday's game
+    </h1>
+    <p style="margin:0 0 28px 0;font-size:15px;color:#a09e98;">
+      <strong style="color:#c9a84c;">${winnerTicker}</strong> (${winnerName}) outperformed on ${data.gameDate}.
+      You didn't play — no worries, today's a fresh start.
+    </p>
+
+    <!-- Result card -->
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#1a1a26;border:1px solid #2a2a3a;border-radius:8px;margin:0 0 24px 0;">
+      <tr>
+        <td width="45%" style="padding:20px;text-align:center;border-right:1px solid #2a2a3a;">
+          ${label("Winner")}
+          <p style="margin:8px 0 4px 0;font-size:22px;font-weight:700;color:#4ade80;font-family:Georgia,serif;">${winnerTicker}</p>
+          <p style="margin:0;font-size:12px;color:#6b6b7a;">${winnerName}</p>
+        </td>
+        <td width="45%" style="padding:20px;text-align:center;">
+          ${label("Your score")}
+          <p style="margin:8px 0 4px 0;font-size:22px;font-weight:700;color:#6b6b7a;font-family:Georgia,serif;">—</p>
+          <p style="margin:0;font-size:12px;color:#6b6b7a;">Didn't play</p>
+        </td>
+      </tr>
+    </table>
+
+    ${commentaryBlock}
+    ${nextGameBlock}
+    ${divider}
+    <p style="margin:0 0 20px 0;font-size:14px;color:#a09e98;line-height:1.6;">
+      Don't miss today's matchup — make your pick before lockout.
+    </p>
+    <div style="text-align:center;">
+      ${goldButton(`${BASE_URL}/game`, "Play Today's Game →")}
+    </div>
+  `);
+
+  return { subject, html };
+}
+
 // ─── Template: Streak At Risk ─────────────────────────────────────────────────
 
 export function buildStreakAtRiskEmail(data: StreakAtRiskData): { subject: string; html: string } {

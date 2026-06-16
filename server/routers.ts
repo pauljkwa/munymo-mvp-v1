@@ -3,6 +3,7 @@ import { calculateScore, checkLockout, computeNewStreak, isQualified } from "./s
 import {
   broadcastEmail,
   buildGameAvailableEmail,
+  buildMissedGameEmail,
   buildResultPublishedEmail,
 } from "./email";
 import { z } from "zod";
@@ -774,29 +775,57 @@ const adminRouter = router({
 
       await writeAuditLog(ctx.user.id, "end_of_day", "game", input.closeGameId ?? 0, JSON.stringify({ winner: input.winner, nextGameDate: input.nextGameDate }));
 
-      // ── 3. Send result emails (only if a game was closed) ──
-      if (game && scoredPicks.length > 0) {
+      // ── 3. Send result emails to ALL registered users (only if a game was closed) ──
+      // Players who participated get a score summary; non-players get a re-engagement email.
+      if (game) {
         try {
           const allUsers = await getAllUsers();
-          const userMap = new Map(allUsers.map((u) => [u.id, u]));
-          for (const scored of scoredPicks) {
-            const user = userMap.get(scored.userId);
-            if (!user?.email) continue;
-            const { subject, html } = buildResultPublishedEmail({
-              playerName: user.name,
-              companyAName: game.companyAName,
-              companyATicker: game.companyATicker,
-              companyBName: game.companyBName,
-              companyBTicker: game.companyBTicker,
-              winner: input.winner!,
-              predictionScore: scored.predictionScore,
-              validationScore: scored.validationScore,
-              totalScore: scored.totalScore,
-              resultCommentary: input.resultSummary ?? "",
-              gameDate: game.gameDate,
-            });
-            await import("./email").then((m) => m.sendEmail({ to: user.email!, subject, html }));
+          const scoredMap = new Map(scoredPicks.map((s) => [s.userId, s]));
+          // Build next-game teaser data if available
+          const nextTicker = nextGame ? { a: input.nextCompanyATicker, b: input.nextCompanyBTicker, aName: input.nextCompanyAName, bName: input.nextCompanyBName } : null;
+          let emailsSent = 0;
+          let emailsFailed = 0;
+          for (const user of allUsers) {
+            if (!user.email) continue;
+            const scored = scoredMap.get(user.id);
+            let subject: string;
+            let html: string;
+            if (scored) {
+              // User played — send score result
+              ({ subject, html } = buildResultPublishedEmail({
+                playerName: user.name,
+                companyAName: game.companyAName,
+                companyATicker: game.companyATicker,
+                companyBName: game.companyBName,
+                companyBTicker: game.companyBTicker,
+                winner: input.winner!,
+                predictionScore: scored.predictionScore,
+                validationScore: scored.validationScore,
+                totalScore: scored.totalScore,
+                resultCommentary: input.resultSummary ?? "",
+                gameDate: game.gameDate,
+              }));
+            } else {
+              // User didn't play — send re-engagement email with result + next game teaser
+              ({ subject, html } = buildMissedGameEmail({
+                playerName: user.name,
+                companyAName: game.companyAName,
+                companyATicker: game.companyATicker,
+                companyBName: game.companyBName,
+                companyBTicker: game.companyBTicker,
+                winner: input.winner!,
+                resultCommentary: input.resultSummary ?? "",
+                gameDate: game.gameDate,
+                nextCompanyAName: nextTicker?.aName ?? null,
+                nextCompanyATicker: nextTicker?.a ?? null,
+                nextCompanyBName: nextTicker?.bName ?? null,
+                nextCompanyBTicker: nextTicker?.b ?? null,
+              }));
+            }
+            const result = await import("./email").then((m) => m.sendEmail({ to: user.email!, subject, html }));
+            if (result.success) emailsSent++; else emailsFailed++;
           }
+          console.log(`[Email] End-of-day notifications: ${emailsSent} sent, ${emailsFailed} failed (${scoredPicks.length} players, ${allUsers.length - scoredPicks.length} non-players)`);
         } catch (err) {
           console.warn("[Email] End-of-day result notifications failed:", err);
         }
