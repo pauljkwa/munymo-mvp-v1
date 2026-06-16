@@ -290,7 +290,11 @@ export default function AdminEndOfDay() {
       nextCompanyBTicker: form.nextCompanyBTicker,
       nextSector: form.nextSector || undefined,
       nextPairingRationale: form.nextPairingRationale || undefined,
-      nextLockoutAt: form.nextLockoutAt || undefined,
+      // Convert local datetime-local string (YYYY-MM-DDTHH:MM) to full ISO string for Zod datetime validation
+      nextLockoutAt: form.nextLockoutAt ? (() => {
+        const d = new Date(form.nextLockoutAt);
+        return isNaN(d.getTime()) ? undefined : d.toISOString();
+      })() : undefined,
       nextResearchContent: form.nextResearchContent || undefined,
       nextResearchMetrics: Object.keys(metricsRecord).length > 0 ? metricsRecord : undefined,
       nextQuestionType: (form.nextQuestionType as "multiple_choice" | "yes_no" | "true_false") || undefined,
