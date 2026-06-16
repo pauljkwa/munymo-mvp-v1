@@ -814,7 +814,6 @@ const adminRouter = router({
                 companyBName: game.companyBName,
                 companyBTicker: game.companyBTicker,
                 winner: input.winner!,
-                resultCommentary: input.resultSummary ?? "",
                 gameDate: game.gameDate,
                 nextCompanyAName: nextTicker?.aName ?? null,
                 nextCompanyATicker: nextTicker?.a ?? null,

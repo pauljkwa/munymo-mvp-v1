@@ -23,6 +23,7 @@ export type GameAvailableData = {
   sector?: string | null;
   gameDate: string;
   lockoutAt?: Date | null;
+  magicLink?: string | null;
 };
 
 export type ResultPublishedData = {
@@ -37,6 +38,22 @@ export type ResultPublishedData = {
   totalScore: number;
   resultCommentary?: string | null;
   gameDate: string;
+  magicLink?: string | null;
+};
+
+export type MissedGameData = {
+  playerName: string | null;
+  companyAName: string;
+  companyATicker: string;
+  companyBName: string;
+  companyBTicker: string;
+  winner: "A" | "B";
+  gameDate: string;
+  nextCompanyAName?: string | null;
+  nextCompanyATicker?: string | null;
+  nextCompanyBName?: string | null;
+  nextCompanyBTicker?: string | null;
+  magicLink?: string | null;
 };
 
 export type StreakAtRiskData = {
@@ -47,11 +64,23 @@ export type StreakAtRiskData = {
   companyBName: string;
   companyBTicker: string;
   lockoutAt: Date;
+  magicLink?: string | null;
 };
 
 // ─── Shared Styles ────────────────────────────────────────────────────────────
 
 const BASE_URL = "https://munymo.com";
+
+// Brand colours (light mode, matching the site)
+const BRAND_GREEN = "#009050";       // emerald CTA green
+const DEEP_GREEN  = "#1a3a2a";       // dark heading / logo green
+const BG_PAGE     = "#f5f7f5";       // near-white page background
+const BG_CARD     = "#ffffff";       // white card
+const BG_SUBTLE   = "#f0f4f1";       // subtle section background
+const BORDER      = "#d8e4dc";       // light green-tinted border
+const TEXT_MAIN   = "#111c16";       // near-black body text
+const TEXT_MUTED  = "#4a6358";       // muted green-grey text
+const TEXT_LABEL  = "#7a9e8a";       // uppercase label colour
 
 const emailWrapper = (content: string) => `
 <!DOCTYPE html>
@@ -61,31 +90,32 @@ const emailWrapper = (content: string) => `
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Munymo</title>
 </head>
-<body style="margin:0;padding:0;background-color:#0a0a0f;font-family:'Inter',Arial,sans-serif;color:#e8e6e0;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#0a0a0f;padding:40px 16px;">
+<body style="margin:0;padding:0;background-color:${BG_PAGE};font-family:'Plus Jakarta Sans',Arial,sans-serif;color:${TEXT_MAIN};">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:${BG_PAGE};padding:40px 16px;">
     <tr>
       <td align="center">
         <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
-          <!-- Header -->
+          <!-- Logo header -->
           <tr>
-            <td style="padding:0 0 32px 0;text-align:center;">
+            <td style="padding:0 0 28px 0;text-align:center;">
               <a href="${BASE_URL}" style="text-decoration:none;">
-                <span style="font-family:Georgia,'Times New Roman',serif;font-size:28px;font-weight:700;color:#c9a84c;letter-spacing:0.08em;">MUNYMO</span>
+                <span style="font-family:Georgia,'Times New Roman',serif;font-size:30px;font-weight:700;color:${DEEP_GREEN};letter-spacing:0.12em;">MUNYMO</span>
               </a>
+              <p style="margin:4px 0 0 0;font-size:11px;font-weight:600;letter-spacing:0.18em;color:${TEXT_LABEL};text-transform:uppercase;">Daily Stock Prediction Game</p>
             </td>
           </tr>
           <!-- Content card -->
           <tr>
-            <td style="background-color:#12121a;border:1px solid #2a2a3a;border-radius:12px;padding:40px 36px;">
+            <td style="background-color:${BG_CARD};border:1px solid ${BORDER};border-radius:12px;padding:40px 36px;">
               ${content}
             </td>
           </tr>
           <!-- Footer -->
           <tr>
-            <td style="padding:28px 0 0 0;text-align:center;">
-              <p style="margin:0;font-size:12px;color:#6b6b7a;line-height:1.6;">
-                You are receiving this because you have a Munymo account.<br/>
-                <a href="${BASE_URL}" style="color:#c9a84c;text-decoration:none;">munymo.com</a>
+            <td style="padding:24px 0 0 0;text-align:center;">
+              <p style="margin:0;font-size:12px;color:${TEXT_LABEL};line-height:1.6;">
+                You're receiving this because you have a Munymo account.<br/>
+                <a href="${BASE_URL}" style="color:${BRAND_GREEN};text-decoration:none;">munymo.com</a>
               </p>
             </td>
           </tr>
@@ -97,61 +127,60 @@ const emailWrapper = (content: string) => `
 </html>
 `;
 
-const goldButton = (href: string, label: string) =>
-  `<a href="${href}" style="display:inline-block;background-color:#c9a84c;color:#0a0a0f;font-weight:700;font-size:15px;padding:14px 32px;border-radius:8px;text-decoration:none;letter-spacing:0.04em;">${label}</a>`;
+const greenButton = (href: string, lbl: string) =>
+  `<a href="${href}" style="display:inline-block;background-color:${BRAND_GREEN};color:#ffffff;font-weight:700;font-size:15px;padding:14px 32px;border-radius:8px;text-decoration:none;letter-spacing:0.03em;font-family:'Plus Jakarta Sans',Arial,sans-serif;">${lbl}</a>`;
 
-const divider = `<hr style="border:none;border-top:1px solid #2a2a3a;margin:28px 0;" />`;
+const divider = `<hr style="border:none;border-top:1px solid ${BORDER};margin:28px 0;" />`;
 
 const label = (text: string) =>
-  `<span style="font-size:11px;font-weight:600;letter-spacing:0.1em;color:#6b6b7a;text-transform:uppercase;">${text}</span>`;
+  `<span style="font-size:11px;font-weight:700;letter-spacing:0.12em;color:${TEXT_LABEL};text-transform:uppercase;">${text}</span>`;
+
+const tickerBadge = (ticker: string, name: string) =>
+  `<div style="background-color:${BG_SUBTLE};border:1px solid ${BORDER};border-radius:8px;padding:16px 12px;text-align:center;">
+    <p style="margin:0 0 4px 0;font-size:22px;font-weight:700;color:${DEEP_GREEN};font-family:Georgia,serif;">${ticker}</p>
+    <p style="margin:0;font-size:12px;color:${TEXT_MUTED};">${name}</p>
+  </div>`;
 
 // ─── Template: Game Available ─────────────────────────────────────────────────
 
 export function buildGameAvailableEmail(data: GameAvailableData): { subject: string; html: string } {
   const subject = `Today's Munymo matchup is live — ${data.companyATicker} vs ${data.companyBTicker}`;
+  const ctaUrl = data.magicLink ?? `${BASE_URL}/game`;
 
   const lockoutLine = data.lockoutAt
-    ? `<p style="margin:0 0 24px 0;font-size:14px;color:#a09e98;">
-        Lockout: <strong style="color:#e8e6e0;">${data.lockoutAt.toUTCString()}</strong>
+    ? `<p style="margin:0 0 24px 0;font-size:14px;color:${TEXT_MUTED};">
+        Picks lock at <strong style="color:${TEXT_MAIN};">${data.lockoutAt.toUTCString()}</strong>
       </p>`
     : "";
 
   const sectorLine = data.sector
-    ? `<p style="margin:0 0 8px 0;">${label("Sector")} <span style="font-size:14px;color:#a09e98;margin-left:8px;">${data.sector}</span></p>`
+    ? `<p style="margin:0 0 20px 0;font-size:13px;color:${TEXT_MUTED};">${label("Sector")} <span style="margin-left:8px;">${data.sector}</span></p>`
     : "";
 
   const html = emailWrapper(`
-    <h1 style="margin:0 0 8px 0;font-family:Georgia,'Times New Roman',serif;font-size:24px;font-weight:700;color:#e8e6e0;">
+    <h1 style="margin:0 0 6px 0;font-size:24px;font-weight:700;color:${DEEP_GREEN};">
       Today's matchup is live
     </h1>
-    <p style="margin:0 0 28px 0;font-size:14px;color:#a09e98;">${data.gameDate}</p>
+    <p style="margin:0 0 28px 0;font-size:14px;color:${TEXT_MUTED};">${data.gameDate}</p>
 
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px 0;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px 0;">
       <tr>
-        <td width="45%" style="background-color:#1a1a26;border:1px solid #2a2a3a;border-radius:8px;padding:20px;text-align:center;">
-          ${label("Company A")}
-          <p style="margin:8px 0 4px 0;font-size:22px;font-weight:700;color:#c9a84c;font-family:Georgia,serif;">${data.companyATicker}</p>
-          <p style="margin:0;font-size:13px;color:#a09e98;">${data.companyAName}</p>
+        <td width="45%">${tickerBadge(data.companyATicker, data.companyAName)}</td>
+        <td width="10%" style="text-align:center;vertical-align:middle;">
+          <span style="font-size:14px;color:${TEXT_LABEL};font-weight:700;">VS</span>
         </td>
-        <td width="10%" style="text-align:center;">
-          <span style="font-size:18px;color:#6b6b7a;font-weight:700;">VS</span>
-        </td>
-        <td width="45%" style="background-color:#1a1a26;border:1px solid #2a2a3a;border-radius:8px;padding:20px;text-align:center;">
-          ${label("Company B")}
-          <p style="margin:8px 0 4px 0;font-size:22px;font-weight:700;color:#c9a84c;font-family:Georgia,serif;">${data.companyBTicker}</p>
-          <p style="margin:0;font-size:13px;color:#a09e98;">${data.companyBName}</p>
-        </td>
+        <td width="45%">${tickerBadge(data.companyBTicker, data.companyBName)}</td>
       </tr>
     </table>
 
     ${sectorLine}
     ${lockoutLine}
     ${divider}
-    <p style="margin:0 0 24px 0;font-size:14px;color:#a09e98;line-height:1.6;">
+    <p style="margin:0 0 24px 0;font-size:14px;color:${TEXT_MUTED};line-height:1.6;">
       Make your Gut Selection, review the research, then lock in your Final Selection before the deadline.
     </p>
     <div style="text-align:center;">
-      ${goldButton(`${BASE_URL}/game`, "Play Today's Game →")}
+      ${greenButton(ctaUrl, "Play Today's Game →")}
     </div>
   `);
 
@@ -161,147 +190,122 @@ export function buildGameAvailableEmail(data: GameAvailableData): { subject: str
 // ─── Template: Result Published ───────────────────────────────────────────────
 
 export function buildResultPublishedEmail(data: ResultPublishedData): { subject: string; html: string } {
-  const winnerName = data.winner === "A" ? data.companyAName : data.companyBName;
+  const winnerName   = data.winner === "A" ? data.companyAName   : data.companyBName;
   const winnerTicker = data.winner === "A" ? data.companyATicker : data.companyBTicker;
-  const playerCorrect =
-    (data.winner === "A" && data.predictionScore > 0) ||
-    (data.winner === "B" && data.predictionScore > 0);
-  const greeting = data.playerName ? `Hi ${data.playerName},` : "Hi,";
-  const scoreColour = data.totalScore >= 80 ? "#4ade80" : data.totalScore >= 50 ? "#c9a84c" : "#f87171";
+  const greeting     = data.playerName ? `Hi ${data.playerName},` : "Hi,";
+  const scoreColour  = data.totalScore >= 80 ? "#009050" : data.totalScore >= 50 ? "#b07d00" : "#c0392b";
+  const ctaUrl       = data.magicLink ?? `${BASE_URL}/game`;
 
   const subject = `Munymo result: ${winnerTicker} wins — your score is ${data.totalScore}`;
 
-  const commentaryBlock = data.resultCommentary
-    ? `${divider}
-       <p style="margin:0 0 8px 0;">${label("Commentary")}</p>
-       <p style="margin:0;font-size:14px;color:#a09e98;line-height:1.7;font-style:italic;">${data.resultCommentary}</p>`
-    : "";
-
   const html = emailWrapper(`
-    <p style="margin:0 0 20px 0;font-size:15px;color:#e8e6e0;">${greeting}</p>
-    <h1 style="margin:0 0 8px 0;font-family:Georgia,'Times New Roman',serif;font-size:24px;font-weight:700;color:#e8e6e0;">
+    <p style="margin:0 0 20px 0;font-size:15px;color:${TEXT_MAIN};">${greeting}</p>
+    <h1 style="margin:0 0 6px 0;font-size:24px;font-weight:700;color:${DEEP_GREEN};">
       ${data.gameDate} result is in
     </h1>
-    <p style="margin:0 0 28px 0;font-size:15px;color:#a09e98;">
-      <strong style="color:#c9a84c;">${winnerTicker}</strong> (${winnerName}) outperformed today.
+    <p style="margin:0 0 28px 0;font-size:15px;color:${TEXT_MUTED};">
+      <strong style="color:${BRAND_GREEN};">${winnerTicker}</strong> (${winnerName}) outperformed today.
     </p>
 
     <!-- Score card -->
-    <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#1a1a26;border:1px solid #2a2a3a;border-radius:8px;margin:0 0 24px 0;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color:${BG_SUBTLE};border:1px solid ${BORDER};border-radius:8px;margin:0 0 24px 0;">
       <tr>
-        <td style="padding:24px;text-align:center;border-right:1px solid #2a2a3a;" width="33%">
+        <td style="padding:20px;text-align:center;border-right:1px solid ${BORDER};" width="33%">
           ${label("Prediction")}
-          <p style="margin:8px 0 0 0;font-size:28px;font-weight:700;color:#e8e6e0;font-family:Georgia,serif;">${data.predictionScore}</p>
-          <p style="margin:4px 0 0 0;font-size:11px;color:#6b6b7a;">/ 80 pts</p>
+          <p style="margin:8px 0 0 0;font-size:28px;font-weight:700;color:${DEEP_GREEN};font-family:Georgia,serif;">${data.predictionScore}</p>
+          <p style="margin:4px 0 0 0;font-size:11px;color:${TEXT_LABEL};">/ 80 pts</p>
         </td>
-        <td style="padding:24px;text-align:center;border-right:1px solid #2a2a3a;" width="33%">
+        <td style="padding:20px;text-align:center;border-right:1px solid ${BORDER};" width="33%">
           ${label("Validation")}
-          <p style="margin:8px 0 0 0;font-size:28px;font-weight:700;color:#e8e6e0;font-family:Georgia,serif;">${data.validationScore}</p>
-          <p style="margin:4px 0 0 0;font-size:11px;color:#6b6b7a;">/ 20 pts</p>
+          <p style="margin:8px 0 0 0;font-size:28px;font-weight:700;color:${DEEP_GREEN};font-family:Georgia,serif;">${data.validationScore}</p>
+          <p style="margin:4px 0 0 0;font-size:11px;color:${TEXT_LABEL};">/ 20 pts</p>
         </td>
-        <td style="padding:24px;text-align:center;" width="33%">
+        <td style="padding:20px;text-align:center;" width="33%">
           ${label("Total Score")}
           <p style="margin:8px 0 0 0;font-size:28px;font-weight:700;color:${scoreColour};font-family:Georgia,serif;">${data.totalScore}</p>
-          <p style="margin:4px 0 0 0;font-size:11px;color:#6b6b7a;">/ 100 pts</p>
+          <p style="margin:4px 0 0 0;font-size:11px;color:${TEXT_LABEL};">/ 100 pts</p>
         </td>
       </tr>
     </table>
 
-    ${commentaryBlock}
     ${divider}
+    <p style="margin:0 0 20px 0;font-size:14px;color:${TEXT_MUTED};line-height:1.6;">
+      See the full result breakdown, Hindsight Spotlight, and how the crowd voted — all on the site.
+    </p>
     <div style="text-align:center;">
-      ${goldButton(`${BASE_URL}/results`, "View Full Results →")}
+      ${greenButton(ctaUrl, "View Full Results →")}
     </div>
   `);
 
   return { subject, html };
 }
 
-// ─── Template: Missed Game (re-engagement) ──────────────────────────────────
-
-export type MissedGameData = {
-  playerName: string | null;
-  companyAName: string;
-  companyATicker: string;
-  companyBName: string;
-  companyBTicker: string;
-  winner: "A" | "B";
-  resultCommentary?: string | null;
-  gameDate: string;
-  nextCompanyAName?: string | null;
-  nextCompanyATicker?: string | null;
-  nextCompanyBName?: string | null;
-  nextCompanyBTicker?: string | null;
-};
+// ─── Template: Missed Game (re-engagement) ────────────────────────────────────
 
 export function buildMissedGameEmail(data: MissedGameData): { subject: string; html: string } {
-  const winnerName = data.winner === "A" ? data.companyAName : data.companyBName;
+  const winnerName   = data.winner === "A" ? data.companyAName   : data.companyBName;
   const winnerTicker = data.winner === "A" ? data.companyATicker : data.companyBTicker;
-  const loserTicker = data.winner === "A" ? data.companyBTicker : data.companyATicker;
-  const greeting = data.playerName ? `Hi ${data.playerName},` : "Hi,";
+  const loserTicker  = data.winner === "A" ? data.companyBTicker : data.companyATicker;
+  const greeting     = data.playerName ? `Hi ${data.playerName},` : "Hi,";
+  const ctaUrl       = data.magicLink ?? `${BASE_URL}/game`;
 
   const subject = `You missed it — ${winnerTicker} beat ${loserTicker} on ${data.gameDate}`;
 
-  const commentaryBlock = data.resultCommentary
-    ? `${divider}
-       <p style="margin:0 0 8px 0;">${label("What happened")}</p>
-       <p style="margin:0;font-size:14px;color:#a09e98;line-height:1.7;font-style:italic;">${data.resultCommentary}</p>`
-    : "";
-
   const nextGameBlock = (data.nextCompanyATicker && data.nextCompanyBTicker)
     ? `${divider}
-       <p style="margin:0 0 12px 0;">${label("Up next")}</p>
+       <p style="margin:0 0 12px 0;">${label("Up next — play today")}</p>
        <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px 0;">
          <tr>
-           <td width="45%" style="background-color:#1a1a26;border:1px solid #2a2a3a;border-radius:8px;padding:16px;text-align:center;">
-             <p style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#c9a84c;font-family:Georgia,serif;">${data.nextCompanyATicker}</p>
-             <p style="margin:0;font-size:12px;color:#6b6b7a;">${data.nextCompanyAName}</p>
+           <td width="45%">${tickerBadge(data.nextCompanyATicker, data.nextCompanyAName ?? "")}</td>
+           <td width="10%" style="text-align:center;vertical-align:middle;">
+             <span style="font-size:14px;color:${TEXT_LABEL};font-weight:700;">VS</span>
            </td>
-           <td width="10%" style="text-align:center;">
-             <span style="font-size:16px;color:#6b6b7a;font-weight:700;">VS</span>
-           </td>
-           <td width="45%" style="background-color:#1a1a26;border:1px solid #2a2a3a;border-radius:8px;padding:16px;text-align:center;">
-             <p style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#c9a84c;font-family:Georgia,serif;">${data.nextCompanyBTicker}</p>
-             <p style="margin:0;font-size:12px;color:#6b6b7a;">${data.nextCompanyBName}</p>
-           </td>
+           <td width="45%">${tickerBadge(data.nextCompanyBTicker, data.nextCompanyBName ?? "")}</td>
          </tr>
        </table>`
     : "";
 
   const html = emailWrapper(`
-    <p style="margin:0 0 20px 0;font-size:15px;color:#e8e6e0;">${greeting}</p>
-    <h1 style="margin:0 0 8px 0;font-family:Georgia,'Times New Roman',serif;font-size:24px;font-weight:700;color:#e8e6e0;">
+    <p style="margin:0 0 20px 0;font-size:15px;color:${TEXT_MAIN};">${greeting}</p>
+    <h1 style="margin:0 0 6px 0;font-size:24px;font-weight:700;color:${DEEP_GREEN};">
       You missed yesterday's game
     </h1>
-    <p style="margin:0 0 28px 0;font-size:15px;color:#a09e98;">
-      <strong style="color:#c9a84c;">${winnerTicker}</strong> (${winnerName}) outperformed on ${data.gameDate}.
-      You didn't play — no worries, today's a fresh start.
+    <p style="margin:0 0 28px 0;font-size:15px;color:${TEXT_MUTED};">
+      <strong style="color:${BRAND_GREEN};">${winnerTicker}</strong> (${winnerName}) outperformed on ${data.gameDate}.
+      No worries — today's a fresh start.
     </p>
 
-    <!-- Result card -->
-    <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#1a1a26;border:1px solid #2a2a3a;border-radius:8px;margin:0 0 24px 0;">
+    <!-- Result teaser -->
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color:${BG_SUBTLE};border:1px solid ${BORDER};border-radius:8px;margin:0 0 24px 0;">
       <tr>
-        <td width="45%" style="padding:20px;text-align:center;border-right:1px solid #2a2a3a;">
+        <td width="50%" style="padding:20px;text-align:center;border-right:1px solid ${BORDER};">
           ${label("Winner")}
-          <p style="margin:8px 0 4px 0;font-size:22px;font-weight:700;color:#4ade80;font-family:Georgia,serif;">${winnerTicker}</p>
-          <p style="margin:0;font-size:12px;color:#6b6b7a;">${winnerName}</p>
+          <p style="margin:8px 0 4px 0;font-size:22px;font-weight:700;color:${BRAND_GREEN};font-family:Georgia,serif;">${winnerTicker}</p>
+          <p style="margin:0;font-size:12px;color:${TEXT_MUTED};">${winnerName}</p>
         </td>
-        <td width="45%" style="padding:20px;text-align:center;">
+        <td width="50%" style="padding:20px;text-align:center;">
           ${label("Your score")}
-          <p style="margin:8px 0 4px 0;font-size:22px;font-weight:700;color:#6b6b7a;font-family:Georgia,serif;">—</p>
-          <p style="margin:0;font-size:12px;color:#6b6b7a;">Didn't play</p>
+          <p style="margin:8px 0 4px 0;font-size:22px;font-weight:700;color:${TEXT_LABEL};font-family:Georgia,serif;">—</p>
+          <p style="margin:0;font-size:12px;color:${TEXT_LABEL};">Didn't play</p>
         </td>
       </tr>
     </table>
 
-    ${commentaryBlock}
+    <p style="margin:0 0 20px 0;font-size:14px;color:${TEXT_MUTED};line-height:1.6;">
+      See the full result, Hindsight Spotlight, and crowd vote breakdown on the site.
+    </p>
+    <div style="text-align:center;margin-bottom:8px;">
+      ${greenButton(ctaUrl, "See Yesterday's Result →")}
+    </div>
+
     ${nextGameBlock}
+
     ${divider}
-    <p style="margin:0 0 20px 0;font-size:14px;color:#a09e98;line-height:1.6;">
+    <p style="margin:0 0 20px 0;font-size:14px;color:${TEXT_MUTED};line-height:1.6;">
       Don't miss today's matchup — make your pick before lockout.
     </p>
     <div style="text-align:center;">
-      ${goldButton(`${BASE_URL}/game`, "Play Today's Game →")}
+      ${greenButton(ctaUrl, "Play Today's Game →")}
     </div>
   `);
 
@@ -313,39 +317,38 @@ export function buildMissedGameEmail(data: MissedGameData): { subject: string; h
 export function buildStreakAtRiskEmail(data: StreakAtRiskData): { subject: string; html: string } {
   const greeting = data.playerName ? `Hi ${data.playerName},` : "Hi,";
   const lockoutStr = data.lockoutAt.toUTCString();
+  const ctaUrl = data.magicLink ?? `${BASE_URL}/game`;
   const subject = `Your ${data.currentStreak}-day Munymo streak is at risk — play before lockout`;
 
   const html = emailWrapper(`
-    <p style="margin:0 0 20px 0;font-size:15px;color:#e8e6e0;">${greeting}</p>
-    <h1 style="margin:0 0 8px 0;font-family:Georgia,'Times New Roman',serif;font-size:24px;font-weight:700;color:#c9a84c;">
+    <p style="margin:0 0 20px 0;font-size:15px;color:${TEXT_MAIN};">${greeting}</p>
+    <h1 style="margin:0 0 6px 0;font-size:24px;font-weight:700;color:${DEEP_GREEN};">
       Your streak is at risk
     </h1>
-    <p style="margin:0 0 28px 0;font-size:15px;color:#a09e98;line-height:1.6;">
-      You have a <strong style="color:#e8e6e0;">${data.currentStreak}-day streak</strong> and today's game closes soon.
+    <p style="margin:0 0 28px 0;font-size:15px;color:${TEXT_MUTED};line-height:1.6;">
+      You have a <strong style="color:${TEXT_MAIN};">${data.currentStreak}-day streak</strong> and today's game closes soon.
       Submit your pick before lockout to keep it alive.
     </p>
 
-    <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#1a1a26;border:1px solid #2a2a3a;border-radius:8px;margin:0 0 24px 0;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color:${BG_SUBTLE};border:1px solid ${BORDER};border-radius:8px;margin:0 0 24px 0;">
       <tr>
-        <td width="45%" style="padding:20px;text-align:center;">
-          <p style="margin:0 0 4px 0;font-size:22px;font-weight:700;color:#c9a84c;font-family:Georgia,serif;">${data.companyATicker}</p>
-          <p style="margin:0;font-size:12px;color:#6b6b7a;">${data.companyAName}</p>
+        <td width="45%" style="padding:20px;text-align:center;border-right:1px solid ${BORDER};">
+          ${tickerBadge(data.companyATicker, data.companyAName)}
         </td>
-        <td width="10%" style="text-align:center;">
-          <span style="font-size:16px;color:#6b6b7a;font-weight:700;">VS</span>
+        <td width="10%" style="text-align:center;vertical-align:middle;">
+          <span style="font-size:14px;color:${TEXT_LABEL};font-weight:700;">VS</span>
         </td>
         <td width="45%" style="padding:20px;text-align:center;">
-          <p style="margin:0 0 4px 0;font-size:22px;font-weight:700;color:#c9a84c;font-family:Georgia,serif;">${data.companyBTicker}</p>
-          <p style="margin:0;font-size:12px;color:#6b6b7a;">${data.companyBName}</p>
+          ${tickerBadge(data.companyBTicker, data.companyBName)}
         </td>
       </tr>
     </table>
 
-    <p style="margin:0 0 24px 0;font-size:13px;color:#6b6b7a;text-align:center;">
-      Lockout: <strong style="color:#a09e98;">${lockoutStr}</strong>
+    <p style="margin:0 0 24px 0;font-size:13px;color:${TEXT_LABEL};text-align:center;">
+      Lockout: <strong style="color:${TEXT_MUTED};">${lockoutStr}</strong>
     </p>
     <div style="text-align:center;">
-      ${goldButton(`${BASE_URL}/game`, "Play Now — Keep Your Streak →")}
+      ${greenButton(ctaUrl, "Play Now — Keep Your Streak →")}
     </div>
   `);
 
