@@ -745,7 +745,7 @@ const adminRouter = router({
         pairingRationale: input.nextPairingRationale,
         lockoutAt: input.nextLockoutAt ? new Date(input.nextLockoutAt) : undefined,
         createdBy: ctx.user.id,
-        status: "draft",
+        status: "active",
       });
 
       // Get the newly created game to attach research/question
