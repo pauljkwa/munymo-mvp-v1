@@ -26,6 +26,7 @@ import PrivacyPolicy from "./pages/legal/PrivacyPolicy";
 import Disclaimer from "./pages/legal/Disclaimer";
 import ResponsibleGaming from "./pages/legal/ResponsibleGaming";
 import EmailLanding from "./pages/EmailLanding";
+import Demo from "./pages/Demo";
 
 function ScrollToTop() {
   const [location] = useLocation();
@@ -48,6 +49,7 @@ function Router() {
       <Route path="/profile" component={PlayerProfile} />
       <Route path="/dashboard" component={MyDashboard} />
       <Route path="/evolution" component={EvolutionOfMunymo} />
+      <Route path="/demo" component={Demo} />
       <Route path="/terms" component={TermsOfUse} />
       <Route path="/privacy" component={PrivacyPolicy} />
       <Route path="/disclaimer" component={Disclaimer} />
