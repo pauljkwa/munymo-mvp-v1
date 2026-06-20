@@ -4,6 +4,7 @@ import { SignInButton } from "@clerk/clerk-react";
 import { trpc } from "@/lib/trpc";
 import { Link } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
+import MunymoLogo from "@/components/MunymoLogo";
 import {
   ArrowRight,
   Brain,
@@ -316,18 +317,16 @@ export default function Home() {
                 eeny meeny...
               </p>
 
-              {/* H1 */}
-              <h1
-                className="font-display animate-fade-up mb-5"
-                style={{
-                  color: "var(--color-foreground)",
-                  lineHeight: 1.05,
-                  animationDelay: "80ms",
-                }}
-              >
-                Introducing{" "}
-                <span className="text-gradient-gold">Munymo.</span>
-              </h1>
+              {/* Logo — large wordmark as the hero headline */}
+              <div className="animate-fade-up mb-2" style={{ animationDelay: "80ms" }}>
+                <p
+                  className="text-sm font-semibold tracking-widest uppercase mb-3"
+                  style={{ color: "var(--color-muted)" }}
+                >
+                  Introducing
+                </p>
+                <MunymoLogo height={64} className="mb-1" />
+              </div>
 
               {/* Body copy — tight, punchy */}
               <div
