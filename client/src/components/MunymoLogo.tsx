@@ -90,7 +90,7 @@ export default function MunymoLogo({
 
   return (
     <img
-      src="/manus-storage/munymo-logo-cropped_f2d06ef3.png"
+      src="/manus-storage/munymo-logo-cropped_75fe3c86.png"
       alt="Munymo"
       width={width}
       height={height}
