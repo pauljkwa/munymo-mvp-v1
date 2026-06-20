@@ -1,15 +1,15 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { SignInButton } from "@clerk/clerk-react";
 import { trpc } from "@/lib/trpc";
 import { Link } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
 import {
-  TrendingUp,
+  ArrowRight,
   Brain,
   BookOpen,
+  TrendingUp,
   Trophy,
-  ArrowRight,
   Flame,
   Lock,
   Smartphone,
@@ -18,8 +18,151 @@ import {
   Sparkles,
   BarChart2,
   CheckCircle2,
+  ChevronRight,
 } from "lucide-react";
 
+// ─── Fake candlestick data for hero mockup ────────────────────────────────────
+const CANDLES_A = [
+  { o: 52, h: 58, l: 49, c: 56 },
+  { o: 56, h: 60, l: 53, c: 54 },
+  { o: 54, h: 57, l: 50, c: 51 },
+  { o: 51, h: 55, l: 48, c: 53 },
+  { o: 53, h: 62, l: 52, c: 60 },
+  { o: 60, h: 65, l: 57, c: 58 },
+  { o: 58, h: 63, l: 55, c: 62 },
+  { o: 62, h: 68, l: 60, c: 65 },
+  { o: 65, h: 70, l: 62, c: 63 },
+  { o: 63, h: 67, l: 59, c: 66 },
+];
+const CANDLES_B = [
+  { o: 48, h: 54, l: 45, c: 50 },
+  { o: 50, h: 56, l: 47, c: 53 },
+  { o: 53, h: 58, l: 50, c: 52 },
+  { o: 52, h: 55, l: 46, c: 48 },
+  { o: 48, h: 52, l: 44, c: 51 },
+  { o: 51, h: 57, l: 49, c: 55 },
+  { o: 55, h: 60, l: 52, c: 57 },
+  { o: 57, h: 62, l: 54, c: 56 },
+  { o: 56, h: 61, l: 53, c: 59 },
+  { o: 59, h: 64, l: 56, c: 62 },
+];
+
+function MiniCandlestick({ candles }: { candles: typeof CANDLES_A }) {
+  const min = Math.min(...candles.map((c) => c.l));
+  const max = Math.max(...candles.map((c) => c.h));
+  const range = max - min || 1;
+  const W = 180;
+  const H = 72;
+  const pad = 4;
+  const candleW = 12;
+  const gap = (W - pad * 2 - candleW * candles.length) / (candles.length - 1);
+
+  const toY = (v: number) => H - pad - ((v - min) / range) * (H - pad * 2);
+
+  // MA line
+  const closes = candles.map((c) => c.c);
+  const maPoints = closes
+    .map((_, i) => {
+      const slice = closes.slice(Math.max(0, i - 2), i + 1);
+      return slice.reduce((a, b) => a + b, 0) / slice.length;
+    })
+    .map((v, i) => `${pad + i * (candleW + gap) + candleW / 2},${toY(v)}`)
+    .join(" ");
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full">
+      {/* MA line */}
+      <polyline
+        points={maPoints}
+        fill="none"
+        stroke="rgba(255,255,255,0.5)"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+      {candles.map((c, i) => {
+        const x = pad + i * (candleW + gap);
+        const bull = c.c >= c.o;
+        const bodyTop = toY(Math.max(c.o, c.c));
+        const bodyBot = toY(Math.min(c.o, c.c));
+        const bodyH = Math.max(bodyBot - bodyTop, 2);
+        const cx = x + candleW / 2;
+        return (
+          <g key={i}>
+            <line
+              x1={cx} y1={toY(c.h)}
+              x2={cx} y2={toY(c.l)}
+              stroke={bull ? "#4ade80" : "#f87171"}
+              strokeWidth="1"
+            />
+            <rect
+              x={x} y={bodyTop}
+              width={candleW} height={bodyH}
+              rx="1.5"
+              fill={bull ? "#4ade80" : "#f87171"}
+            />
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+function CompanyCard({
+  label,
+  sector,
+  candles,
+  onSelect,
+  selected,
+}: {
+  label: string;
+  sector: string;
+  candles: typeof CANDLES_A;
+  onSelect: () => void;
+  selected: boolean;
+}) {
+  return (
+    <button
+      onClick={onSelect}
+      className="flex-1 rounded-2xl p-4 flex flex-col gap-3 transition-all duration-300 text-left"
+      style={{
+        background: selected
+          ? "oklch(0.30 0.12 160)"
+          : "oklch(0.20 0.08 160)",
+        border: selected
+          ? "2px solid oklch(0.58 0.16 155)"
+          : "2px solid oklch(0.28 0.10 160)",
+        boxShadow: selected
+          ? "0 0 24px oklch(0.58 0.16 155 / 0.3)"
+          : "none",
+        transform: selected ? "scale(1.02)" : "scale(1)",
+      }}
+    >
+      <div className="flex items-center justify-between">
+        <span className="text-white font-bold text-sm">{label}</span>
+        <span
+          className="text-xs px-2 py-0.5 rounded-full font-semibold"
+          style={{ background: "oklch(0.58 0.16 155 / 0.25)", color: "#4ade80" }}
+        >
+          {sector}
+        </span>
+      </div>
+      <div className="h-[72px]">
+        <MiniCandlestick candles={candles} />
+      </div>
+      <div
+        className="w-full py-2 rounded-xl text-center text-sm font-bold transition-all duration-200"
+        style={{
+          background: selected ? "oklch(0.58 0.16 155)" : "oklch(0.35 0.12 160)",
+          color: "white",
+        }}
+      >
+        {selected ? "✓ Selected" : "Select"}
+      </div>
+    </button>
+  );
+}
+
+// ─── MunyIQ card data ─────────────────────────────────────────────────────────
 const MUNYIQ_CARDS = [
   {
     tier: "Sapphire",
@@ -31,7 +174,8 @@ const MUNYIQ_CARDS = [
     instinct: "72%",
     research: "88%",
     consistency: "A+",
-    description: "The entry point to recognised financial intelligence. Sapphire holders have demonstrated consistent engagement and reliable prediction accuracy. A MunyIQ above 100 places you in the upper half of all participants.",
+    description:
+      "Consistent engagement and reliable prediction accuracy. A MunyIQ above 100 places you in the upper half of all participants.",
     scoreRange: "100 – 119",
     img: "https://d2xsxph8kpxj0f.cloudfront.net/110945286/eKLqbcXcmD3p6GhwsMA3tE/munyiq-card-sapphire-v2-i8oSTMtX32anHab7t8qL8P.webp",
     accentColor: "#2563eb",
@@ -47,7 +191,8 @@ const MUNYIQ_CARDS = [
     instinct: "79%",
     research: "91%",
     consistency: "A",
-    description: "Emerald status signals a player whose instincts and research habits are measurably above average. A MunyIQ in this range corresponds to superior financial reasoning — a meaningful credential in any professional context.",
+    description:
+      "Instincts and research habits measurably above average. Emerald status is a meaningful signal of superior financial reasoning.",
     scoreRange: "120 – 129",
     img: "https://d2xsxph8kpxj0f.cloudfront.net/110945286/eKLqbcXcmD3p6GhwsMA3tE/munyiq-card-emerald-v2-9hdxL4mXhcEwHfx9ZdvutS.webp",
     accentColor: "#059669",
@@ -63,7 +208,8 @@ const MUNYIQ_CARDS = [
     instinct: "84%",
     research: "95%",
     consistency: "A+",
-    description: "Ruby holders operate at the level of gifted analysts. A MunyIQ of 130–139 places you in the top 2% of all participants — approaching the threshold of genuine financial genius.",
+    description:
+      "Ruby holders operate at the level of gifted analysts — top 2% of all participants.",
     scoreRange: "130 – 139",
     img: "https://d2xsxph8kpxj0f.cloudfront.net/110945286/eKLqbcXcmD3p6GhwsMA3tE/munyiq-card-ruby-v2-dAsHLuGRJ6QN5i7YdXbQen.webp",
     accentColor: "#dc2626",
@@ -79,7 +225,8 @@ const MUNYIQ_CARDS = [
     instinct: "93%",
     research: "99%",
     consistency: "S",
-    description: "Diamond is genius-level. A MunyIQ of 140 or above — the threshold recognised internationally as genius — places you among fewer than 0.5% of all participants. The rarest credential Munymo will ever issue.",
+    description:
+      "Diamond is genius-level. A MunyIQ of 140+ places you among fewer than 0.5% of all participants.",
     scoreRange: "140 – 200",
     img: "https://d2xsxph8kpxj0f.cloudfront.net/110945286/eKLqbcXcmD3p6GhwsMA3tE/munyiq-card-diamond-v2-ZgzStMMuBgYsgnMFBXpURJ.webp",
     accentColor: "#6366f1",
@@ -87,27 +234,36 @@ const MUNYIQ_CARDS = [
   },
 ];
 
+// ─── Main Component ───────────────────────────────────────────────────────────
 export default function Home() {
   const { isAuthenticated } = useAuth();
   const { data: todayGame } = trpc.games.getToday.useQuery();
   const [activeCard, setActiveCard] = useState(0);
+  const [selectedCompany, setSelectedCompany] = useState<"A" | "B" | null>(null);
   const touchStartX = useRef<number | null>(null);
+
+  // Auto-cycle MunyIQ cards
+  useEffect(() => {
+    const t = setInterval(() => {
+      setActiveCard((p) => (p + 1) % MUNYIQ_CARDS.length);
+    }, 3500);
+    return () => clearInterval(t);
+  }, []);
 
   const card = MUNYIQ_CARDS[activeCard];
 
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
   };
-
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (touchStartX.current === null) return;
     const delta = e.changedTouches[0].clientX - touchStartX.current;
     if (Math.abs(delta) > 40) {
-      if (delta < 0) {
-        setActiveCard((p) => (p + 1) % MUNYIQ_CARDS.length);
-      } else {
-        setActiveCard((p) => (p - 1 + MUNYIQ_CARDS.length) % MUNYIQ_CARDS.length);
-      }
+      setActiveCard((p) =>
+        delta < 0
+          ? (p + 1) % MUNYIQ_CARDS.length
+          : (p - 1 + MUNYIQ_CARDS.length) % MUNYIQ_CARDS.length
+      );
     }
     touchStartX.current = null;
   };
@@ -115,15 +271,29 @@ export default function Home() {
   return (
     <PublicLayout>
 
-      {/* ── Hero — asymmetric two-column ── */}
-      <section className="border-b" style={{ borderColor: "var(--color-border)" }}>
-        <div className="container">
-          <div className="grid lg:grid-cols-2 gap-0 min-h-[580px]">
+      {/* ══════════════════════════════════════════════════════════════════════
+          SECTION 1 — HERO
+      ══════════════════════════════════════════════════════════════════════ */}
+      <section className="relative overflow-hidden border-b" style={{ borderColor: "var(--color-border)" }}>
 
-            {/* Left column — copy */}
-            <div className="flex flex-col justify-center py-20 lg:py-24 lg:pr-16">
+        {/* Subtle radial glow behind hero */}
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(ellipse 70% 50% at 50% -10%, oklch(0.58 0.16 155 / 0.07) 0%, transparent 70%)",
+          }}
+        />
+
+        <div className="container relative">
+          <div className="grid lg:grid-cols-2 gap-0 min-h-[600px] items-center">
+
+            {/* ── Left: copy ── */}
+            <div className="flex flex-col justify-center py-16 lg:py-24 lg:pr-16">
+
+              {/* Eyebrow label */}
               <div
-                className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-widest mb-8 w-fit"
+                className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest mb-6 w-fit animate-fade-up"
                 style={{
                   background: "var(--color-brand-muted)",
                   color: "var(--color-brand)",
@@ -131,70 +301,99 @@ export default function Home() {
                 }}
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
-                Daily Stock Prediction Game
+                Daily Stock Market Training Game
               </div>
 
-              <h1
-                className="font-display mb-6 animate-fade-up"
-                style={{ color: "var(--color-foreground)", lineHeight: 1.1 }}
+              {/* Hook */}
+              <p
+                className="font-display italic mb-2 animate-fade-up"
+                style={{
+                  color: "var(--color-muted)",
+                  fontSize: "clamp(1.1rem, 2.5vw, 1.4rem)",
+                  animationDelay: "40ms",
+                }}
               >
-                Trust Your Gut.
-                <br />
-                <span className="text-gradient-gold">Back It With Research.</span>
+                eeny meeny...
+              </p>
+
+              {/* H1 */}
+              <h1
+                className="font-display animate-fade-up mb-5"
+                style={{
+                  color: "var(--color-foreground)",
+                  lineHeight: 1.05,
+                  animationDelay: "80ms",
+                }}
+              >
+                Introducing{" "}
+                <span className="text-gradient-gold">Munymo.</span>
               </h1>
 
-              <p
-                className="text-base md:text-lg mb-4 animate-fade-up delay-75 max-w-xl"
-                style={{ color: "var(--color-muted)", lineHeight: 1.7 }}
+              {/* Body copy — tight, punchy */}
+              <div
+                className="space-y-3 mb-8 animate-fade-up"
+                style={{ animationDelay: "140ms" }}
               >
-                Munymo fills a genuine gap in financial education — a daily game designed to help
-                beginners develop the market instincts they have yet to form, while giving the
-                experienced investor a rigorous new way to test and refine the ones they already have.
-              </p>
+                <p
+                  className="text-base leading-relaxed font-medium"
+                  style={{ color: "var(--color-foreground)" }}
+                >
+                  Not a guessing game.
+                </p>
+                <p
+                  className="text-base leading-relaxed"
+                  style={{ color: "var(--color-muted)" }}
+                >
+                  A daily training game with one simple question: who will
+                  perform better today — Company A or Company B?
+                </p>
+                <p
+                  className="text-base leading-relaxed"
+                  style={{ color: "var(--color-muted)" }}
+                >
+                  Study the research. Make your pick. Learn from the result.
+                </p>
+              </div>
 
-              <p
-                className="text-sm font-semibold uppercase tracking-wider mb-10 animate-fade-up delay-150"
-                style={{ color: "var(--color-brand)", letterSpacing: "0.08em" }}
+              {/* CTA */}
+              <div
+                className="flex flex-col sm:flex-row gap-3 animate-fade-up"
+                style={{ animationDelay: "200ms" }}
               >
-                Built to educate the novice. Built to stimulate the professional.
-              </p>
-
-              <div className="flex flex-col sm:flex-row gap-3 animate-fade-up delay-150">
                 {isAuthenticated ? (
-                  <Link href="/game" className="btn-gold text-sm px-6 py-2.5">
+                  <Link href="/game" className="btn-gold text-sm px-7 py-3">
                     Play Today's Game
                     <ArrowRight size={16} />
                   </Link>
                 ) : (
                   <SignInButton mode="modal">
-                    <button className="btn-gold text-sm px-6 py-2.5">
-                      Start Playing Free
+                    <button className="btn-gold text-sm px-7 py-3">
+                      Start Playing — It's Free
                       <ArrowRight size={16} />
                     </button>
                   </SignInButton>
                 )}
-                <Link href="/leaderboard" className="btn-ghost text-sm px-6 py-2.5">
-                  View Leaderboard
+                <Link href="/demo" className="btn-ghost text-sm px-6 py-3">
+                  See How It Works
                 </Link>
               </div>
             </div>
 
-            {/* Right column — live game card or stat panel */}
+            {/* ── Right: interactive game card mockup ── */}
             <div
               className="hidden lg:flex flex-col justify-center items-center border-l py-24 pl-16"
               style={{ borderColor: "var(--color-border)" }}
             >
               {todayGame ? (
+                /* Live game card when a game is active */
                 <div className="w-full max-w-sm">
                   <p
-                    className="text-xs font-semibold uppercase tracking-widest mb-5"
+                    className="text-xs font-bold uppercase tracking-widest mb-5"
                     style={{ color: "var(--color-subtle)" }}
                   >
                     Today's Matchup
                   </p>
-                  <div
-                    className="card-glass p-6 shadow-card"
-                  >
+                  <div className="card-glass p-6 shadow-card">
                     <div className="flex items-center justify-between gap-4 mb-5">
                       <div className="flex-1 text-center">
                         <div className="ticker-chip mb-2">{todayGame.companyATicker}</div>
@@ -202,10 +401,7 @@ export default function Home() {
                           {todayGame.companyAName}
                         </p>
                       </div>
-                      <div
-                        className="text-lg font-display font-bold px-3"
-                        style={{ color: "var(--color-subtle)" }}
-                      >
+                      <div className="text-lg font-display font-bold px-3" style={{ color: "var(--color-subtle)" }}>
                         vs
                       </div>
                       <div className="flex-1 text-center">
@@ -230,162 +426,259 @@ export default function Home() {
                   </div>
                 </div>
               ) : (
-                <div className="w-full max-w-sm space-y-4">
+                /* Demo card mockup when no live game */
+                <div className="w-full max-w-xs">
                   <p
-                    className="text-xs font-semibold uppercase tracking-widest mb-5"
+                    className="text-xs font-bold uppercase tracking-widest mb-4 text-center"
                     style={{ color: "var(--color-subtle)" }}
                   >
-                    Why Munymo
+                    Today's Matchup
                   </p>
-                  {[
-                    { icon: Brain, text: "Two-step prediction: gut instinct then informed research" },
-                    { icon: BarChart2, text: "Server-calculated scores — no manipulation possible" },
-                    { icon: Trophy, text: "Leaderboard qualification after 20 games" },
-                    { icon: Flame, text: "Streak tracking with Away Status protection" },
-                  ].map(({ icon: Icon, text }) => (
-                    <div key={text} className="flex items-start gap-3">
-                      <div
-                        className="w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0 mt-0.5"
-                        style={{ background: "var(--color-brand-muted)" }}
-                      >
-                        <Icon size={15} style={{ color: "var(--color-brand)" }} />
-                      </div>
-                      <p className="text-sm" style={{ color: "var(--color-muted)" }}>{text}</p>
+                  <div
+                    className="rounded-3xl p-5 flex flex-col gap-4"
+                    style={{
+                      background: "oklch(0.15 0.06 160)",
+                      border: "1.5px solid oklch(0.28 0.10 160)",
+                      boxShadow: "0 20px 60px oklch(0.10 0.08 160 / 0.5)",
+                    }}
+                  >
+                    <div className="flex gap-3">
+                      <CompanyCard
+                        label="Company A"
+                        sector="Tech"
+                        candles={CANDLES_A}
+                        selected={selectedCompany === "A"}
+                        onSelect={() =>
+                          setSelectedCompany((p) => (p === "A" ? null : "A"))
+                        }
+                      />
+                      <CompanyCard
+                        label="Company B"
+                        sector="Tech"
+                        candles={CANDLES_B}
+                        selected={selectedCompany === "B"}
+                        onSelect={() =>
+                          setSelectedCompany((p) => (p === "B" ? null : "B"))
+                        }
+                      />
                     </div>
-                  ))}
+                    {selectedCompany && (
+                      <div
+                        className="text-center text-xs py-2 rounded-xl font-semibold animate-fade-up"
+                        style={{ background: "oklch(0.58 0.16 155 / 0.15)", color: "#4ade80" }}
+                      >
+                        Good instinct. Now read the research →
+                      </div>
+                    )}
+                  </div>
+                  <p
+                    className="text-xs text-center mt-4"
+                    style={{ color: "var(--color-subtle)" }}
+                  >
+                    Try clicking a card ↑
+                  </p>
                 </div>
               )}
             </div>
+
+          </div>
+        </div>
+
+        {/* Mobile hero card — shown below copy on small screens */}
+        <div className="lg:hidden container pb-12">
+          <div
+            className="rounded-3xl p-5 flex flex-col gap-4 mx-auto max-w-sm"
+            style={{
+              background: "oklch(0.15 0.06 160)",
+              border: "1.5px solid oklch(0.28 0.10 160)",
+              boxShadow: "0 20px 60px oklch(0.10 0.08 160 / 0.5)",
+            }}
+          >
+            <div className="flex gap-3">
+              <CompanyCard
+                label="Company A"
+                sector="Tech"
+                candles={CANDLES_A}
+                selected={selectedCompany === "A"}
+                onSelect={() =>
+                  setSelectedCompany((p) => (p === "A" ? null : "A"))
+                }
+              />
+              <CompanyCard
+                label="Company B"
+                sector="Tech"
+                candles={CANDLES_B}
+                selected={selectedCompany === "B"}
+                onSelect={() =>
+                  setSelectedCompany((p) => (p === "B" ? null : "B"))
+                }
+              />
+            </div>
+            {selectedCompany && (
+              <div
+                className="text-center text-xs py-2 rounded-xl font-semibold animate-fade-up"
+                style={{ background: "oklch(0.58 0.16 155 / 0.15)", color: "#4ade80" }}
+              >
+                Good instinct. Now read the research →
+              </div>
+            )}
           </div>
         </div>
       </section>
 
-      {/* ── How It Works ── */}
+      {/* ══════════════════════════════════════════════════════════════════════
+          SECTION 2 — HOW IT WORKS
+      ══════════════════════════════════════════════════════════════════════ */}
       <section className="py-20 border-b" style={{ borderColor: "var(--color-border)" }}>
         <div className="container">
-          <div className="max-w-xl mb-12">
+          <div className="max-w-lg mb-14">
             <p className="section-label mb-3">How It Works</p>
-            <h2 className="font-display mb-3" style={{ color: "var(--color-foreground)" }}>
-              A two-step process that separates instinct from informed judgement
+            <h2 className="font-display" style={{ color: "var(--color-foreground)" }}>
+              Four steps. Five minutes.
+              <br />
+              <span className="text-gradient-gold">One daily habit.</span>
             </h2>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-px"
-            style={{ background: "var(--color-border)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-lg)", overflow: "hidden" }}
-          >
-            {[
-              {
-                icon: Brain,
-                step: "01",
-                title: "Gut Selection",
-                body: "Before reading anything, pick the company you instinctively believe will outperform. Your raw intuition, unfiltered.",
-              },
-              {
-                icon: BookOpen,
-                step: "02",
-                title: "Read the Research",
-                body: "Review curated research, sector context, and the pairing rationale provided for today's matchup.",
-              },
-              {
-                icon: TrendingUp,
-                step: "03",
-                title: "Final Selection",
-                body: "Confirm your official prediction and answer one validation question drawn from the research. This is your scored pick.",
-              },
-              {
-                icon: Trophy,
-                step: "04",
-                title: "Score & Learn",
-                body: "After lockout, results are published. See your Daily Score, community statistics, and educational commentary.",
-              },
-            ].map((item, i) => (
-              <div
-                key={item.step}
-                className="p-7 animate-fade-up"
-                style={{ background: "var(--color-surface)", animationDelay: `${i * 60}ms` }}
-              >
-                <div className="flex items-start justify-between mb-5">
-                  <div
-                    className="w-9 h-9 rounded-md flex items-center justify-center"
-                    style={{ background: "var(--color-brand-muted)" }}
-                  >
-                    <item.icon size={16} style={{ color: "var(--color-brand)" }} />
+          {/* Steps — horizontal timeline on desktop, stacked on mobile */}
+          <div className="relative">
+            {/* Connector line (desktop only) */}
+            <div
+              className="hidden md:block absolute top-[2.2rem] left-[calc(12.5%+1.5rem)] right-[calc(12.5%+1.5rem)] h-px"
+              style={{ background: "var(--color-border)" }}
+            />
+
+            <div className="grid md:grid-cols-4 gap-8">
+              {[
+                {
+                  icon: Brain,
+                  step: "01",
+                  title: "Gut Pick",
+                  body: "Choose a winner before you see any data. Raw instinct only.",
+                },
+                {
+                  icon: BookOpen,
+                  step: "02",
+                  title: "Read the Research",
+                  body: "Charts, financial metrics, and an AI-curated research brief.",
+                },
+                {
+                  icon: TrendingUp,
+                  step: "03",
+                  title: "Final Pick + Quiz",
+                  body: "Lock in your call. Answer one timed question from the research.",
+                },
+                {
+                  icon: Trophy,
+                  step: "04",
+                  title: "See the Result",
+                  body: "Score, community stats, and the Hindsight Spotlight lesson.",
+                },
+              ].map((item, i) => (
+                <div
+                  key={item.step}
+                  className="flex flex-col items-center text-center md:items-start md:text-left animate-fade-up"
+                  style={{ animationDelay: `${i * 60}ms` }}
+                >
+                  {/* Step circle */}
+                  <div className="relative mb-5">
+                    <div
+                      className="w-[4.5rem] h-[4.5rem] rounded-full flex items-center justify-center"
+                      style={{
+                        background: "var(--color-brand-muted)",
+                        border: "1px solid oklch(0.35 0.10 160 / 0.2)",
+                      }}
+                    >
+                      <item.icon size={22} style={{ color: "var(--color-brand)" }} />
+                    </div>
+                    <span
+                      className="absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold"
+                      style={{
+                        background: "var(--color-gold)",
+                        color: "white",
+                      }}
+                    >
+                      {i + 1}
+                    </span>
                   </div>
-                  <span
-                    className="font-mono text-xs font-bold"
-                    style={{ color: "var(--color-border-strong)" }}
+                  <h4
+                    className="font-display text-base mb-2"
+                    style={{ color: "var(--color-foreground)" }}
                   >
-                    {item.step}
-                  </span>
+                    {item.title}
+                  </h4>
+                  <p className="text-sm leading-relaxed" style={{ color: "var(--color-muted)" }}>
+                    {item.body}
+                  </p>
                 </div>
-                <h4 className="mb-2 text-base" style={{ color: "var(--color-foreground)" }}>
-                  {item.title}
-                </h4>
-                <p className="text-sm leading-relaxed" style={{ color: "var(--color-muted)" }}>
-                  {item.body}
-                </p>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       </section>
 
-      {/* ── Scoring ── */}
-      <section className="py-20 border-b" style={{ borderColor: "var(--color-border)" }}>
+      {/* ══════════════════════════════════════════════════════════════════════
+          SECTION 3 — SCORING (tight, visual)
+      ══════════════════════════════════════════════════════════════════════ */}
+      <section
+        className="py-20 border-b"
+        style={{
+          borderColor: "var(--color-border)",
+          background: "var(--color-surface-raised)",
+        }}
+      >
         <div className="container">
-          <div className="grid md:grid-cols-2 gap-16 items-start">
-            <div>
-              <p className="section-label mb-3">Scoring System</p>
-              <h2 className="font-display mb-4" style={{ color: "var(--color-foreground)" }}>
-                Rewards both prediction accuracy and research engagement
-              </h2>
-              <p className="mb-8 text-sm leading-relaxed" style={{ color: "var(--color-muted)" }}>
-                Your Daily Score is calculated entirely on the server after results are published —
-                reflecting both your prediction accuracy and your engagement with the research.
-              </p>
+          <div className="grid md:grid-cols-2 gap-12 items-center">
 
-              <div className="space-y-3">
-                {[
-                  { label: "Correct Final Selection", value: "+80", variant: "success" },
-                  { label: "Correct Validation Answer", value: "+20", variant: "info" },
-                  { label: "Perfect Day", value: "100", variant: "gold" },
-                ].map((row) => (
+            {/* Score display */}
+            <div>
+              <p className="section-label mb-4">The Score</p>
+              <div className="flex items-end gap-6 mb-8">
+                <div>
                   <div
-                    key={row.label}
-                    className="flex items-center justify-between px-4 py-3 rounded-lg"
-                    style={{ background: "var(--color-surface-raised)", border: "1px solid var(--color-border)" }}
+                    className="font-display font-black leading-none mb-1"
+                    style={{
+                      fontSize: "clamp(4rem, 10vw, 6rem)",
+                      color: "var(--color-gold)",
+                    }}
                   >
-                    <div className="flex items-center gap-3">
-                      <CheckCircle2
-                        size={15}
-                        style={{
-                          color: row.variant === "success" ? "var(--color-success)"
-                            : row.variant === "info" ? "var(--color-brand)"
-                            : "var(--color-gold)"
-                        }}
-                      />
-                      <span className="text-sm font-medium" style={{ color: "var(--color-foreground)" }}>
-                        {row.label}
-                      </span>
-                    </div>
-                    <span
-                      className="font-mono text-sm font-bold px-3 py-1 rounded"
-                      style={{
-                        background: row.variant === "success" ? "var(--color-success-muted)"
-                          : row.variant === "info" ? "var(--color-brand-muted)"
-                          : "var(--color-gold-muted)",
-                        color: row.variant === "success" ? "var(--color-success)"
-                          : row.variant === "info" ? "var(--color-brand)"
-                          : "var(--color-gold)",
-                      }}
-                    >
-                      {row.value}
-                    </span>
+                    80
                   </div>
-                ))}
+                  <p className="text-sm font-semibold" style={{ color: "var(--color-muted)" }}>
+                    Correct prediction
+                  </p>
+                </div>
+                <div
+                  className="text-3xl font-display font-bold pb-8"
+                  style={{ color: "var(--color-border-strong)" }}
+                >
+                  +
+                </div>
+                <div>
+                  <div
+                    className="font-display font-black leading-none mb-1"
+                    style={{
+                      fontSize: "clamp(4rem, 10vw, 6rem)",
+                      color: "var(--color-brand)",
+                    }}
+                  >
+                    20
+                  </div>
+                  <p className="text-sm font-semibold" style={{ color: "var(--color-muted)" }}>
+                    Validation question
+                  </p>
+                </div>
               </div>
+              <p className="text-sm leading-relaxed" style={{ color: "var(--color-muted)" }}>
+                Answer the validation question faster and score closer to the full 20 pts.
+                Scores are calculated server-side after market close.{" "}
+                <span style={{ color: "var(--color-foreground)", fontWeight: 600 }}>
+                  No manipulation possible.
+                </span>
+              </p>
             </div>
 
+            {/* Feature pills */}
             <div className="space-y-4">
               {[
                 {
@@ -393,21 +686,21 @@ export default function Home() {
                   iconColor: "var(--color-warning)",
                   iconBg: "var(--color-warning-muted)",
                   title: "Participation Streaks",
-                  body: "Play every day to build your streak. Away Status preserves your streak when you need a break. Market-closed and cancelled days never penalise you.",
+                  body: "Play every day to build your streak. Away Status protects it when life gets in the way.",
                 },
                 {
                   icon: Trophy,
                   iconColor: "var(--color-brand)",
                   iconBg: "var(--color-brand-muted)",
-                  title: "Leaderboard Qualification",
-                  body: "Ranked by Average Daily Score. You qualify for the leaderboard after completing 20 games — ensuring rankings reflect sustained performance.",
+                  title: "Leaderboard",
+                  body: "Ranked by Average Daily Score. Qualify after 20 games — rankings reflect sustained performance, not luck.",
                 },
                 {
                   icon: Lock,
                   iconColor: "var(--color-info)",
                   iconBg: "var(--color-info-muted)",
                   title: "Server-Side Integrity",
-                  body: "All scores are calculated server-side after results are published. Lockout is enforced on the server, not the browser. No manipulation is possible.",
+                  body: "Lockout is enforced on the server, not the browser. Every score is tamper-proof.",
                 },
               ].map((item) => (
                 <div
@@ -435,69 +728,43 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ── MunyIQ Card Showcase ── */}
-      <section
-        className="py-24 border-b"
-        style={{ borderColor: "var(--color-border)", background: "var(--color-surface-raised)" }}
-      >
+      {/* ══════════════════════════════════════════════════════════════════════
+          SECTION 4 — MUNYIQ TEASER
+      ══════════════════════════════════════════════════════════════════════ */}
+      <section className="py-24 border-b" style={{ borderColor: "var(--color-border)" }}>
         <div className="container">
-          {/* Header */}
-          <div className="max-w-2xl mb-14">
+          <div className="grid lg:grid-cols-2 gap-16 items-center">
+
+            {/* Card carousel */}
             <div
-              className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-widest mb-5"
-              style={{
-                background: "var(--color-gold-muted)",
-                color: "var(--color-gold)",
-                border: "1px solid oklch(0.58 0.16 155 / 0.2)",
-              }}
+              className="relative flex flex-col items-center select-none"
+              onTouchStart={handleTouchStart}
+              onTouchEnd={handleTouchEnd}
             >
-              <Sparkles size={11} />
-              Coming Soon
-            </div>
-            <h2 className="font-display mb-4" style={{ color: "var(--color-foreground)" }}>
-              Introducing <span className="text-gradient-gold">MunyIQ</span>
-            </h2>
-            <p className="text-base leading-relaxed" style={{ color: "var(--color-muted)" }}>
-              As Munymo matures, your game history will power a composite intelligence score — a
-              living measure of your instinct accuracy, research engagement, and consistency over
-              time. Aligned with the internationally recognised IQ scale (1–200), MunyIQ is the
-              credential that proves your financial intelligence is more than a feeling.
-            </p>
-          </div>
-
-          {/* Card + Info layout */}
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            {/* Card display */}
-            <div className="relative flex flex-col items-center">
+              {/* Glow */}
               <div
-                className="absolute inset-0 rounded-3xl blur-3xl opacity-30 transition-all duration-700 pointer-events-none"
-                style={{ background: card.glowColor, transform: "scale(0.8)" }}
+                className="absolute inset-0 rounded-3xl blur-3xl opacity-40 transition-all duration-700 pointer-events-none"
+                style={{ background: card.glowColor, transform: "scale(0.75)" }}
               />
-              <div
-                className="relative w-full max-w-md select-none"
-                onTouchStart={handleTouchStart}
-                onTouchEnd={handleTouchEnd}
-              >
-                <img
-                  src={card.img}
-                  alt={`MunyIQ ${card.tier} Tier Card`}
-                  className="w-full rounded-2xl transition-all duration-500"
-                  style={{
-                    boxShadow: `0 0 40px ${card.glowColor}, 0 20px 40px rgba(0,0,0,0.12)`,
-                  }}
-                />
-              </div>
-
-              {/* Tier selector — dots only, swipe to navigate on mobile */}
+              <img
+                src={card.img}
+                alt={`MunyIQ ${card.tier} Tier Card`}
+                className="relative w-full max-w-md rounded-2xl transition-all duration-500"
+                style={{
+                  boxShadow: `0 0 48px ${card.glowColor}, 0 24px 48px rgba(0,0,0,0.14)`,
+                }}
+              />
+              {/* Tier dots */}
               <div className="flex items-center justify-center gap-3 mt-8">
                 {MUNYIQ_CARDS.map((c, i) => (
                   <button
                     key={c.tier}
                     onClick={() => setActiveCard(i)}
-                    className="w-2 h-2 rounded-full transition-all duration-300"
+                    className="rounded-full transition-all duration-300"
                     style={{
+                      width: i === activeCard ? "1.5rem" : "0.5rem",
+                      height: "0.5rem",
                       background: i === activeCard ? card.accentColor : "var(--color-border-strong)",
-                      transform: i === activeCard ? "scale(1.5)" : "scale(1)",
                     }}
                     aria-label={`${c.tier} tier`}
                   />
@@ -505,75 +772,91 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Tier info */}
-            <div className="animate-fade-up">
+            {/* Copy */}
+            <div>
               <div
-                className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest mb-4"
-                style={{ background: `${card.accentColor}18`, color: card.accentColor, border: `1px solid ${card.accentColor}30` }}
+                className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest mb-5"
+                style={{
+                  background: "var(--color-gold-muted)",
+                  color: "var(--color-gold)",
+                  border: "1px solid oklch(0.58 0.16 155 / 0.2)",
+                }}
               >
-                {card.tier} Tier
+                <Sparkles size={11} />
+                Coming Soon
               </div>
-              <p
-                className="text-5xl font-display font-bold mb-2"
-                style={{ color: card.accentColor }}
-              >
-                {card.scoreRange}
+
+              <h2 className="font-display mb-4" style={{ color: "var(--color-foreground)" }}>
+                Your game history becomes{" "}
+                <span className="text-gradient-gold">your credential.</span>
+              </h2>
+
+              <p className="text-base leading-relaxed mb-6" style={{ color: "var(--color-muted)" }}>
+                As Munymo grows, your prediction record will power{" "}
+                <strong style={{ color: "var(--color-foreground)" }}>MunyIQ</strong> — a composite
+                score of instinct accuracy, research engagement, and consistency over time.
               </p>
-              <p className="text-sm font-medium mb-6" style={{ color: "var(--color-subtle)" }}>
-                MunyIQ Score Range
-              </p>
-              <p className="text-sm mb-8 leading-relaxed" style={{ color: "var(--color-muted)" }}>
-                {card.description}
+              <p className="text-base leading-relaxed mb-8" style={{ color: "var(--color-muted)" }}>
+                Earn a card. Share it. Prove it.
               </p>
 
-              {/* IQ scale reference */}
-              <div
-                className="rounded-lg p-5 mb-6"
-                style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)" }}
-              >
-                <p className="text-xs font-semibold uppercase tracking-widest mb-4" style={{ color: "var(--color-subtle)" }}>
-                  MunyIQ Scale Reference
-                </p>
-                <div className="space-y-2.5">
-                  {[
-                    { range: "Below 100", label: "Building", color: "var(--color-subtle)" },
-                    { range: "100 – 119", label: "Sapphire", color: "#2563eb" },
-                    { range: "120 – 129", label: "Emerald", color: "#059669" },
-                    { range: "130 – 139", label: "Ruby", color: "#dc2626" },
-                    { range: "140 – 200", label: "Diamond — Genius Level", color: "#6366f1" },
-                  ].map((row) => (
-                    <div key={row.range} className="flex items-center justify-between text-sm">
-                      <div className="flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: row.color }} />
-                        <span style={{ color: "var(--color-muted)" }}>{row.range}</span>
-                      </div>
-                      <span className="font-semibold text-xs" style={{ color: row.color }}>{row.label}</span>
+              {/* Tier list — compact */}
+              <div className="space-y-2">
+                {[
+                  { range: "100 – 119", label: "Sapphire", color: "#2563eb" },
+                  { range: "120 – 129", label: "Emerald", color: "#059669" },
+                  { range: "130 – 139", label: "Ruby", color: "#dc2626" },
+                  { range: "140+", label: "Diamond", color: "#6366f1" },
+                ].map((row) => (
+                  <div
+                    key={row.range}
+                    className="flex items-center justify-between px-4 py-2.5 rounded-lg"
+                    style={{
+                      background: `${row.color}10`,
+                      border: `1px solid ${row.color}25`,
+                    }}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span
+                        className="w-2 h-2 rounded-full flex-shrink-0"
+                        style={{ background: row.color }}
+                      />
+                      <span className="text-sm font-semibold" style={{ color: row.color }}>
+                        {row.label}
+                      </span>
                     </div>
-                  ))}
-                </div>
+                    <span className="text-xs font-mono" style={{ color: "var(--color-muted)" }}>
+                      {row.range}
+                    </span>
+                  </div>
+                ))}
               </div>
 
-              <p className="text-xs leading-relaxed" style={{ color: "var(--color-subtle)" }}>
-                Cards are digitally verifiable via QR code and designed to be shared, displayed,
-                and included in professional profiles. Early Munymo members will be first to earn them.
+              <p className="text-xs mt-6 leading-relaxed" style={{ color: "var(--color-subtle)" }}>
+                Players who join now will have the deepest prediction history when MunyIQ launches — and the most credible credentials.
               </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ── Road Ahead ── */}
-      <section className="py-20 border-b" style={{ borderColor: "var(--color-border)" }}>
+      {/* ══════════════════════════════════════════════════════════════════════
+          SECTION 5 — ROAD AHEAD (icon + title + one line)
+      ══════════════════════════════════════════════════════════════════════ */}
+      <section
+        className="py-20 border-b"
+        style={{
+          borderColor: "var(--color-border)",
+          background: "var(--color-surface-raised)",
+        }}
+      >
         <div className="container">
-          <div className="max-w-xl mb-12">
+          <div className="max-w-lg mb-12">
             <p className="section-label mb-3">The Road Ahead</p>
-            <h2 className="font-display mb-4" style={{ color: "var(--color-foreground)" }}>
-              You are joining at the beginning
+            <h2 className="font-display" style={{ color: "var(--color-foreground)" }}>
+              You are joining{" "}
+              <span className="text-gradient-gold">at the beginning.</span>
             </h2>
-            <p className="text-sm leading-relaxed" style={{ color: "var(--color-muted)" }}>
-              The MVP is the foundation. Early members will be first to access every feature
-              as Munymo grows into a complete financial intelligence platform.
-            </p>
           </div>
 
           <div className="grid md:grid-cols-3 gap-6">
@@ -583,43 +866,49 @@ export default function Home() {
                 iconColor: "var(--color-gold)",
                 iconBg: "var(--color-gold-muted)",
                 title: "Certificates of Achievement",
-                body: "Official, digitally verifiable Certificates of Achievement for significant milestones — leaderboard qualification, streak records, and tier attainment. Designed to be included in CVs, LinkedIn profiles, and professional portfolios as evidence of applied financial intelligence.",
+                body: "Digitally verifiable credentials for leaderboard qualification, streak records, and tier attainment — designed for CVs and LinkedIn.",
+                tag: "Coming",
               },
               {
                 icon: Users,
                 iconColor: "var(--color-brand)",
                 iconBg: "var(--color-brand-muted)",
                 title: "Head-to-Head Challenges",
-                body: "Challenge a friend, a colleague, or a rival to a private prediction contest. Head-to-head competitions are coming for those who want to prove their edge beyond the public leaderboard — and for workplaces that want to run their own internal Munymo leagues.",
+                body: "Challenge a friend or colleague to a private prediction contest. Workplace leagues included.",
+                tag: "Coming",
               },
               {
                 icon: Smartphone,
                 iconColor: "var(--color-success)",
                 iconBg: "var(--color-success-muted)",
                 title: "Native Mobile Apps",
-                body: "Dedicated iOS and Android apps are on the roadmap — built for the commute, the lunch break, and the habit. Push notifications, offline research reading, and a native experience optimised for the daily game loop.",
+                body: "Dedicated iOS and Android apps built for the commute, the lunch break, and the daily habit.",
+                tag: "Coming",
               },
             ].map((item, i) => (
               <div
                 key={item.title}
-                className="card-glass p-7 shadow-card animate-fade-up"
+                className="card-glass p-7 shadow-card animate-fade-up group"
                 style={{ animationDelay: `${i * 75}ms` }}
               >
                 <div
-                  className="w-10 h-10 rounded-lg flex items-center justify-center mb-5"
+                  className="w-10 h-10 rounded-xl flex items-center justify-center mb-5 transition-transform duration-300 group-hover:scale-110"
                   style={{ background: item.iconBg }}
                 >
                   <item.icon size={18} style={{ color: item.iconColor }} />
                 </div>
-                <div className="flex items-center gap-2 mb-3">
+                <div className="flex items-center gap-2 mb-2">
                   <h4 className="text-sm font-semibold" style={{ color: "var(--color-foreground)" }}>
                     {item.title}
                   </h4>
                   <span
-                    className="text-xs px-2 py-0.5 rounded-full font-semibold"
-                    style={{ background: "var(--color-border)", color: "var(--color-subtle)" }}
+                    className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wide"
+                    style={{
+                      background: "var(--color-border)",
+                      color: "var(--color-subtle)",
+                    }}
                   >
-                    Coming
+                    {item.tag}
                   </span>
                 </div>
                 <p className="text-sm leading-relaxed" style={{ color: "var(--color-muted)" }}>
@@ -628,68 +917,57 @@ export default function Home() {
               </div>
             ))}
           </div>
-
-          {/* Early member callout */}
-          <div
-            className="mt-8 rounded-xl p-8"
-            style={{
-              background: "var(--color-brand-muted)",
-              border: "1px solid oklch(0.35 0.10 160 / 0.15)",
-            }}
-          >
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-              <div>
-                <p className="text-sm font-semibold mb-1" style={{ color: "var(--color-brand)" }}>
-                  Early Member Advantage
-                </p>
-                <p className="text-sm" style={{ color: "var(--color-muted)" }}>
-                  Every game you play now builds the prediction record that your future MunyIQ score
-                  will be calculated from. The players who join earliest will have the deepest history
-                  — and the most credible credentials — when these features launch.
-                </p>
-              </div>
-              {!isAuthenticated && (
-                <SignInButton mode="modal">
-                  <button className="btn-brand text-sm flex-shrink-0" style={{ padding: "0.5rem 1.25rem" }}>
-                    Join Now
-                    <ArrowRight size={14} />
-                  </button>
-                </SignInButton>
-              )}
-            </div>
-          </div>
         </div>
       </section>
 
-      {/* ── CTA ── */}
+      {/* ══════════════════════════════════════════════════════════════════════
+          SECTION 6 — FINAL CTA
+      ══════════════════════════════════════════════════════════════════════ */}
       {!isAuthenticated && (
-        <section className="py-20">
+        <section className="py-24">
           <div className="container">
             <div
-              className="max-w-2xl mx-auto text-center rounded-2xl p-12 shadow-card"
+              className="relative max-w-2xl mx-auto text-center rounded-3xl p-12 overflow-hidden"
               style={{
                 background: "var(--color-surface)",
                 border: "1px solid var(--color-border)",
+                boxShadow: "0 8px 40px oklch(0.15 0.01 260 / 0.06)",
               }}
             >
-              <p className="section-label mb-4 justify-center">Get Started</p>
-              <h2 className="font-display mb-4" style={{ color: "var(--color-foreground)" }}>
-                Ready to start building your record?
-              </h2>
-              <p className="mb-8 text-sm leading-relaxed" style={{ color: "var(--color-muted)" }}>
-                Join Munymo today. Every game you play is a data point in your financial
-                intelligence story — and the story starts now.
-              </p>
-              <SignInButton mode="modal">
-                <button className="btn-gold text-sm px-8 py-3">
-                  Get Started Free
-                  <ArrowRight size={16} />
-                </button>
-              </SignInButton>
+              {/* Background glow */}
+              <div
+                className="pointer-events-none absolute inset-0"
+                style={{
+                  background:
+                    "radial-gradient(ellipse 80% 60% at 50% 120%, oklch(0.58 0.16 155 / 0.08) 0%, transparent 70%)",
+                }}
+              />
+
+              <div className="relative">
+                <p className="section-label mb-5 justify-center">Get Started</p>
+                <h2
+                  className="font-display mb-4"
+                  style={{ color: "var(--color-foreground)", lineHeight: 1.1 }}
+                >
+                  Five minutes a day.
+                  <br />
+                  <span className="text-gradient-gold">Real companies. Real results.</span>
+                </h2>
+                <p className="mb-8 text-sm leading-relaxed" style={{ color: "var(--color-muted)" }}>
+                  Free to play. No financial knowledge required. Just curiosity.
+                </p>
+                <SignInButton mode="modal">
+                  <button className="btn-gold text-sm px-8 py-3">
+                    Start Playing Free
+                    <ArrowRight size={16} />
+                  </button>
+                </SignInButton>
+              </div>
             </div>
           </div>
         </section>
       )}
+
     </PublicLayout>
   );
 }
