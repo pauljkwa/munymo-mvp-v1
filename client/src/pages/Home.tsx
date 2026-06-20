@@ -305,9 +305,9 @@ export default function Home() {
                 Daily Stock Market Training Game
               </div>
 
-              {/* Hook */}
+              {/* 1. Hook */}
               <p
-                className="font-display italic mb-2 animate-fade-up"
+                className="font-display italic mb-4 animate-fade-up"
                 style={{
                   color: "var(--color-muted)",
                   fontSize: "clamp(1.1rem, 2.5vw, 1.4rem)",
@@ -317,40 +317,34 @@ export default function Home() {
                 eeny meeny...
               </p>
 
-              {/* Logo — large wordmark as the hero headline */}
-              <div className="animate-fade-up mb-2" style={{ animationDelay: "80ms" }}>
-                <p
-                  className="text-sm font-semibold tracking-widest uppercase mb-3"
-                  style={{ color: "var(--color-muted)" }}
-                >
-                  Introducing
-                </p>
-                <MunymoLogo height={64} className="mb-1" />
+              {/* 2. Logo — large wordmark */}
+              <div className="animate-fade-up mb-5" style={{ animationDelay: "80ms" }}>
+                <MunymoLogo height={64} />
               </div>
 
-              {/* Body copy — tight, punchy */}
+              {/* 3. Introducing Munymo — bold headline */}
+              <h1
+                className="font-display font-bold animate-fade-up mb-4"
+                style={{
+                  color: "var(--color-foreground)",
+                  fontSize: "clamp(1.4rem, 3vw, 1.9rem)",
+                  lineHeight: 1.2,
+                  animationDelay: "120ms",
+                }}
+              >
+                Introducing Munymo.
+              </h1>
+
+              {/* 4. Single combined paragraph */}
               <div
-                className="space-y-3 mb-8 animate-fade-up"
-                style={{ animationDelay: "140ms" }}
+                className="mb-8 animate-fade-up"
+                style={{ animationDelay: "160ms" }}
               >
                 <p
-                  className="text-base leading-relaxed font-medium"
-                  style={{ color: "var(--color-foreground)" }}
-                >
-                  Not a guessing game.
-                </p>
-                <p
                   className="text-base leading-relaxed"
                   style={{ color: "var(--color-muted)" }}
                 >
-                  A daily training game with one simple question: who will
-                  perform better today — Company A or Company B?
-                </p>
-                <p
-                  className="text-base leading-relaxed"
-                  style={{ color: "var(--color-muted)" }}
-                >
-                  Study the research. Make your pick. Learn from the result.
+                  Not a guessing game. A daily stock market training game that asks one simple question: who will perform better today — Company A or Company B?
                 </p>
               </div>
 
