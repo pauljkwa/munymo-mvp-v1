@@ -1,31 +1,25 @@
-/**
- * auth.logout — Clerk migration
- *
- * Since switching to Clerk, logout is handled entirely client-side by
- * Clerk's signOut() function. The server-side logout procedure is a
- * no-op stub that returns { success: true } for API compatibility.
- * No session cookie is cleared server-side.
- */
 import { describe, expect, it } from "vitest";
 import { appRouter } from "./routers";
+import { COOKIE_NAME } from "../shared/const";
 import type { TrpcContext } from "./_core/context";
+
+type CookieCall = {
+  name: string;
+  options: Record<string, unknown>;
+};
 
 type AuthenticatedUser = NonNullable<TrpcContext["user"]>;
 
-function createAuthContext(): { ctx: TrpcContext } {
+function createAuthContext(): { ctx: TrpcContext; clearedCookies: CookieCall[] } {
+  const clearedCookies: CookieCall[] = [];
+
   const user: AuthenticatedUser = {
     id: 1,
-    clerkId: "user_test_123",
-    openId: null,
+    openId: "sample-user",
     email: "sample@example.com",
     name: "Sample User",
-    displayName: null,
-    loginMethod: "clerk",
+    loginMethod: "manus",
     role: "user",
-    tier: "free",
-    awayStatus: false,
-    awayStatusUntil: null,
-    deactivated: false,
     createdAt: new Date(),
     updatedAt: new Date(),
     lastSignedIn: new Date(),
@@ -37,19 +31,32 @@ function createAuthContext(): { ctx: TrpcContext } {
       protocol: "https",
       headers: {},
     } as TrpcContext["req"],
-    res: {} as TrpcContext["res"],
+    res: {
+      clearCookie: (name: string, options: Record<string, unknown>) => {
+        clearedCookies.push({ name, options });
+      },
+    } as TrpcContext["res"],
   };
 
-  return { ctx };
+  return { ctx, clearedCookies };
 }
 
 describe("auth.logout", () => {
-  it("returns success (logout is handled client-side by Clerk)", async () => {
-    const { ctx } = createAuthContext();
+  it("clears the session cookie and reports success", async () => {
+    const { ctx, clearedCookies } = createAuthContext();
     const caller = appRouter.createCaller(ctx);
 
     const result = await caller.auth.logout();
 
     expect(result).toEqual({ success: true });
+    expect(clearedCookies).toHaveLength(1);
+    expect(clearedCookies[0]?.name).toBe(COOKIE_NAME);
+    expect(clearedCookies[0]?.options).toMatchObject({
+      maxAge: -1,
+      secure: true,
+      sameSite: "none",
+      httpOnly: true,
+      path: "/",
+    });
   });
 });

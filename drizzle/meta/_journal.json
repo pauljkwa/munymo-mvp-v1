@@ -1,55 +1,5 @@
 {
   "version": "7",
   "dialect": "mysql",
-  "entries": [
-    {
-      "idx": 0,
-      "version": "5",
-      "when": 1781144649753,
-      "tag": "0000_slow_squadron_supreme",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "5",
-      "when": 1781144860250,
-      "tag": "0001_jittery_inertia",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "5",
-      "when": 1781417953818,
-      "tag": "0002_yielding_george_stacy",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "5",
-      "when": 1781433903838,
-      "tag": "0003_romantic_veda",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "5",
-      "when": 1781496244349,
-      "tag": "0004_plain_puff_adder",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "5",
-      "when": 1781508961782,
-      "tag": "0005_watery_cannonball",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "5",
-      "when": 1781621488801,
-      "tag": "0006_unknown_micromax",
-      "breakpoints": true
-    }
-  ]
+  "entries": []
 }
