@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
 import { CandlestickChart } from "@/components/CandlestickChart";
@@ -232,6 +232,119 @@ function ValidationModal({ phase, onOpenQuestion, onSubmitAnswer, result, onClos
   );
 }
 
+// ─── Step Tooltips ───────────────────────────────────────────────────────────
+
+const STEP_TIPS: Record<string, { title: string; body: string; emoji: string }> = {
+  gut: {
+    emoji: "🧠",
+    title: "Step 1 of 5 — Gut Pick",
+    body: "Before you see any data, tap the company you instinctively think will outperform today. Pure gut feel — no research allowed yet. This is compared to your final pick later to measure how much the research changed your mind.",
+  },
+  research: {
+    emoji: "📊",
+    title: "Step 2 of 5 — Research",
+    body: "Read the pairing rationale, analyst notes, and key financial metrics for both companies. Study the live candlestick charts. You'll be tested on this material in a timed question — so read carefully!",
+  },
+  final: {
+    emoji: "🎯",
+    title: "Step 3 of 5 — Final Pick",
+    body: "Now that you've done your research, lock in your official prediction. This is the pick that counts for scoring. You can change your mind from your gut pick — that's the whole point.",
+  },
+  validation: {
+    emoji: "⏱",
+    title: "Step 4 of 5 — Validation Question",
+    body: "A timed multiple-choice question based on the research you just read. Answer quickly — speed is part of your score. This tests whether you actually absorbed the research or just skimmed it.",
+  },
+  result: {
+    emoji: "🏆",
+    title: "Step 5 of 5 — Result",
+    body: "See who won, how your picks compared, and read the Hindsight Spotlight — a post-game analysis explaining what drove the result. In the live game, your score is added to the leaderboard.",
+  },
+};
+
+interface StepTooltipProps {
+  step: string;
+  onDismiss: () => void;
+}
+
+function StepTooltip({ step, onDismiss }: StepTooltipProps) {
+  const tip = STEP_TIPS[step];
+  const touchStartX = useRef<number | null>(null);
+  const [isExiting, setIsExiting] = useState(false);
+
+  const dismiss = useCallback(() => {
+    setIsExiting(true);
+    setTimeout(onDismiss, 250);
+  }, [onDismiss]);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const delta = e.changedTouches[0].clientX - touchStartX.current;
+    if (Math.abs(delta) > 60) dismiss();
+    touchStartX.current = null;
+  };
+
+  if (!tip) return null;
+
+  return (
+    <div
+      className="fixed bottom-6 left-1/2 z-50 w-[calc(100%-2rem)] max-w-sm"
+      style={{
+        transform: `translateX(-50%) translateY(${isExiting ? "120%" : "0"})`,
+        transition: "transform 0.25s cubic-bezier(0.23,1,0.32,1)",
+      }}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
+      <div
+        className="rounded-2xl p-5 shadow-2xl"
+        style={{
+          background: "oklch(0.18 0.02 250)",
+          border: "1px solid oklch(0.35 0.08 250)",
+          color: "white",
+        }}
+      >
+        {/* Drag handle */}
+        <div className="flex justify-center mb-3">
+          <div className="w-8 h-1 rounded-full" style={{ background: "oklch(0.5 0.05 250)" }} />
+        </div>
+
+        <div className="flex items-start gap-3 mb-4">
+          <span className="text-2xl leading-none mt-0.5">{tip.emoji}</span>
+          <div>
+            <p className="font-bold text-sm mb-1" style={{ color: "oklch(0.85 0.12 250)" }}>
+              {tip.title}
+            </p>
+            <p className="text-sm leading-relaxed" style={{ color: "oklch(0.78 0.03 250)" }}>
+              {tip.body}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs" style={{ color: "oklch(0.55 0.04 250)" }}>
+            Swipe to dismiss
+          </p>
+          <button
+            onClick={dismiss}
+            className="px-4 py-2 rounded-xl text-sm font-semibold transition-all active:scale-95"
+            style={{
+              background: "oklch(0.45 0.2 250)",
+              color: "white",
+            }}
+          >
+            Got it →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Demo Banner ──────────────────────────────────────────────────────────────
 
 function DemoBanner() {
@@ -257,6 +370,10 @@ export default function Demo() {
   const [modalPhase, setModalPhase] = useState<"confirm" | "question" | "result" | null>(null);
   const [validationResult, setValidationResult] = useState<{ isCorrect: boolean } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Track which step tooltips have been dismissed
+  const [dismissedTips, setDismissedTips] = useState<Set<string>>(new Set());
+  const showTip = (s: string) => !dismissedTips.has(s) && step === s && !modalPhase;
+  const dismissTip = (s: string) => setDismissedTips(prev => new Set(Array.from(prev).concat(s)));
 
   const stepLabels: DemoStep[] = ["gut", "research", "final", "validation", "result"];
   const stepDisplayLabels = ["Gut Pick", "Research", "Final Pick", "Validation", "Result"];
@@ -351,6 +468,11 @@ export default function Demo() {
     <>
       <DemoBanner />
       <PublicLayout>
+        {/* Step-by-step guided tooltips */}
+        {showTip("gut") && <StepTooltip step="gut" onDismiss={() => dismissTip("gut")} />}
+        {showTip("research") && <StepTooltip step="research" onDismiss={() => dismissTip("research")} />}
+        {showTip("final") && <StepTooltip step="final" onDismiss={() => dismissTip("final")} />}
+        {showTip("result") && <StepTooltip step="result" onDismiss={() => dismissTip("result")} />}
         {/* Validation Modal */}
         {modalPhase && (
           <ValidationModal
