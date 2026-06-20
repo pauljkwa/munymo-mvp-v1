@@ -106,8 +106,8 @@ The correct answer must be the **exact text** of one of the four options.
 
 ## Step 6 — Set Tomorrow's Game Date and Lockout Time
 
-- `gameDate`: tomorrow's date in `YYYY-MM-DD` format (the next trading day — skip weekends)
-- `lockoutAt`: tomorrow at **13:00:00 UTC** during DST (Mar–Nov, UTC−4), or **14:00:00 UTC** outside DST (Nov–Mar, UTC−5) — both equal 9:00 AM US Eastern time
+- `gameDate`: the **next valid US trading day** in `YYYY-MM-DD` format. You must check the US market holiday calendar. If tomorrow is a weekend or a scheduled holiday, advance the date until you reach an open trading day.
+- `lockoutAt`: on the `gameDate` at **13:00:00 UTC** during DST (Mar–Nov, UTC−4), or **14:00:00 UTC** outside DST (Nov–Mar, UTC−5) — both equal 9:00 AM US Eastern time
 
 US Daylight Saving Time is in effect from the second Sunday in March to the first Sunday in November. During DST, US Eastern time is UTC−4, so 9:00 AM ET = `13:00:00 UTC`. Outside DST (winter), US Eastern is UTC−5, so 9:00 AM ET = `14:00:00 UTC`.
 
@@ -136,6 +136,7 @@ The JSON structure to POST:
 
 ```json
 {
+  "marketClosed": false,
   "today": {
     "gameId": null,
     "companyAPerf": <number>,
@@ -217,8 +218,9 @@ The owner will be notified automatically. Log the error details for diagnosis.
 - **Always use real closing prices** — do not estimate or use pre-market prices
 - **Always use full ISO 8601 UTC format** for `lockoutAt` — e.g. `2026-06-17T13:00:00.000Z`
 - **The `correctAnswer` must exactly match one of the `options` strings** — character for character
-- **Do not skip weekends** — if today is Friday, tomorrow's `gameDate` should be Monday
-- **Market holidays**: if NASDAQ is closed today (no trading), skip the `today` block entirely and set `"today": null`
+- **Market holidays & Weekends**: 
+  - If today was a US market holiday (NASDAQ/NYSE closed), skip scoring entirely: set `"today": null` and include a `"marketClosed": true` flag at the top level of the JSON.
+  - The `gameDate` for tomorrow MUST be the **next valid US trading day**. If tomorrow is a weekend or a scheduled US market holiday, advance the date to the next open trading day.
 
 ---
 

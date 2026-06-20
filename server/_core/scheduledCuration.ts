@@ -66,10 +66,17 @@ async function dailyCurationHandler(req: Request, res: Response) {
     }
 
     const body = req.body as CurationPayload;
-    const { today, tomorrow } = body;
+    const { today, tomorrow, marketClosed } = body;
 
     if (!tomorrow) {
       return res.status(400).json({ error: "Missing 'tomorrow' block in payload" });
+    }
+
+    // ── Market-closed day handling ──
+    // If the agent signals the market was closed today (public holiday),
+    // we skip all scoring/closing logic and only create tomorrow's game.
+    if (marketClosed) {
+      console.log("[daily-curation] Market closed today — skipping result scoring, creating next game only.");
     }
 
     const { getDb } = await import("../db");
@@ -133,8 +140,9 @@ async function dailyCurationHandler(req: Request, res: Response) {
     }
 
     // ── 3. Determine active game to close ──
+    // Skip closing if the market was closed today (holiday) or no winner data provided.
     let closeGameId: number | undefined;
-    if (today && today.winnerTicker) {
+    if (!marketClosed && today && today.winnerTicker) {
       // Find the active/locked game to close
       const activeGame = await db
         .select({ id: dailyGames.id, companyATicker: dailyGames.companyATicker, companyBTicker: dailyGames.companyBTicker })
@@ -147,7 +155,7 @@ async function dailyCurationHandler(req: Request, res: Response) {
 
     // ── 4. Determine winner ──
     let winner: "A" | "B" | undefined;
-    if (today && today.winnerTicker && closeGameId) {
+    if (!marketClosed && today && today.winnerTicker && closeGameId) {
       const game = await db.select().from(dailyGames).where(eq(dailyGames.id, closeGameId)).limit(1);
       if (game[0]) {
         winner = game[0].companyATicker.toUpperCase() === today.winnerTicker.toUpperCase() ? "A" : "B";
@@ -202,7 +210,12 @@ async function dailyCurationHandler(req: Request, res: Response) {
     const result = await caller.admin.endOfDay(endOfDayInput);
 
     const elapsed = Date.now() - startTime;
-    const summary = `Daily curation completed in ${elapsed}ms. Next game: ${tomorrow.companyATicker} vs ${tomorrow.companyBTicker} on ${tomorrow.gameDate}. ${closeGameId ? `Closed game #${closeGameId} (winner: ${winner}).` : "No game closed (first game)."}`;
+    const closedNote = marketClosed
+      ? "Market was closed today (public holiday) — no game scored."
+      : closeGameId
+        ? `Closed game #${closeGameId} (winner: ${winner}).`
+        : "No game closed (first game).";
+    const summary = `Daily curation completed in ${elapsed}ms. Next game: ${tomorrow.companyATicker} vs ${tomorrow.companyBTicker} on ${tomorrow.gameDate}. ${closedNote}`;
     console.log("[daily-curation]", summary);
 
     await notifyOwner({
@@ -233,6 +246,8 @@ async function dailyCurationHandler(req: Request, res: Response) {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface CurationPayload {
+  /** Set to true by the agent when the market was closed today (holiday). */
+  marketClosed?: boolean;
   today?: {
     gameId?: number | null;
     companyAPerf?: number;
