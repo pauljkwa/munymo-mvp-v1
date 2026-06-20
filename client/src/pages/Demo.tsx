@@ -413,16 +413,15 @@ export default function Demo() {
   const metricsA = allMetrics.filter(([label]) => label.startsWith("AAPL"));
   const metricsB = allMetrics.filter(([label]) => label.startsWith("MSFT"));
 
-  const CompanyCard = ({
+  // Metrics-only card (no chart) — used in the side-by-side comparison row
+  const MetricsCard = ({
     ticker,
     companyName,
     metrics,
-    accentColor,
   }: {
     ticker: string;
     companyName: string;
     metrics: [string, string][];
-    accentColor: string;
   }) => (
     <div
       className="rounded-xl overflow-hidden flex flex-col"
@@ -432,9 +431,7 @@ export default function Demo() {
         className="px-4 py-3 flex items-center gap-2"
         style={{ borderBottom: "1px solid var(--color-border)", background: "var(--color-surface-raised)" }}
       >
-        <span className="ticker-chip" style={{ fontSize: "0.65rem" }}>
-          {ticker}
-        </span>
+        <span className="ticker-chip" style={{ fontSize: "0.65rem" }}>{ticker}</span>
         <span className="text-xs font-semibold truncate" style={{ color: "var(--color-foreground)" }}>
           {companyName}
         </span>
@@ -458,9 +455,6 @@ export default function Demo() {
           })}
         </div>
       )}
-      <div className="mt-auto">
-        <CandlestickChart ticker={ticker} companyName={companyName} accentColor={accentColor} />
-      </div>
     </div>
   );
 
@@ -647,27 +641,57 @@ export default function Demo() {
                   </div>
                 </div>
 
-                {/* Key Metrics & Charts */}
+                {/* Key Metrics — always side by side for easy comparison */}
                 <div className="mt-5">
                   <p
                     className="text-xs font-semibold uppercase tracking-wider mb-3"
                     style={{ color: "var(--color-brand)" }}
                   >
-                    Key Metrics &amp; Charts
+                    Key Metrics
                   </p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <CompanyCard
+                  <div className="grid grid-cols-2 gap-3">
+                    <MetricsCard
                       ticker="AAPL"
                       companyName={DEMO_GAME.companyAName}
                       metrics={metricsA}
-                      accentColor="#009050"
                     />
-                    <CompanyCard
+                    <MetricsCard
                       ticker="MSFT"
                       companyName={DEMO_GAME.companyBName}
                       metrics={metricsB}
-                      accentColor="#1d4ed8"
                     />
+                  </div>
+                </div>
+
+                {/* Charts — full width per company for readability */}
+                <div className="mt-4">
+                  <p
+                    className="text-xs font-semibold uppercase tracking-wider mb-3"
+                    style={{ color: "var(--color-brand)" }}
+                  >
+                    Charts
+                  </p>
+                  <div className="flex flex-col gap-3">
+                    <div
+                      className="rounded-xl overflow-hidden"
+                      style={{ border: "1px solid var(--color-border)", background: "var(--color-surface)" }}
+                    >
+                      <div className="px-4 py-2 flex items-center gap-2" style={{ borderBottom: "1px solid var(--color-border)", background: "var(--color-surface-raised)" }}>
+                        <span className="ticker-chip" style={{ fontSize: "0.65rem" }}>AAPL</span>
+                        <span className="text-xs font-semibold" style={{ color: "var(--color-foreground)" }}>{DEMO_GAME.companyAName}</span>
+                      </div>
+                      <CandlestickChart ticker="AAPL" companyName={DEMO_GAME.companyAName} accentColor="#009050" />
+                    </div>
+                    <div
+                      className="rounded-xl overflow-hidden"
+                      style={{ border: "1px solid var(--color-border)", background: "var(--color-surface)" }}
+                    >
+                      <div className="px-4 py-2 flex items-center gap-2" style={{ borderBottom: "1px solid var(--color-border)", background: "var(--color-surface-raised)" }}>
+                        <span className="ticker-chip" style={{ fontSize: "0.65rem" }}>MSFT</span>
+                        <span className="text-xs font-semibold" style={{ color: "var(--color-foreground)" }}>{DEMO_GAME.companyBName}</span>
+                      </div>
+                      <CandlestickChart ticker="MSFT" companyName={DEMO_GAME.companyBName} accentColor="#1d4ed8" />
+                    </div>
                   </div>
                 </div>
               </div>
