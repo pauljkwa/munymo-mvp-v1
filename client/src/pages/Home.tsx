@@ -4,6 +4,7 @@ import { SignInButton } from "@clerk/clerk-react";
 import { trpc } from "@/lib/trpc";
 import { Link } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
+import MunymoLogo from "@/components/MunymoLogo";
 import {
   ArrowRight,
   Brain,
@@ -306,7 +307,7 @@ export default function Home() {
 
               {/* Hook */}
               <p
-                className="font-display italic mb-2 animate-fade-up"
+                className="font-display italic mb-4 animate-fade-up"
                 style={{
                   color: "var(--color-muted)",
                   fontSize: "clamp(1.1rem, 2.5vw, 1.4rem)",
@@ -316,42 +317,33 @@ export default function Home() {
                 eeny meeny...
               </p>
 
-              {/* H1 */}
-              <h1
-                className="font-display animate-fade-up mb-5"
+              {/* Logo */}
+              <div className="mb-5 animate-fade-up" style={{ animationDelay: "80ms" }}>
+                <MunymoLogo height={52} />
+              </div>
+
+              {/* Introducing headline */}
+              <p
+                className="font-display font-bold animate-fade-up mb-4"
                 style={{
                   color: "var(--color-foreground)",
-                  lineHeight: 1.05,
-                  animationDelay: "80ms",
+                  fontSize: "clamp(1.1rem, 2vw, 1.25rem)",
+                  animationDelay: "110ms",
                 }}
               >
-                Introducing{" "}
-                <span className="text-gradient-gold">Munymo.</span>
-              </h1>
+                Introducing Munymo.
+              </p>
 
-              {/* Body copy — tight, punchy */}
+              {/* Body copy — single combined paragraph */}
               <div
-                className="space-y-3 mb-8 animate-fade-up"
-                style={{ animationDelay: "140ms" }}
+                className="mb-8 animate-fade-up"
+                style={{ animationDelay: "150ms" }}
               >
                 <p
-                  className="text-base leading-relaxed font-medium"
-                  style={{ color: "var(--color-foreground)" }}
-                >
-                  Not a guessing game.
-                </p>
-                <p
                   className="text-base leading-relaxed"
                   style={{ color: "var(--color-muted)" }}
                 >
-                  A daily training game with one simple question: who will
-                  perform better today — Company A or Company B?
-                </p>
-                <p
-                  className="text-base leading-relaxed"
-                  style={{ color: "var(--color-muted)" }}
-                >
-                  Study the research. Make your pick. Learn from the result.
+                  Not a guessing game. A daily stock market training game that asks one simple question: who will perform better today — Company A or Company B?
                 </p>
               </div>
 
