@@ -12,6 +12,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { ENV } from "./_core/env";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
+import { referralRouter } from "./referralRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import {
   computeAndStoreCommunityStats,
@@ -1194,5 +1195,6 @@ export const appRouter = router({
   dashboard: dashboardRouter,
     metrics: metricsRouter,
   push: pushRouter,
+  referral: referralRouter,
 });
 export type AppRouter = typeof appRouter;

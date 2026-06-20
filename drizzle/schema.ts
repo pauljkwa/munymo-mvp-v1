@@ -330,6 +330,84 @@ export const pushSubscriptions = mysqlTable(
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
 export type InsertPushSubscription = typeof pushSubscriptions.$inferInsert;
 
+// ─── Referral Codes ──────────────────────────────────────────────────────────
+
+/**
+ * One row per physical merch item.
+ * Each item ships with a unique QR code pointing to munymo.com/r/[code].
+ *
+ * Lifecycle:
+ *   unassigned  — code generated, item not yet shipped / claimed
+ *   active      — owner has scanned and enrolled the code; referrals are live
+ *   suspended   — admin has suspended this code (abuse, lost item, etc.)
+ *
+ * When status = 'active', every subsequent scan by a non-owner opens the
+ * landing page with a referral cookie. If that visitor signs up within the
+ * attribution window, a referral_event row is created and the owner is credited.
+ */
+export const referralCodes = mysqlTable("referral_codes", {
+  id: int("id").autoincrement().primaryKey(),
+  // 8-character alphanumeric code, e.g. "X7K2M9PQ" — embedded in the QR URL
+  code: varchar("code", { length: 16 }).notNull().unique(),
+  // Merch item type for display / analytics
+  merchType: mysqlEnum("merchType", ["mug", "tshirt", "other"])
+    .default("other")
+    .notNull(),
+  // Batch identifier — links a code to a production/fulfilment run
+  batchId: varchar("batchId", { length: 64 }),
+  // The Munymo user who owns this code (null until enrolled)
+  ownerId: int("ownerId"),
+  // Lifecycle status
+  status: mysqlEnum("status", ["unassigned", "active", "suspended"])
+    .default("unassigned")
+    .notNull(),
+  // Timestamp when the owner enrolled (claimed) this code
+  enrolledAt: timestamp("enrolledAt"),
+  // Running totals — denormalised for fast dashboard queries
+  totalScans: int("totalScans").notNull().default(0),
+  totalSignups: int("totalSignups").notNull().default(0),
+  // Admin notes
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ReferralCode = typeof referralCodes.$inferSelect;
+export type InsertReferralCode = typeof referralCodes.$inferInsert;
+
+// ─── Referral Events ──────────────────────────────────────────────────────────
+
+/**
+ * One row per meaningful referral interaction.
+ *
+ * eventType:
+ *   scan    — someone scanned the QR code (may or may not sign up)
+ *   signup  — a scan led to a new user registration within the attribution window
+ *
+ * For 'signup' events, referredUserId is populated once the new user is created.
+ * The attribution window is 30 days from the scan timestamp.
+ */
+export const referralEvents = mysqlTable("referral_events", {
+  id: int("id").autoincrement().primaryKey(),
+  referralCodeId: int("referralCodeId").notNull(),
+  eventType: mysqlEnum("eventType", ["scan", "signup"]).notNull(),
+  // The new user who signed up (null for scan events)
+  referredUserId: int("referredUserId"),
+  // The owner of the code at the time of this event (denormalised for history)
+  ownerIdAtEvent: int("ownerIdAtEvent"),
+  // Anonymous fingerprint for deduplicating repeat scans from the same device
+  // SHA-256 of (IP + User-Agent) — never stored raw
+  deviceFingerprint: varchar("deviceFingerprint", { length: 64 }),
+  // UTM / referral cookie value set on the visitor's browser
+  referralCookie: varchar("referralCookie", { length: 64 }),
+  // Attribution: was this scan within the 30-day window of a prior scan?
+  attributed: boolean("attributed").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ReferralEvent = typeof referralEvents.$inferSelect;
+export type InsertReferralEvent = typeof referralEvents.$inferInsert;
+
 // ─── Admin Audit Log ──────────────────────────────────────────────────────────
 
 export const adminAuditLog = mysqlTable("admin_audit_log", {
