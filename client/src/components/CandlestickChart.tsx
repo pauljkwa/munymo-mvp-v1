@@ -46,77 +46,93 @@ export function CandlestickChart({ ticker, companyName, accentColor = "#009050" 
     const textColor = isDark ? "#94a3b8" : "#64748b";
     const gridColor = isDark ? "#1e293b" : "#f1f5f9";
 
-    // Use actual container width, falling back to a sensible default if not yet laid out
-    const initialWidth = container.clientWidth > 0 ? container.clientWidth : 320;
+    // Use actual container width; if zero (e.g. inside an animating Drawer),
+    // wait one rAF so the layout has settled before creating the chart.
+    const createChartWhenReady = () => {
+      const w = container.clientWidth > 0 ? container.clientWidth : 320;
 
-    const chart = createChart(container, {
-      layout: {
-        background: { type: ColorType.Solid, color: bg },
-        textColor,
-        fontFamily: "'Plus Jakarta Sans', sans-serif",
-        fontSize: 11,
-      },
-      grid: {
-        vertLines: { color: gridColor },
-        horzLines: { color: gridColor },
-      },
-      crosshair: { mode: 1 },
-      rightPriceScale: { borderColor: gridColor },
-      timeScale: {
-        borderColor: gridColor,
-        timeVisible: range === "1d" || range === "5d",
-        secondsVisible: false,
-      },
-      width: initialWidth,
-      height: 280,
-    });
+      const chart = createChart(container, {
+        layout: {
+          background: { type: ColorType.Solid, color: bg },
+          textColor,
+          fontFamily: "'Plus Jakarta Sans', sans-serif",
+          fontSize: 11,
+        },
+        grid: {
+          vertLines: { color: gridColor },
+          horzLines: { color: gridColor },
+        },
+        crosshair: { mode: 1 },
+        rightPriceScale: { borderColor: gridColor },
+        timeScale: {
+          borderColor: gridColor,
+          timeVisible: range === "1d" || range === "5d",
+          secondsVisible: false,
+        },
+        width: w,
+        height: 280,
+      });
 
-    const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: accentColor,
-      downColor: "#ef4444",
-      borderUpColor: accentColor,
-      borderDownColor: "#ef4444",
-      wickUpColor: accentColor,
-      wickDownColor: "#ef4444",
-    });
+      const candleSeries = chart.addSeries(CandlestickSeries, {
+        upColor: accentColor,
+        downColor: "#ef4444",
+        borderUpColor: accentColor,
+        borderDownColor: "#ef4444",
+        wickUpColor: accentColor,
+        wickDownColor: "#ef4444",
+      });
 
-    type RawCandle = { time: number; open: number | null; high: number | null; low: number | null; close: number | null; volume: number | null };
-    const formattedCandles = (data.candles as RawCandle[])
-      .filter((c) => c.open !== null && c.close !== null && c.high !== null && c.low !== null)
-      .map((c) => ({
-        time: c.time as Time,
-        open: c.open as number,
-        high: c.high as number,
-        low: c.low as number,
-        close: c.close as number,
-      }));
+      type RawCandle = { time: number; open: number | null; high: number | null; low: number | null; close: number | null; volume: number | null };
+      const formattedCandles = (data.candles as RawCandle[])
+        .filter((c) => c.open !== null && c.close !== null && c.high !== null && c.low !== null)
+        .map((c) => ({
+          time: c.time as Time,
+          open: c.open as number,
+          high: c.high as number,
+          low: c.low as number,
+          close: c.close as number,
+        }));
 
-    candleSeries.setData(formattedCandles);
-    chart.timeScale().fitContent();
+      candleSeries.setData(formattedCandles);
+      chart.timeScale().fitContent();
 
-    // ResizeObserver keeps chart in sync with container width changes (grid layout, orientation)
-    const ro = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (entry) {
-        const w = entry.contentRect.width;
-        if (w > 0) chart.applyOptions({ width: w });
-      }
-    });
-    ro.observe(container);
+      // ResizeObserver keeps chart in sync with container width changes
+      const ro = new ResizeObserver((entries) => {
+        const entry = entries[0];
+        if (entry) {
+          const newW = entry.contentRect.width;
+          if (newW > 0) chart.applyOptions({ width: newW });
+        }
+      });
+      ro.observe(container);
 
-    // Also handle window resize as a fallback
-    const handleResize = () => {
-      if (container.clientWidth > 0) {
-        chart.applyOptions({ width: container.clientWidth });
-      }
+      const handleResize = () => {
+        if (container.clientWidth > 0) {
+          chart.applyOptions({ width: container.clientWidth });
+        }
+      };
+      window.addEventListener("resize", handleResize);
+
+      return () => {
+        ro.disconnect();
+        window.removeEventListener("resize", handleResize);
+        chart.remove();
+      };
     };
-    window.addEventListener("resize", handleResize);
 
-    return () => {
-      ro.disconnect();
-      window.removeEventListener("resize", handleResize);
-      chart.remove();
-    };
+    // If container already has width, initialise immediately; otherwise defer one frame
+    if (container.clientWidth > 0) {
+      return createChartWhenReady();
+    } else {
+      let cleanup: (() => void) | undefined;
+      const rafId = requestAnimationFrame(() => {
+        cleanup = createChartWhenReady();
+      });
+      return () => {
+        cancelAnimationFrame(rafId);
+        cleanup?.();
+      };
+    }
   }, [data, range, accentColor]);
 
   return (
