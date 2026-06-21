@@ -14,7 +14,23 @@ import {
   Trophy,
   Loader2,
   FlaskConical,
+  BarChart2,
+  TrendingDown,
+  DollarSign,
+  Percent,
+  Activity,
+  Target,
+  LineChart,
+  X,
 } from "lucide-react";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerClose,
+} from "@/components/ui/drawer";
+import { MetricExplanationSheet } from "@/components/MetricExplanationSheet";
 
 // ─── Demo Data ────────────────────────────────────────────────────────────────
 
@@ -372,6 +388,8 @@ export default function Demo() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Track which step tooltips have been dismissed
   const [dismissedTips, setDismissedTips] = useState<Set<string>>(new Set());
+  // Chart drawer state
+  const [chartOpen, setChartOpen] = useState<"A" | "B" | null>(null);
   const showTip = (s: string) => !dismissedTips.has(s) && step === s && !modalPhase;
   const dismissTip = (s: string) => setDismissedTips(prev => new Set(Array.from(prev).concat(s)));
 
@@ -410,53 +428,26 @@ export default function Demo() {
 
   // Build metrics split
   const allMetrics = Object.entries(DEMO_GAME.researchMetrics);
-  const metricsA = allMetrics.filter(([label]) => label.startsWith("AAPL"));
-  const metricsB = allMetrics.filter(([label]) => label.startsWith("MSFT"));
+  const metricsA = allMetrics.filter(([label]) => label.toUpperCase().startsWith("AAPL"));
+  const metricsB = allMetrics.filter(([label]) => label.toUpperCase().startsWith("MSFT"));
 
-  // Metrics-only card (no chart) — used in the side-by-side comparison row
-  const MetricsCard = ({
-    ticker,
-    companyName,
-    metrics,
-  }: {
-    ticker: string;
-    companyName: string;
-    metrics: [string, string][];
-  }) => (
-    <div
-      className="rounded-xl overflow-hidden flex flex-col"
-      style={{ border: "1px solid var(--color-border)", background: "var(--color-surface)" }}
-    >
-      <div
-        className="px-4 py-3 flex items-center gap-2"
-        style={{ borderBottom: "1px solid var(--color-border)", background: "var(--color-surface-raised)" }}
-      >
-        <span className="ticker-chip" style={{ fontSize: "0.65rem" }}>{ticker}</span>
-        <span className="text-xs font-semibold truncate" style={{ color: "var(--color-foreground)" }}>
-          {companyName}
-        </span>
-      </div>
-      {metrics.length > 0 && (
-        <div className="divide-y" style={{ borderColor: "var(--color-border)" }}>
-          {metrics.map(([label, value]) => {
-            const shortLabel = label.replace(/^(AAPL|MSFT)\s*/i, "");
-            return (
-              <div key={label} className="px-3 py-2">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-xs font-medium leading-tight" style={{ color: "var(--color-muted)" }}>
-                    {shortLabel}
-                  </p>
-                  <span className="text-xs font-mono font-bold shrink-0" style={{ color: "var(--color-foreground)" }}>
-                    {value}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
+  const stripTicker = (label: string, ticker: string) =>
+    label.replace(new RegExp(`^${ticker}\\s*[—\\-\\s:]\\s*`, "i"), "");
+
+  // Pick an icon for each metric based on its label
+  const metricIcon = (label: string) => {
+    const l = label.toLowerCase();
+    if (l.includes("revenue") || l.includes("sales")) return DollarSign;
+    if (l.includes("margin") || l.includes("eps") || l.includes("earning")) return Percent;
+    if (l.includes("p/e") || l.includes("ratio") || l.includes("valuation")) return BarChart2;
+    if (l.includes("growth")) return TrendingUp;
+    if (l.includes("market cap") || l.includes("cap")) return Activity;
+    if (l.includes("analyst") || l.includes("target") || l.includes("consensus")) return Target;
+    if (l.includes("week") || l.includes("range") || l.includes("52")) return LineChart;
+    return BarChart2;
+  };
+
+  void TrendingDown; // imported but available for future use
 
   return (
     <>
@@ -641,57 +632,80 @@ export default function Demo() {
                   </div>
                 </div>
 
-                {/* Key Metrics — always side by side for easy comparison */}
+                {/* Key Metrics & Charts — dashboard-style stat cards, always side by side */}
                 <div className="mt-5">
-                  <p
-                    className="text-xs font-semibold uppercase tracking-wider mb-3"
-                    style={{ color: "var(--color-brand)" }}
-                  >
-                    Key Metrics
+                  <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--color-brand)" }}>
+                    Key Metrics &amp; Charts
                   </p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <MetricsCard
-                      ticker="AAPL"
-                      companyName={DEMO_GAME.companyAName}
-                      metrics={metricsA}
-                    />
-                    <MetricsCard
-                      ticker="MSFT"
-                      companyName={DEMO_GAME.companyBName}
-                      metrics={metricsB}
-                    />
-                  </div>
-                </div>
 
-                {/* Charts — full width per company for readability */}
-                <div className="mt-4">
-                  <p
-                    className="text-xs font-semibold uppercase tracking-wider mb-3"
-                    style={{ color: "var(--color-brand)" }}
-                  >
-                    Charts
-                  </p>
-                  <div className="flex flex-col gap-3">
-                    <div
-                      className="rounded-xl overflow-hidden"
-                      style={{ border: "1px solid var(--color-border)", background: "var(--color-surface)" }}
-                    >
-                      <div className="px-4 py-2 flex items-center gap-2" style={{ borderBottom: "1px solid var(--color-border)", background: "var(--color-surface-raised)" }}>
-                        <span className="ticker-chip" style={{ fontSize: "0.65rem" }}>AAPL</span>
-                        <span className="text-xs font-semibold" style={{ color: "var(--color-foreground)" }}>{DEMO_GAME.companyAName}</span>
-                      </div>
-                      <CandlestickChart ticker="AAPL" companyName={DEMO_GAME.companyAName} accentColor="#009050" />
+                  {/* Company headers */}
+                  <div className="grid grid-cols-2 gap-2 mb-2">
+                    <div className="flex items-center gap-2 px-1">
+                      <span className="ticker-chip" style={{ fontSize: "0.6rem" }}>AAPL</span>
+                      <span className="text-xs font-semibold truncate" style={{ color: "var(--color-foreground)" }}>{DEMO_GAME.companyAName}</span>
                     </div>
-                    <div
-                      className="rounded-xl overflow-hidden"
-                      style={{ border: "1px solid var(--color-border)", background: "var(--color-surface)" }}
-                    >
-                      <div className="px-4 py-2 flex items-center gap-2" style={{ borderBottom: "1px solid var(--color-border)", background: "var(--color-surface-raised)" }}>
-                        <span className="ticker-chip" style={{ fontSize: "0.65rem" }}>MSFT</span>
-                        <span className="text-xs font-semibold" style={{ color: "var(--color-foreground)" }}>{DEMO_GAME.companyBName}</span>
-                      </div>
-                      <CandlestickChart ticker="MSFT" companyName={DEMO_GAME.companyBName} accentColor="#1d4ed8" />
+                    <div className="flex items-center gap-2 px-1">
+                      <span className="ticker-chip" style={{ fontSize: "0.6rem", background: "oklch(0.45 0.18 260 / 0.15)", color: "oklch(0.45 0.18 260)" }}>MSFT</span>
+                      <span className="text-xs font-semibold truncate" style={{ color: "var(--color-foreground)" }}>{DEMO_GAME.companyBName}</span>
                     </div>
+                  </div>
+
+                  {/* Metric card rows — each row is a grid-cols-2 pair */}
+                  <div className="flex flex-col gap-2">
+                    {Array.from({ length: Math.max(metricsA.length, metricsB.length) }, (_, i) => {
+                      const [labelA, valueA] = metricsA[i] ?? ["", "—"];
+                      const [labelB, valueB] = metricsB[i] ?? ["", "—"];
+                      const IconA = metricIcon(labelA);
+                      const IconB = metricIcon(labelB);
+                      const shortLabelA = stripTicker(labelA, "AAPL");
+                      const shortLabelB = stripTicker(labelB, "MSFT");
+                      return (
+                        <div key={i} className="grid grid-cols-2 gap-2">
+                          {/* Company A card */}
+                          <div className="rounded-2xl p-4" style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)" }}>
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "var(--color-surface-raised)" }}>
+                                <IconA size={14} style={{ color: "var(--color-brand)" }} />
+                              </div>
+                            </div>
+                            <p className="text-base font-display font-bold leading-tight mb-1" style={{ color: "var(--color-foreground)" }}>{valueA}</p>
+                            <p className="text-xs font-semibold uppercase tracking-wider leading-tight" style={{ color: "var(--color-muted)" }}>{shortLabelA || labelA}</p>
+                            {labelA && <MetricExplanationSheet metricLabel={labelA} />}
+                          </div>
+                          {/* Company B card */}
+                          <div className="rounded-2xl p-4" style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)" }}>
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "oklch(0.45 0.18 260 / 0.08)" }}>
+                                <IconB size={14} style={{ color: "oklch(0.45 0.18 260)" }} />
+                              </div>
+                            </div>
+                            <p className="text-base font-display font-bold leading-tight mb-1" style={{ color: "var(--color-foreground)" }}>{valueB}</p>
+                            <p className="text-xs font-semibold uppercase tracking-wider leading-tight" style={{ color: "var(--color-muted)" }}>{shortLabelB || labelB}</p>
+                            {labelB && <MetricExplanationSheet metricLabel={labelB} />}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Chart CTA buttons */}
+                  <div className="grid grid-cols-2 gap-2 mt-3">
+                    <button
+                      onClick={() => setChartOpen("A")}
+                      className="flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold transition-all active:scale-95"
+                      style={{ background: "var(--color-brand-muted)", color: "var(--color-brand)", border: "1px solid var(--color-brand)" }}
+                    >
+                      <LineChart size={15} />
+                      View AAPL Chart
+                    </button>
+                    <button
+                      onClick={() => setChartOpen("B")}
+                      className="flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold transition-all active:scale-95"
+                      style={{ background: "oklch(0.45 0.18 260 / 0.08)", color: "oklch(0.45 0.18 260)", border: "1px solid oklch(0.45 0.18 260 / 0.4)" }}
+                    >
+                      <LineChart size={15} />
+                      View MSFT Chart
+                    </button>
                   </div>
                 </div>
               </div>
@@ -719,6 +733,43 @@ export default function Demo() {
               </button>
             </div>
           )}
+
+          {/* ── Chart Drawer (slides up from bottom, swipe to dismiss) ── */}
+          <Drawer open={chartOpen !== null} onOpenChange={(open) => { if (!open) setChartOpen(null); }}>
+            <DrawerContent className="max-h-[90vh]">
+              <DrawerHeader className="flex items-center justify-between pb-2">
+                <DrawerTitle className="text-base">
+                  {chartOpen === "A"
+                    ? `AAPL — ${DEMO_GAME.companyAName}`
+                    : `MSFT — ${DEMO_GAME.companyBName}`}
+                </DrawerTitle>
+                <DrawerClose asChild>
+                  <button
+                    className="w-8 h-8 rounded-full flex items-center justify-center transition-colors"
+                    style={{ background: "var(--color-surface-raised)" }}
+                  >
+                    <X size={16} style={{ color: "var(--color-muted)" }} />
+                  </button>
+                </DrawerClose>
+              </DrawerHeader>
+              <div className="px-4 pb-8 overflow-y-auto">
+                {chartOpen === "A" && (
+                  <CandlestickChart
+                    ticker="AAPL"
+                    companyName={DEMO_GAME.companyAName}
+                    accentColor="#009050"
+                  />
+                )}
+                {chartOpen === "B" && (
+                  <CandlestickChart
+                    ticker="MSFT"
+                    companyName={DEMO_GAME.companyBName}
+                    accentColor="oklch(0.45 0.18 260)"
+                  />
+                )}
+              </div>
+            </DrawerContent>
+          </Drawer>
 
           {/* ── Step: Final ── */}
           {step === "final" && (
