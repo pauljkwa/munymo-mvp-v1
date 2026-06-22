@@ -41,15 +41,12 @@ export function CandlestickChart({ ticker, companyName, accentColor = "#009050" 
 
     const container = chartContainerRef.current;
 
-    const isDark = document.documentElement.classList.contains("dark");
-    const bg = isDark ? "#0f172a" : "#ffffff";
-    const textColor = isDark ? "#94a3b8" : "#64748b";
-    const gridColor = isDark ? "#1e293b" : "#f1f5f9";
-
-    // Use actual container width; if zero (e.g. inside an animating Drawer),
-    // wait one rAF so the layout has settled before creating the chart.
-    const createChartWhenReady = () => {
-      const w = container.clientWidth > 0 ? container.clientWidth : 320;
+    // Chart factory — called once we know the real container width.
+    const buildChart = (w: number) => {
+      const isDark = document.documentElement.classList.contains("dark");
+      const bg = isDark ? "#0f172a" : "#ffffff";
+      const textColor = isDark ? "#94a3b8" : "#64748b";
+      const gridColor = isDark ? "#1e293b" : "#f1f5f9";
 
       const chart = createChart(container, {
         layout: {
@@ -96,7 +93,7 @@ export function CandlestickChart({ ticker, companyName, accentColor = "#009050" 
       candleSeries.setData(formattedCandles);
       chart.timeScale().fitContent();
 
-      // ResizeObserver keeps chart in sync with container width changes
+      // Keep chart in sync with future container width changes (e.g. orientation change)
       const ro = new ResizeObserver((entries) => {
         const entry = entries[0];
         if (entry) {
@@ -120,19 +117,43 @@ export function CandlestickChart({ ticker, companyName, accentColor = "#009050" 
       };
     };
 
-    // If container already has width, initialise immediately; otherwise defer one frame
+    // If the container already has a real width (e.g. inline chart, first company),
+    // build immediately. Otherwise attach a ResizeObserver that fires as soon as
+    // the Drawer animation settles and the container gets its first non-zero width.
+    // This is more reliable than a single rAF which can fire mid-animation.
     if (container.clientWidth > 0) {
-      return createChartWhenReady();
-    } else {
-      let cleanup: (() => void) | undefined;
-      const rafId = requestAnimationFrame(() => {
-        cleanup = createChartWhenReady();
-      });
-      return () => {
-        cancelAnimationFrame(rafId);
-        cleanup?.();
-      };
+      return buildChart(container.clientWidth);
     }
+
+    let cleanup: (() => void) | undefined;
+    let built = false;
+
+    const waitRo = new ResizeObserver((entries) => {
+      if (built) return;
+      const w = entries[0]?.contentRect.width ?? 0;
+      if (w > 0) {
+        built = true;
+        waitRo.disconnect();
+        cleanup = buildChart(w);
+      }
+    });
+    waitRo.observe(container);
+
+    // Safety fallback: if the ResizeObserver never fires (e.g. hidden tab),
+    // try again after 300 ms (enough for any CSS transition to complete).
+    const fallbackTimer = setTimeout(() => {
+      if (built) return;
+      built = true;
+      waitRo.disconnect();
+      const w = container.clientWidth > 0 ? container.clientWidth : 320;
+      cleanup = buildChart(w);
+    }, 300);
+
+    return () => {
+      clearTimeout(fallbackTimer);
+      waitRo.disconnect();
+      cleanup?.();
+    };
   }, [data, range, accentColor]);
 
   return (
