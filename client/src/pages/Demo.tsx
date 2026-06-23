@@ -753,20 +753,21 @@ export default function Demo() {
                 </DrawerClose>
               </DrawerHeader>
               <div className="px-4 pb-8 overflow-y-auto">
-                {chartOpen === "A" && (
+                {/* Always mount both so each initialises at correct width */}
+                <div style={{ display: chartOpen === "A" ? "block" : "none" }}>
                   <CandlestickChart
                     ticker="AAPL"
                     companyName={DEMO_GAME.companyAName}
                     accentColor="#009050"
                   />
-                )}
-                {chartOpen === "B" && (
+                </div>
+                <div style={{ display: chartOpen === "B" ? "block" : "none" }}>
                   <CandlestickChart
                     ticker="MSFT"
                     companyName={DEMO_GAME.companyBName}
                     accentColor="oklch(0.45 0.18 260)"
                   />
-                )}
+                </div>
               </div>
             </DrawerContent>
           </Drawer>

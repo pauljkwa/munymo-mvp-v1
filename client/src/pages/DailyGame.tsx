@@ -789,19 +789,25 @@ export default function DailyGame() {
               </DrawerClose>
             </DrawerHeader>
             <div className="px-4 pb-8 overflow-y-auto">
-              {chartOpen === "A" && game?.companyATicker && (
-                <CandlestickChart
-                  ticker={game.companyATicker}
-                  companyName={game.companyAName ?? ""}
-                  accentColor="#009050"
-                />
+              {/* Always mount both charts so each initialises at the correct width.
+                  CSS visibility hides the inactive one — no remounting on switch. */}
+              {game?.companyATicker && (
+                <div style={{ display: chartOpen === "A" ? "block" : "none" }}>
+                  <CandlestickChart
+                    ticker={game.companyATicker}
+                    companyName={game.companyAName ?? ""}
+                    accentColor="#009050"
+                  />
+                </div>
               )}
-              {chartOpen === "B" && game?.companyBTicker && (
-                <CandlestickChart
-                  ticker={game.companyBTicker}
-                  companyName={game.companyBName ?? ""}
-                  accentColor="oklch(0.45 0.18 260)"
-                />
+              {game?.companyBTicker && (
+                <div style={{ display: chartOpen === "B" ? "block" : "none" }}>
+                  <CandlestickChart
+                    ticker={game.companyBTicker}
+                    companyName={game.companyBName ?? ""}
+                    accentColor="oklch(0.45 0.18 260)"
+                  />
+                </div>
               )}
             </div>
           </DrawerContent>
