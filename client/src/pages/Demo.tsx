@@ -703,7 +703,7 @@ export default function Demo() {
                       View AAPL Chart
                     </button>
                     <button
-                      onClick={() => { setChartTicker("MSFT"); setChartName(DEMO_GAME.companyBName); setChartColor("oklch(0.45 0.18 260)"); }}
+                      onClick={() => { setChartTicker("MSFT"); setChartName(DEMO_GAME.companyBName); setChartColor("#1d4ed8"); }}
                       className="flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold transition-all active:scale-95"
                       style={{ background: "oklch(0.45 0.18 260 / 0.08)", color: "oklch(0.45 0.18 260)", border: "1px solid oklch(0.45 0.18 260 / 0.4)" }}
                     >
