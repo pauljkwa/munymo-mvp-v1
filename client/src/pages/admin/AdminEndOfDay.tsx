@@ -120,9 +120,11 @@ function parseJsonImport(raw: string): Partial<FormState> | null {
     const questionOptions = vq.options ?? t("options", "nextQuestionOptions") ?? ["", ""];
     const correctAnswer = vq.correctAnswer ?? t("correctAnswer", "nextCorrectAnswer") ?? "";
 
-    // lockoutTime field name varies: curation prompt uses lockoutTime, flat uses nextLockoutAt
+    // lockoutTime field name varies: curation prompt uses lockoutTime or lockoutAt, flat uses nextLockoutAt
     // Convert UTC ISO string to local datetime-local format (YYYY-MM-DDTHH:MM) for the date/time inputs
-    const rawLockout = String(t("lockoutTime", "nextLockoutAt") ?? "");
+    const rawLockout = String(
+      tomorrow["lockoutTime"] ?? tomorrow["lockoutAt"] ?? parsed["nextLockoutAt"] ?? ""
+    );
     let lockoutAt = "";
     if (rawLockout) {
       try {
@@ -138,7 +140,17 @@ function parseJsonImport(raw: string): Partial<FormState> | null {
     return {
       // Today / close section — treat null/missing gameId as empty so the UI auto-selects the active game
       closeGameId: (td("gameId", "closeGameId") != null && String(td("gameId", "closeGameId")) !== "null") ? String(td("gameId", "closeGameId")) : "",
-      winner: (String(td("winner", "winner") ?? "") as "A" | "B" | ""),
+      winner: (() => {
+        // Accept winner as "A"/"B" directly, or resolve from winnerTicker by matching against company tickers
+        const raw = String(td("winner") ?? "");
+        if (raw === "A" || raw === "B") return raw as "A" | "B";
+        const wt = String(td("winnerTicker") ?? "").toUpperCase();
+        const aTicker = String(t("companyATicker", "nextCompanyATicker") ?? "").toUpperCase();
+        const bTicker = String(t("companyBTicker", "nextCompanyBTicker") ?? "").toUpperCase();
+        if (wt && wt === aTicker) return "A";
+        if (wt && wt === bTicker) return "B";
+        return "" as "A" | "B" | "";
+      })(),
       companyAPerf: td("companyAPerf") !== undefined ? String(td("companyAPerf")) : "",
       companyBPerf: td("companyBPerf") !== undefined ? String(td("companyBPerf")) : "",
       resultSummary: String(td("resultSummary") ?? ""),
