@@ -140,17 +140,7 @@ function parseJsonImport(raw: string): Partial<FormState> | null {
     return {
       // Today / close section — treat null/missing gameId as empty so the UI auto-selects the active game
       closeGameId: (td("gameId", "closeGameId") != null && String(td("gameId", "closeGameId")) !== "null") ? String(td("gameId", "closeGameId")) : "",
-      winner: (() => {
-        // Accept winner as "A"/"B" directly, or resolve from winnerTicker by matching against company tickers
-        const raw = String(td("winner") ?? "");
-        if (raw === "A" || raw === "B") return raw as "A" | "B";
-        const wt = String(td("winnerTicker") ?? "").toUpperCase();
-        const aTicker = String(t("companyATicker", "nextCompanyATicker") ?? "").toUpperCase();
-        const bTicker = String(t("companyBTicker", "nextCompanyBTicker") ?? "").toUpperCase();
-        if (wt && wt === aTicker) return "A";
-        if (wt && wt === bTicker) return "B";
-        return "" as "A" | "B" | "";
-      })(),
+      winner: (String(td("winner") ?? "") as "A" | "B" | ""),
       companyAPerf: td("companyAPerf") !== undefined ? String(td("companyAPerf")) : "",
       companyBPerf: td("companyBPerf") !== undefined ? String(td("companyBPerf")) : "",
       resultSummary: String(td("resultSummary") ?? ""),
@@ -219,7 +209,20 @@ export default function AdminEndOfDay() {
     const autoGameId = (!parsed.closeGameId && activeGames.length === 1)
       ? String(activeGames[0].id)
       : parsed.closeGameId;
-    setForm((prev) => ({ ...prev, ...parsed, closeGameId: autoGameId ?? "" }));
+    // Resolve winnerTicker → "A"/"B" using the active game's tickers from the DB
+    let resolvedWinner = parsed.winner;
+    // Extract winnerTicker from the raw JSON (today block or top-level)
+    const rawObj = obj as Record<string, unknown>;
+    const todayBlock = (rawObj.today ?? rawObj) as Record<string, unknown>;
+    const wt = String(todayBlock.winnerTicker ?? "").toUpperCase();
+    if (!resolvedWinner && wt) {
+      const activeGame = activeGames.find((g) => String(g.id) === (autoGameId ?? "")) ?? activeGames[0];
+      if (activeGame) {
+        if (wt === activeGame.companyATicker?.toUpperCase()) resolvedWinner = "A";
+        else if (wt === activeGame.companyBTicker?.toUpperCase()) resolvedWinner = "B";
+      }
+    }
+    setForm((prev) => ({ ...prev, ...parsed, closeGameId: autoGameId ?? "", winner: resolvedWinner ?? "" }));
     setShowJsonPanel(false);
     setJsonInput("");
     const removed = obj?.__consensusRemoved as number | undefined;
