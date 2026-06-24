@@ -242,19 +242,23 @@ const MUNYIQ_CARDS = [
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function Home() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const { data: todayGame } = trpc.games.getToday.useQuery();
   const [activeCard, setActiveCard] = useState(0);
   const [selectedCompany, setSelectedCompany] = useState<"A" | "B" | null>(null);
   const touchStartX = useRef<number | null>(null);
   const [bannerDismissed, setBannerDismissed] = useState(() => {
-    try { return localStorage.getItem("munymo_beta_banner_dismissed") === "1"; } catch { return false; }
+    try { return sessionStorage.getItem("munymo_beta_banner_dismissed") === "1"; } catch { return false; }
   });
 
   function dismissBanner() {
     setBannerDismissed(true);
-    try { localStorage.setItem("munymo_beta_banner_dismissed", "1"); } catch { /* ignore */ }
+    try { sessionStorage.setItem("munymo_beta_banner_dismissed", "1"); } catch { /* ignore */ }
   }
+
+  // Admins always see the banner and beta section — never dismissed, never hidden
+  const showBanner = isAdmin || !bannerDismissed;
 
   // Auto-cycle MunyIQ cards
   useEffect(() => {
@@ -288,37 +292,38 @@ export default function Home() {
       {/* ══════════════════════════════════════════════════════════════════════
           ANNOUNCEMENT BAR — Beta recruitment
       ══════════════════════════════════════════════════════════════════════ */}
-      {!bannerDismissed && (
+      {showBanner && (
         <div
           className="relative flex items-center justify-center gap-3 px-4 py-2.5 text-sm font-medium"
           style={{
-            background: "oklch(0.22 0.08 160)",
-            borderBottom: "1px solid oklch(0.32 0.10 160 / 0.5)",
-            color: "oklch(0.92 0.06 155)",
+            background: "var(--color-brand)",
+            borderBottom: "1px solid oklch(0.28 0.12 160)",
+            color: "oklch(0.95 0.02 155)",
           }}
         >
           <span
-            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest flex-shrink-0"
-            style={{ background: "oklch(0.58 0.16 155 / 0.2)", color: "var(--color-brand)" }}
+            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest flex-shrink-0"
+            style={{ background: "oklch(0.58 0.16 155 / 0.30)", color: "oklch(0.88 0.12 155)" }}
           >
             <FlaskConical size={10} />
             Beta
           </span>
-          <span className="hidden sm:inline">We're recruiting founding beta testers — play free, shape the product, earn founding member status.</span>
-          <span className="sm:hidden">Recruiting beta testers — join free.</span>
+          <span className="hidden sm:inline" style={{ color: "oklch(0.92 0.04 155)" }}>We're recruiting founding beta testers — play free, shape the product, earn founding member status.</span>
+          <span className="sm:hidden" style={{ color: "oklch(0.92 0.04 155)" }}>Recruiting beta testers — join free.</span>
           {!isAuthenticated && (
             <SignInButton mode="modal">
               <button
                 className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold flex-shrink-0 transition-all duration-150 hover:opacity-90 active:scale-95"
-                style={{ background: "var(--color-brand)", color: "#ffffff" }}
+                style={{ background: "oklch(0.58 0.16 155)", color: "#ffffff" }}
               >
-                <span style={{ color: "#ffffff" }}>Join now</span> <ArrowRight size={11} style={{ color: "#ffffff" }} />
+                Join now <ArrowRight size={11} />
               </button>
             </SignInButton>
           )}
           <button
             onClick={dismissBanner}
-            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full opacity-50 hover:opacity-100 transition-opacity"
+            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full transition-opacity"
+            style={{ color: "oklch(0.70 0.06 155)", opacity: 0.7 }}
             aria-label="Dismiss"
           >
             <X size={14} />
@@ -970,10 +975,10 @@ export default function Home() {
           SECTION 5b — BETA RECRUITMENT
       ══════════════════════════════════════════════════════════════════════ */}
       <section
-          className="py-24 border-b"
+          className="py-24 border-y"
           style={{
             borderColor: "var(--color-border)",
-            background: "oklch(0.13 0.05 160)",
+            background: "oklch(0.96 0.018 155)",
           }}
         >
           <div className="container">
@@ -985,8 +990,8 @@ export default function Home() {
                   className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest mb-5"
                   style={{
                     background: "oklch(0.58 0.16 155 / 0.15)",
-                    color: "var(--color-brand)",
-                    border: "1px solid oklch(0.58 0.16 155 / 0.2)",
+                    color: "oklch(0.30 0.12 155)",
+                    border: "1px solid oklch(0.58 0.16 155 / 0.25)",
                   }}
                 >
                   <FlaskConical size={11} />
@@ -994,14 +999,14 @@ export default function Home() {
                 </div>
                 <h2
                   className="font-display mb-4"
-                  style={{ color: "white" }}
+                  style={{ color: "oklch(0.15 0.010 260)" }}
                 >
                   Be part of building{" "}
                   <span className="text-gradient-gold">something real.</span>
                 </h2>
                 <p
                   className="text-base leading-relaxed max-w-xl mx-auto"
-                  style={{ color: "oklch(0.72 0.04 160)" }}
+                  style={{ color: "oklch(0.38 0.010 260)" }}
                 >
                   Munymo is in active beta. We're looking for curious, financially-minded people to play every day,
                   give honest feedback, and help shape what this becomes.
@@ -1013,32 +1018,32 @@ export default function Home() {
                 {[
                   {
                     icon: Star,
-                    iconColor: "var(--color-gold)",
-                    iconBg: "var(--color-gold-muted)",
+                    iconColor: "oklch(0.50 0.16 65)",
+                    iconBg: "oklch(0.62 0.16 65 / 0.12)",
                     title: "Founding Member Status",
                     body: "Your join date is recorded permanently. When MunyIQ launches, founding members will be recognised with an exclusive badge.",
                   },
                   {
                     icon: Zap,
-                    iconColor: "var(--color-brand)",
-                    iconBg: "var(--color-brand-muted)",
+                    iconColor: "oklch(0.35 0.10 160)",
+                    iconBg: "oklch(0.35 0.10 160 / 0.10)",
                     title: "Deepest Prediction History",
                     body: "MunyIQ is built on your track record. Players who join now will have the most credible, data-rich credentials when it launches.",
                   },
                   {
                     icon: Gift,
-                    iconColor: "var(--color-warning)",
-                    iconBg: "var(--color-warning-muted)",
+                    iconColor: "oklch(0.45 0.16 230)",
+                    iconBg: "oklch(0.52 0.16 230 / 0.10)",
                     title: "Shape the Product",
                     body: "Direct access to the team. Your feedback influences what gets built next — features, exchanges, scoring, everything.",
                   },
                 ].map((item, i) => (
                   <div
                     key={item.title}
-                    className="rounded-2xl p-6 animate-fade-up"
+                    className="rounded-2xl p-6 animate-fade-up shadow-sm"
                     style={{
-                      background: "oklch(0.18 0.06 160)",
-                      border: "1px solid oklch(0.28 0.08 160 / 0.6)",
+                      background: "oklch(1.00 0.000 0)",
+                      border: "1px solid oklch(0.88 0.020 155)",
                       animationDelay: `${i * 60}ms`,
                     }}
                   >
@@ -1048,10 +1053,10 @@ export default function Home() {
                     >
                       <item.icon size={18} style={{ color: item.iconColor }} />
                     </div>
-                    <h4 className="text-sm font-semibold mb-2" style={{ color: "white" }}>
+                    <h4 className="text-sm font-semibold mb-2" style={{ color: "oklch(0.15 0.010 260)" }}>
                       {item.title}
                     </h4>
-                    <p className="text-sm leading-relaxed" style={{ color: "oklch(0.68 0.04 160)" }}>
+                    <p className="text-sm leading-relaxed" style={{ color: "oklch(0.42 0.010 260)" }}>
                       {item.body}
                     </p>
                   </div>
@@ -1075,7 +1080,7 @@ export default function Home() {
                     </button>
                   </SignInButton>
                 )}
-                <p className="text-xs" style={{ color: "oklch(0.52 0.04 160)" }}>
+                <p className="text-xs" style={{ color: "oklch(0.55 0.008 260)" }}>
                   No credit card. No financial knowledge required. Just play every day and tell us what you think.
                 </p>
               </div>
