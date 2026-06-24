@@ -753,18 +753,17 @@ export default function Demo() {
                 </DrawerClose>
               </DrawerHeader>
               <div className="px-4 pb-8 overflow-y-auto">
-                {/* Both charts always mounted in normal flow so ResizeObserver gets
-                    the real drawer width. Inactive chart collapsed with height:0 +
-                    overflow:hidden — it still occupies full width in layout.
-                    DO NOT use display:none or position:absolute (both break width). */}
-                <div style={chartOpen !== "A" ? { height: 0, overflow: "hidden", pointerEvents: "none" } : {}}>
+                {/* Always mount both charts. display:none gives clientWidth=0 so
+                    waitRo fires when display:block is applied, building chart at
+                    correct full width. Confirmed working approach from 3eecb1af. */}
+                <div style={{ display: chartOpen === "A" ? "block" : "none" }}>
                   <CandlestickChart
                     ticker="AAPL"
                     companyName={DEMO_GAME.companyAName}
                     accentColor="#009050"
                   />
                 </div>
-                <div style={chartOpen !== "B" ? { height: 0, overflow: "hidden", pointerEvents: "none" } : {}}>
+                <div style={{ display: chartOpen === "B" ? "block" : "none" }}>
                   <CandlestickChart
                     ticker="MSFT"
                     companyName={DEMO_GAME.companyBName}

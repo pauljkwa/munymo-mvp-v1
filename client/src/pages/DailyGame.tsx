@@ -799,14 +799,14 @@ export default function DailyGame() {
               </DrawerClose>
             </DrawerHeader>
             <div className="px-4 pb-8 overflow-y-auto">
-              {/* Both charts are always mounted in the normal document flow so
-                  ResizeObserver sees the real container width from the first render.
-                  The inactive chart is collapsed to height:0 + overflow:hidden so it
-                  takes no visible space, but its width is still the full drawer width.
-                  DO NOT use display:none (removes from layout) or position:absolute
-                  (width becomes relative to positioned ancestor, often 0). */}
+              {/* Always mount both charts so each initialises at the correct width.
+                  display:none gives clientWidth=0, so the waitRo ResizeObserver in
+                  CandlestickChart waits. When display:block is applied on switch,
+                  the element gets its real width, waitRo fires, and the chart builds
+                  at the correct full width. This was the approach in checkpoint 3eecb1af
+                  and is the only approach confirmed to work correctly. */}
               {game?.companyATicker && (
-                <div style={chartOpen !== "A" ? { height: 0, overflow: "hidden", pointerEvents: "none" } : {}}>
+                <div style={{ display: chartOpen === "A" ? "block" : "none" }}>
                   <CandlestickChart
                     ticker={game.companyATicker}
                     companyName={game.companyAName ?? ""}
@@ -815,7 +815,7 @@ export default function DailyGame() {
                 </div>
               )}
               {game?.companyBTicker && (
-                <div style={chartOpen !== "B" ? { height: 0, overflow: "hidden", pointerEvents: "none" } : {}}>
+                <div style={{ display: chartOpen === "B" ? "block" : "none" }}>
                   <CandlestickChart
                     ticker={game.companyBTicker}
                     companyName={game.companyBName ?? ""}
