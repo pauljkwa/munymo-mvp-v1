@@ -310,9 +310,9 @@ export default function Home() {
             <SignInButton mode="modal">
               <button
                 className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold flex-shrink-0 transition-all duration-150 hover:opacity-90 active:scale-95"
-                style={{ background: "var(--color-brand)", color: "white" }}
+                style={{ background: "var(--color-brand)", color: "#ffffff" }}
               >
-                Join now <ArrowRight size={11} />
+                <span style={{ color: "#ffffff" }}>Join now</span> <ArrowRight size={11} style={{ color: "#ffffff" }} />
               </button>
             </SignInButton>
           )}
@@ -969,8 +969,7 @@ export default function Home() {
       {/* ══════════════════════════════════════════════════════════════════════
           SECTION 5b — BETA RECRUITMENT
       ══════════════════════════════════════════════════════════════════════ */}
-      {!isAuthenticated && (
-        <section
+      <section
           className="py-24 border-b"
           style={{
             borderColor: "var(--color-border)",
@@ -1061,12 +1060,21 @@ export default function Home() {
 
               {/* CTA */}
               <div className="text-center">
-                <SignInButton mode="modal">
-                  <button className="btn-gold text-sm px-8 py-3.5 mb-4">
-                    Apply as a Beta Tester — It's Free
-                    <ArrowRight size={16} />
-                  </button>
-                </SignInButton>
+                {isAuthenticated ? (
+                  <Link href="/daily-game">
+                    <button className="btn-gold text-sm px-8 py-3.5 mb-4">
+                      Play Today's Game
+                      <ArrowRight size={16} />
+                    </button>
+                  </Link>
+                ) : (
+                  <SignInButton mode="modal">
+                    <button className="btn-gold text-sm px-8 py-3.5 mb-4">
+                      Apply as a Beta Tester — It's Free
+                      <ArrowRight size={16} />
+                    </button>
+                  </SignInButton>
+                )}
                 <p className="text-xs" style={{ color: "oklch(0.52 0.04 160)" }}>
                   No credit card. No financial knowledge required. Just play every day and tell us what you think.
                 </p>
@@ -1075,7 +1083,6 @@ export default function Home() {
             </div>
           </div>
         </section>
-      )}
 
       {/* ══════════════════════════════════════════════════════════════════════
           SECTION 6 — FINAL CTA
