@@ -20,6 +20,11 @@ import {
   BarChart2,
   CheckCircle2,
   ChevronRight,
+  X,
+  FlaskConical,
+  Star,
+  Zap,
+  Gift,
 } from "lucide-react";
 
 // ─── Fake candlestick data for hero mockup ────────────────────────────────────
@@ -242,6 +247,14 @@ export default function Home() {
   const [activeCard, setActiveCard] = useState(0);
   const [selectedCompany, setSelectedCompany] = useState<"A" | "B" | null>(null);
   const touchStartX = useRef<number | null>(null);
+  const [bannerDismissed, setBannerDismissed] = useState(() => {
+    try { return localStorage.getItem("munymo_beta_banner_dismissed") === "1"; } catch { return false; }
+  });
+
+  function dismissBanner() {
+    setBannerDismissed(true);
+    try { localStorage.setItem("munymo_beta_banner_dismissed", "1"); } catch { /* ignore */ }
+  }
 
   // Auto-cycle MunyIQ cards
   useEffect(() => {
@@ -271,6 +284,47 @@ export default function Home() {
 
   return (
     <PublicLayout>
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          ANNOUNCEMENT BAR — Beta recruitment
+      ══════════════════════════════════════════════════════════════════════ */}
+      {!bannerDismissed && (
+        <div
+          className="relative flex items-center justify-center gap-3 px-4 py-2.5 text-sm font-medium"
+          style={{
+            background: "oklch(0.22 0.08 160)",
+            borderBottom: "1px solid oklch(0.32 0.10 160 / 0.5)",
+            color: "oklch(0.92 0.06 155)",
+          }}
+        >
+          <span
+            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest flex-shrink-0"
+            style={{ background: "oklch(0.58 0.16 155 / 0.2)", color: "var(--color-brand)" }}
+          >
+            <FlaskConical size={10} />
+            Beta
+          </span>
+          <span className="hidden sm:inline">We're recruiting founding beta testers — play free, shape the product, earn founding member status.</span>
+          <span className="sm:hidden">Recruiting beta testers — join free.</span>
+          {!isAuthenticated && (
+            <SignInButton mode="modal">
+              <button
+                className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold flex-shrink-0 transition-all duration-150 hover:opacity-90 active:scale-95"
+                style={{ background: "var(--color-brand)", color: "white" }}
+              >
+                Join now <ArrowRight size={11} />
+              </button>
+            </SignInButton>
+          )}
+          <button
+            onClick={dismissBanner}
+            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full opacity-50 hover:opacity-100 transition-opacity"
+            aria-label="Dismiss"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
 
       {/* ══════════════════════════════════════════════════════════════════════
           SECTION 1 — HERO
@@ -911,6 +965,117 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          SECTION 5b — BETA RECRUITMENT
+      ══════════════════════════════════════════════════════════════════════ */}
+      {!isAuthenticated && (
+        <section
+          className="py-24 border-b"
+          style={{
+            borderColor: "var(--color-border)",
+            background: "oklch(0.13 0.05 160)",
+          }}
+        >
+          <div className="container">
+            <div className="max-w-4xl mx-auto">
+
+              {/* Header */}
+              <div className="text-center mb-14">
+                <div
+                  className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest mb-5"
+                  style={{
+                    background: "oklch(0.58 0.16 155 / 0.15)",
+                    color: "var(--color-brand)",
+                    border: "1px solid oklch(0.58 0.16 155 / 0.2)",
+                  }}
+                >
+                  <FlaskConical size={11} />
+                  Founding Beta
+                </div>
+                <h2
+                  className="font-display mb-4"
+                  style={{ color: "white" }}
+                >
+                  Be part of building{" "}
+                  <span className="text-gradient-gold">something real.</span>
+                </h2>
+                <p
+                  className="text-base leading-relaxed max-w-xl mx-auto"
+                  style={{ color: "oklch(0.72 0.04 160)" }}
+                >
+                  Munymo is in active beta. We're looking for curious, financially-minded people to play every day,
+                  give honest feedback, and help shape what this becomes.
+                </p>
+              </div>
+
+              {/* Benefits grid */}
+              <div className="grid md:grid-cols-3 gap-5 mb-12">
+                {[
+                  {
+                    icon: Star,
+                    iconColor: "var(--color-gold)",
+                    iconBg: "var(--color-gold-muted)",
+                    title: "Founding Member Status",
+                    body: "Your join date is recorded permanently. When MunyIQ launches, founding members will be recognised with an exclusive badge.",
+                  },
+                  {
+                    icon: Zap,
+                    iconColor: "var(--color-brand)",
+                    iconBg: "var(--color-brand-muted)",
+                    title: "Deepest Prediction History",
+                    body: "MunyIQ is built on your track record. Players who join now will have the most credible, data-rich credentials when it launches.",
+                  },
+                  {
+                    icon: Gift,
+                    iconColor: "var(--color-warning)",
+                    iconBg: "var(--color-warning-muted)",
+                    title: "Shape the Product",
+                    body: "Direct access to the team. Your feedback influences what gets built next — features, exchanges, scoring, everything.",
+                  },
+                ].map((item, i) => (
+                  <div
+                    key={item.title}
+                    className="rounded-2xl p-6 animate-fade-up"
+                    style={{
+                      background: "oklch(0.18 0.06 160)",
+                      border: "1px solid oklch(0.28 0.08 160 / 0.6)",
+                      animationDelay: `${i * 60}ms`,
+                    }}
+                  >
+                    <div
+                      className="w-10 h-10 rounded-xl flex items-center justify-center mb-4"
+                      style={{ background: item.iconBg }}
+                    >
+                      <item.icon size={18} style={{ color: item.iconColor }} />
+                    </div>
+                    <h4 className="text-sm font-semibold mb-2" style={{ color: "white" }}>
+                      {item.title}
+                    </h4>
+                    <p className="text-sm leading-relaxed" style={{ color: "oklch(0.68 0.04 160)" }}>
+                      {item.body}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              {/* CTA */}
+              <div className="text-center">
+                <SignInButton mode="modal">
+                  <button className="btn-gold text-sm px-8 py-3.5 mb-4">
+                    Apply as a Beta Tester — It's Free
+                    <ArrowRight size={16} />
+                  </button>
+                </SignInButton>
+                <p className="text-xs" style={{ color: "oklch(0.52 0.04 160)" }}>
+                  No credit card. No financial knowledge required. Just play every day and tell us what you think.
+                </p>
+              </div>
+
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* ══════════════════════════════════════════════════════════════════════
           SECTION 6 — FINAL CTA
