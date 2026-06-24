@@ -4,7 +4,7 @@ import { trpc } from "@/lib/trpc";
 import { useState, useEffect, useRef } from "react";
 import { Link } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
-import { CandlestickChart } from "@/components/CandlestickChart";
+import { ChartSheet } from "@/components/ChartSheet";
 import { MetricExplanationSheet } from "@/components/MetricExplanationSheet";
 import { toast } from "sonner";
 import {
@@ -22,21 +22,8 @@ import {
   Lightbulb,
   Trophy,
   BarChart2,
-  TrendingDown,
-  DollarSign,
-  Percent,
-  Activity,
-  Target,
-  LineChart,
-  X,
+  X as XIcon,
 } from "lucide-react";
-import {
-  Drawer,
-  DrawerContent,
-  DrawerHeader,
-  DrawerTitle,
-  DrawerClose,
-} from "@/components/ui/drawer";
 
 type GameStep = "gut" | "research" | "final" | "submitted";
 
@@ -291,7 +278,7 @@ export default function DailyGame() {
   const { isAuthenticated } = useAuth();
   const { data: game, isLoading } = trpc.games.getToday.useQuery();
 
-  const { data: myPick } = trpc.picks.getMyPick.useQuery(
+  const { data: myPick, isLoading: isLoadingPick } = trpc.picks.getMyPick.useQuery(
     { gameId: game?.id ?? 0 },
     { enabled: !!game?.id && isAuthenticated }
   );
@@ -310,8 +297,10 @@ export default function DailyGame() {
   const [gutSelection, setGutSelection] = useState<"A" | "B" | null>(null);
   const [finalSelection, setFinalSelection] = useState<"A" | "B" | null>(null);
 
-  // Chart drawer state
-  const [chartOpen, setChartOpen] = useState<"A" | "B" | null>(null);
+  // Chart panel state (hoisted here because hooks can't be inside IIFEs)
+  const [chartTicker, setChartTicker] = useState<string | null>(null);
+  const [chartName, setChartName] = useState("");
+  const [chartColor, setChartColor] = useState("#009050");
 
   // Validation modal state
   const [modalPhase, setModalPhase] = useState<"confirm" | "question" | "result" | null>(null);
@@ -394,6 +383,18 @@ export default function DailyGame() {
     );
   }
 
+  // Wait for myPick to resolve before rendering the game UI so the step
+  // doesn't flicker from "gut" to the correct step on navigation back
+  if (isAuthenticated && isLoadingPick) {
+    return (
+      <PublicLayout>
+        <div className="container py-24 flex justify-center">
+          <Loader2 size={32} className="animate-spin" style={{ color: "var(--color-brand)" }} />
+        </div>
+      </PublicLayout>
+    );
+  }
+
   if (!game) {
     return (
       <PublicLayout>
@@ -420,6 +421,16 @@ export default function DailyGame() {
 
   return (
     <PublicLayout>
+      {/* Chart Sheet — rendered at top level so fixed positioning covers full viewport on iOS */}
+      {chartTicker && (
+        <ChartSheet
+          ticker={chartTicker}
+          companyName={chartName}
+          accentColor={chartColor}
+          onClose={() => setChartTicker(null)}
+        />
+      )}
+
       {/* Timed Validation Modal — rendered outside normal flow */}
       {modalPhase && (
         <ValidationModal
@@ -598,12 +609,7 @@ export default function DailyGame() {
                     Pairing Rationale
                   </p>
                   <p className="text-sm" style={{ color: "var(--color-muted)" }}>
-                    {game.pairingRationale
-                      .replace(/^#{1,6}\s+/gm, "")
-                      .replace(/\*\*([^*]+)\*\*/g, "$1")
-                      .replace(/\*([^*]+)\*/g, "$1")
-                      .replace(/^[-*]\s+/gm, "• ")
-                      .trim()}
+                    {game.pairingRationale}
                   </p>
                 </div>
               )}
@@ -615,13 +621,8 @@ export default function DailyGame() {
                   >
                     Research Notes
                   </p>
-                  <div className="text-sm whitespace-pre-wrap" style={{ color: "var(--color-muted)" }}>
-                    {research.content
-                      .replace(/^#{1,6}\s+/gm, "")
-                      .replace(/\*\*([^*]+)\*\*/g, "$1")
-                      .replace(/\*([^*]+)\*/g, "$1")
-                      .replace(/^[-*]\s+/gm, "• ")
-                      .trim()}
+                  <div className="prose-munymo text-sm whitespace-pre-wrap">
+                    {research.content}
                   </div>
                 </div>
               ) : (
@@ -630,12 +631,14 @@ export default function DailyGame() {
                 </p>
               )}
 
-              {/* Key Metrics: dashboard-style stat cards side by side */}
+              {/* Company Cards: metrics + chart side by side */}
               {research?.metrics && (() => {
+                // Split flat metrics array into per-company groups by ticker prefix
                 const allMetrics = Object.entries(research.metrics as Record<string, string>);
                 const tickerA = (game.companyATicker ?? "").toUpperCase();
                 const tickerB = (game.companyBTicker ?? "").toUpperCase();
 
+                // Match labels that start with the ticker followed by a space, dash, or em-dash
                 const matchesTicker = (label: string, ticker: string) => {
                   const upper = label.toUpperCase();
                   return (
@@ -650,106 +653,133 @@ export default function DailyGame() {
                 let metricsA = allMetrics.filter(([label]) => matchesTicker(label, tickerA));
                 let metricsB = allMetrics.filter(([label]) => matchesTicker(label, tickerB));
 
+                // Fallback: if ticker matching fails (e.g. labels don't include ticker prefix),
+                // split the list in half — first half to A, second half to B
                 if (metricsA.length === 0 && metricsB.length === 0 && allMetrics.length > 0) {
                   const mid = Math.ceil(allMetrics.length / 2);
                   metricsA = allMetrics.slice(0, mid);
                   metricsB = allMetrics.slice(mid);
                 }
 
-                const stripTicker = (label: string, ticker: string) =>
-                  label.replace(new RegExp(`^${ticker}\\s*[—\\-\\s:]\\s*`, "i"), "");
+                // Normalise metric labels to strip ticker prefix for display
+                const shortLabel = (label: string, ticker: string) =>
+                  label.replace(new RegExp(`^${ticker}\\s*[—\\-:]\\s*`, "i"), "");
 
-                // Pick an icon for each metric based on its label
-                const metricIcon = (label: string) => {
-                  const l = label.toLowerCase();
-                  if (l.includes("revenue") || l.includes("sales")) return DollarSign;
-                  if (l.includes("margin") || l.includes("eps") || l.includes("earning")) return Percent;
-                  if (l.includes("p/e") || l.includes("ratio") || l.includes("valuation")) return BarChart2;
-                  if (l.includes("growth")) return TrendingUp;
-                  if (l.includes("market cap") || l.includes("cap")) return Activity;
-                  if (l.includes("analyst") || l.includes("target") || l.includes("consensus")) return Target;
-                  if (l.includes("week") || l.includes("range") || l.includes("52")) return LineChart;
-                  return BarChart2;
-                };
-
-                const rowCount = Math.max(metricsA.length, metricsB.length);
+                // Build a unified row list: [{label, valueA, valueB}]
+                const metricLabelsA = metricsA.map(([l]) => shortLabel(l, tickerA));
+                const metricLabelsB = metricsB.map(([l]) => shortLabel(l, tickerB));
+                // Use the longer list as the row driver
+                const rowCount = Math.max(metricLabelsA.length, metricLabelsB.length);
+                const rows = Array.from({ length: rowCount }, (_, i) => ({
+                  labelA: metricLabelsA[i] ?? "",
+                  valueA: metricsA[i]?.[1] ?? "—",
+                  rawLabelA: metricsA[i]?.[0] ?? "",
+                  labelB: metricLabelsB[i] ?? "",
+                  valueB: metricsB[i]?.[1] ?? "—",
+                  rawLabelB: metricsB[i]?.[0] ?? "",
+                }));
 
                 return (
-                  <div className="mt-5">
-                    <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--color-brand)" }}>
-                      Key Metrics &amp; Charts
-                    </p>
+                  <>
+                    <div className="mt-5">
+                      <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--color-brand)" }}>
+                        Key Metrics
+                      </p>
 
-                    {/* Company headers */}
-                    <div className="grid grid-cols-2 gap-2 mb-2">
-                      <div className="flex items-center gap-2 px-1">
-                        <span className="ticker-chip" style={{ fontSize: "0.6rem" }}>{tickerA}</span>
-                        <span className="text-xs font-semibold truncate" style={{ color: "var(--color-foreground)" }}>{game.companyAName}</span>
-                      </div>
-                      <div className="flex items-center gap-2 px-1">
-                        <span className="ticker-chip" style={{ fontSize: "0.6rem", background: "oklch(0.45 0.18 260 / 0.15)", color: "oklch(0.45 0.18 260)" }}>{tickerB}</span>
-                        <span className="text-xs font-semibold truncate" style={{ color: "var(--color-foreground)" }}>{game.companyBName}</span>
-                      </div>
-                    </div>
-
-                    {/* Metric card rows — each row is a grid-cols-2 pair */}
-                    <div className="flex flex-col gap-2">
-                      {Array.from({ length: rowCount }, (_, i) => {
-                        const [labelA, valueA] = metricsA[i] ?? ["", "—"];
-                        const [labelB, valueB] = metricsB[i] ?? ["", "—"];
-                        const IconA = metricIcon(labelA);
-                        const IconB = metricIcon(labelB);
-                        const shortLabelA = stripTicker(labelA, tickerA);
-                        const shortLabelB = stripTicker(labelB, tickerB);
-                        return (
-                          <div key={i} className="grid grid-cols-2 gap-2">
-                            {/* Company A card */}
-                            <div className="rounded-2xl p-4" style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)" }}>
-                              <div className="flex items-start justify-between mb-2">
-                                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "var(--color-surface-raised)" }}>
-                                  <IconA size={14} style={{ color: "var(--color-brand)" }} />
-                                </div>
-                              </div>
-                              <p className="text-base font-display font-bold leading-tight mb-1" style={{ color: "var(--color-foreground)" }}>{valueA}</p>
-                              <p className="text-xs font-semibold uppercase tracking-wider leading-tight" style={{ color: "var(--color-muted)" }}>{shortLabelA || labelA}</p>
-                              {labelA && <MetricExplanationSheet metricLabel={labelA} />}
+                      {/* Two-column comparison table */}
+                      <div
+                        className="rounded-xl overflow-hidden"
+                        style={{ border: "1px solid var(--color-border)", background: "var(--color-surface)" }}
+                      >
+                        {/* Column headers */}
+                        <div
+                          className="grid grid-cols-2"
+                          style={{ borderBottom: "2px solid var(--color-border)", background: "var(--color-surface-raised)" }}
+                        >
+                          {[{ ticker: tickerA, name: game.companyAName ?? "", color: "#009050" }, { ticker: tickerB, name: game.companyBName ?? "", color: "#1d4ed8" }].map((co) => (
+                            <div
+                              key={co.ticker}
+                              className="px-3 py-3 flex items-center gap-2"
+                              style={{ borderRight: co.ticker === tickerA ? "1px solid var(--color-border)" : undefined }}
+                            >
+                              <span
+                                className="ticker-chip shrink-0"
+                                style={{ fontSize: "0.6rem", background: co.color, color: "#fff", borderColor: co.color }}
+                              >
+                                {co.ticker}
+                              </span>
+                              <span className="text-xs font-semibold leading-tight" style={{ color: "var(--color-foreground)" }}>
+                                {co.name}
+                              </span>
                             </div>
-                            {/* Company B card */}
-                            <div className="rounded-2xl p-4" style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)" }}>
-                              <div className="flex items-start justify-between mb-2">
-                                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "oklch(0.45 0.18 260 / 0.08)" }}>
-                                  <IconB size={14} style={{ color: "oklch(0.45 0.18 260)" }} />
-                                </div>
-                              </div>
-                              <p className="text-base font-display font-bold leading-tight mb-1" style={{ color: "var(--color-foreground)" }}>{valueB}</p>
-                              <p className="text-xs font-semibold uppercase tracking-wider leading-tight" style={{ color: "var(--color-muted)" }}>{shortLabelB || labelB}</p>
-                              {labelB && <MetricExplanationSheet metricLabel={labelB} />}
+                          ))}
+                        </div>
+
+                        {/* Metric rows */}
+                        {rows.map((row, i) => (
+                          <div
+                            key={i}
+                            className="grid grid-cols-2"
+                            style={{
+                              borderBottom: i < rows.length - 1 ? "1px solid var(--color-border)" : undefined,
+                              background: i % 2 === 0 ? "var(--color-surface)" : "var(--color-surface-raised)",
+                            }}
+                          >
+                            {/* Company A cell */}
+                            <div
+                              className="px-3 py-2.5 flex flex-col gap-0.5"
+                              style={{ borderRight: "1px solid var(--color-border)" }}
+                            >
+                              <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--color-muted)" }}>
+                                {row.labelA}
+                              </p>
+                              <p className="text-sm font-bold font-display" style={{ color: "var(--color-foreground)" }}>
+                                {row.valueA}
+                              </p>
+                              {row.rawLabelA && <MetricExplanationSheet metricLabel={row.rawLabelA} />}
+                            </div>
+                            {/* Company B cell */}
+                            <div className="px-3 py-2.5 flex flex-col gap-0.5">
+                              <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--color-muted)" }}>
+                                {row.labelB}
+                              </p>
+                              <p className="text-sm font-bold font-display" style={{ color: "var(--color-foreground)" }}>
+                                {row.valueB}
+                              </p>
+                              {row.rawLabelB && <MetricExplanationSheet metricLabel={row.rawLabelB} />}
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
+                        ))}
 
-                    {/* Chart CTA buttons */}
-                    <div className="grid grid-cols-2 gap-2 mt-3">
-                      <button
-                        onClick={() => setChartOpen("A")}
-                        className="flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold transition-all active:scale-95"
-                        style={{ background: "var(--color-brand-muted)", color: "var(--color-brand)", border: "1px solid var(--color-brand)" }}
-                      >
-                        <LineChart size={15} />
-                        View {tickerA} Chart
-                      </button>
-                      <button
-                        onClick={() => setChartOpen("B")}
-                        className="flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold transition-all active:scale-95"
-                        style={{ background: "oklch(0.45 0.18 260 / 0.08)", color: "oklch(0.45 0.18 260)", border: "1px solid oklch(0.45 0.18 260 / 0.4)" }}
-                      >
-                        <LineChart size={15} />
-                        View {tickerB} Chart
-                      </button>
+                        {/* Chart CTAs */}
+                        <div
+                          className="grid grid-cols-2"
+                          style={{ borderTop: "2px solid var(--color-border)", background: "var(--color-surface-raised)" }}
+                        >
+                          {[{ ticker: tickerA, name: game.companyAName ?? "", color: "#009050" }, { ticker: tickerB, name: game.companyBName ?? "", color: "#1d4ed8" }].map((co) => (
+                            <div
+                              key={co.ticker}
+                              style={{ borderRight: co.ticker === tickerA ? "1px solid var(--color-border)" : undefined }}
+                              className="p-2"
+                            >
+                              <button
+                                onClick={() => { setChartTicker(co.ticker); setChartName(co.name); setChartColor(co.color); }}
+                                className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold transition-all active:scale-95"
+                                style={{
+                                  background: co.color + "18",
+                                  color: co.color,
+                                  border: `1px solid ${co.color}40`,
+                                }}
+                              >
+                                <BarChart2 size={13} />
+                                View Chart
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  </>
                 );
               })()}
             </div>
@@ -779,55 +809,6 @@ export default function DailyGame() {
             </button>
           </div>
         )}
-
-        {/* ── Chart Drawer (slides up from bottom, swipe to dismiss) ── */}
-        <Drawer open={chartOpen !== null} onOpenChange={(open) => { if (!open) setChartOpen(null); }}>
-          <DrawerContent className="max-h-[90vh]">
-            <DrawerHeader className="flex items-center justify-between pb-2">
-              <DrawerTitle className="text-base">
-                {chartOpen === "A"
-                  ? `${(game?.companyATicker ?? "").toUpperCase()} — ${game?.companyAName ?? ""}`
-                  : `${(game?.companyBTicker ?? "").toUpperCase()} — ${game?.companyBName ?? ""}`}
-              </DrawerTitle>
-              <DrawerClose asChild>
-                <button
-                  className="w-8 h-8 rounded-full flex items-center justify-center transition-colors"
-                  style={{ background: "var(--color-surface-raised)" }}
-                >
-                  <X size={16} style={{ color: "var(--color-muted)" }} />
-                </button>
-              </DrawerClose>
-            </DrawerHeader>
-            <div className="px-4 pb-8 overflow-y-auto">
-              {/* Always mount both charts so each initialises at the correct width.
-                  display:none gives clientWidth=0, so the waitRo ResizeObserver in
-                  CandlestickChart waits. When display:block is applied on switch,
-                  the element gets its real width, waitRo fires, and the chart builds
-                  at the correct full width. This was the approach in checkpoint 3eecb1af
-                  and is the only approach confirmed to work correctly. */}
-              {game?.companyATicker && (
-                <div style={{ display: chartOpen === "A" ? "block" : "none" }}>
-                  <CandlestickChart
-                    ticker={game.companyATicker}
-                    companyName={game.companyAName ?? ""}
-                    accentColor="#009050"
-                    isVisible={chartOpen === "A"}
-                  />
-                </div>
-              )}
-              {game?.companyBTicker && (
-                <div style={{ display: chartOpen === "B" ? "block" : "none" }}>
-                  <CandlestickChart
-                    ticker={game.companyBTicker}
-                    companyName={game.companyBName ?? ""}
-                    accentColor="oklch(0.45 0.18 260)"
-                    isVisible={chartOpen === "B"}
-                  />
-                </div>
-              )}
-            </div>
-          </DrawerContent>
-        </Drawer>
 
         {/* ── Step: Final ── */}
         {step === "final" && !isLocked && (
@@ -988,8 +969,9 @@ function LockoutCountdown({ lockoutTime }: { lockoutTime: Date }) {
   const seconds = totalSeconds % 60;
   const pad = (n: number) => String(n).padStart(2, "0");
 
-  const isUrgent = timeLeft < 30 * 60 * 1000;   // under 30 min → amber
-  const isCritical = timeLeft < 5 * 60 * 1000;  // under 5 min → red
+  const isUrgent = timeLeft < 30 * 60 * 1000;    // under 30 min → amber
+  const isCritical = timeLeft < 5 * 60 * 1000;   // under 5 min → red
+  const isFlashing = timeLeft < 60 * 1000;        // under 1 min → flash
 
   const bgColor = isCritical
     ? "oklch(0.45 0.2 25)"
@@ -998,25 +980,34 @@ function LockoutCountdown({ lockoutTime }: { lockoutTime: Date }) {
     : "var(--color-primary)";
 
   return (
-    <div
-      className="fixed bottom-0 left-0 right-0 z-40 flex items-center justify-center gap-3 px-4 py-3 shadow-[0_-2px_16px_rgba(0,0,0,0.15)]"
-      style={{ background: bgColor, transition: "background 1s ease" }}
-    >
-      <Timer size={15} className="shrink-0" style={{ color: "rgba(255,255,255,0.8)" }} />
-      <span className="text-white text-sm font-medium" style={{ opacity: 0.9 }}>
-        Locks in
-      </span>
-      <span
-        className="text-white font-mono font-bold text-base tabular-nums"
-        style={{ letterSpacing: "0.1em" }}
+    <>
+      {/* Spacer so page content isn't hidden behind this bar + bottom nav */}
+      <div className="h-[56px] md:h-[48px]" />
+      <div
+        className={[
+          "fixed left-0 right-0 z-40 flex items-center justify-center gap-3 px-4 py-3 shadow-[0_-2px_16px_rgba(0,0,0,0.15)]",
+          // On mobile sit above the 56px bottom nav; on desktop sit at bottom-0
+          "bottom-[56px] md:bottom-0",
+          isFlashing ? "animate-pulse" : "",
+        ].join(" ")}
+        style={{ background: bgColor, transition: "background 1s ease" }}
       >
-        {hours > 0 ? `${pad(hours)}:` : ""}{pad(minutes)}:{pad(seconds)}
-      </span>
-      {isCritical && (
-        <span className="text-white text-xs font-semibold animate-pulse" style={{ opacity: 0.9 }}>
-          — Make your pick now!
+        <Timer size={15} className="shrink-0" style={{ color: "rgba(255,255,255,0.8)" }} />
+        <span className="text-white text-sm font-medium" style={{ opacity: 0.9 }}>
+          Locks in
         </span>
-      )}
-    </div>
+        <span
+          className="text-white font-mono font-bold text-base tabular-nums"
+          style={{ letterSpacing: "0.1em" }}
+        >
+          {hours > 0 ? `${pad(hours)}:` : ""}{pad(minutes)}:{pad(seconds)}
+        </span>
+        {isCritical && (
+          <span className="text-white text-xs font-semibold" style={{ opacity: 0.9 }}>
+            — Make your pick now!
+          </span>
+        )}
+      </div>
+    </>
   );
 }

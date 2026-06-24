@@ -449,6 +449,13 @@
   }
 }
 
+/* ─── Sheet scroll-lock ───────────────────────────────────────────────────── */
+html.sheet-open,
+html.sheet-open body {
+  overflow: hidden;
+  touch-action: none;
+}
+
 /* ─── Utility Layer ────────────────────────────────────────────────────────── */
 @layer utilities {
   /* Text gradient — navy to brand */

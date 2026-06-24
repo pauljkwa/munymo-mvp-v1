@@ -25,159 +25,99 @@ interface CandlestickChartProps {
   ticker: string;
   companyName: string;
   accentColor?: string;
-  /** Pass true when this chart is the active/visible one in a Drawer.
-   *  Including this in the effect deps ensures the chart re-initialises
-   *  the moment it becomes visible, regardless of ResizeObserver behaviour
-   *  on display:none → display:block transitions. */
-  isVisible?: boolean;
 }
 
-export function CandlestickChart({
-  ticker,
-  companyName,
-  accentColor = "#009050",
-  isVisible = true,
-}: CandlestickChartProps) {
+export function CandlestickChart({ ticker, companyName, accentColor = "#009050" }: CandlestickChartProps) {
   const [range, setRange] = useState<Range>("1mo");
   const chartContainerRef = useRef<HTMLDivElement>(null);
 
   const { data, isLoading, error } = trpc.streaks.getStockChart.useQuery(
     { ticker, range },
-    { staleTime: 5 * 60 * 1000 }
+    { staleTime: 5 * 60 * 1000 } // cache for 5 minutes
   );
 
   useEffect(() => {
-    // Don't build the chart when hidden — wait until isVisible becomes true
-    if (!isVisible) return;
     if (!chartContainerRef.current || !data?.candles?.length) return;
 
     const container = chartContainerRef.current;
 
-    const buildChart = (w: number) => {
-      const isDark = document.documentElement.classList.contains("dark");
-      const bg = isDark ? "#0f172a" : "#ffffff";
-      const textColor = isDark ? "#94a3b8" : "#64748b";
-      const gridColor = isDark ? "#1e293b" : "#f1f5f9";
+    const isDark = document.documentElement.classList.contains("dark");
+    const bg = isDark ? "#0f172a" : "#ffffff";
+    const textColor = isDark ? "#94a3b8" : "#64748b";
+    const gridColor = isDark ? "#1e293b" : "#f1f5f9";
 
-      const chart = createChart(container, {
-        layout: {
-          background: { type: ColorType.Solid, color: bg },
-          textColor,
-          fontFamily: "'Plus Jakarta Sans', sans-serif",
-          fontSize: 11,
-        },
-        grid: {
-          vertLines: { color: gridColor },
-          horzLines: { color: gridColor },
-        },
-        crosshair: { mode: 1 },
-        rightPriceScale: { borderColor: gridColor },
-        timeScale: {
-          borderColor: gridColor,
-          timeVisible: range === "1d" || range === "5d",
-          secondsVisible: false,
-        },
-        width: w,
-        height: 280,
-      });
+    // Use actual container width, falling back to a sensible default if not yet laid out
+    const initialWidth = container.clientWidth > 0 ? container.clientWidth : 320;
 
-      const candleSeries = chart.addSeries(CandlestickSeries, {
-        upColor: accentColor,
-        downColor: "#ef4444",
-        borderUpColor: accentColor,
-        borderDownColor: "#ef4444",
-        wickUpColor: accentColor,
-        wickDownColor: "#ef4444",
-      });
+    const chart = createChart(container, {
+      layout: {
+        background: { type: ColorType.Solid, color: bg },
+        textColor,
+        fontFamily: "'Plus Jakarta Sans', sans-serif",
+        fontSize: 11,
+      },
+      grid: {
+        vertLines: { color: gridColor },
+        horzLines: { color: gridColor },
+      },
+      crosshair: { mode: 1 },
+      rightPriceScale: { borderColor: gridColor },
+      timeScale: {
+        borderColor: gridColor,
+        timeVisible: range === "1d" || range === "5d",
+        secondsVisible: false,
+      },
+      width: initialWidth,
+      height: 280,
+    });
 
-      type RawCandle = {
-        time: number;
-        open: number | null;
-        high: number | null;
-        low: number | null;
-        close: number | null;
-        volume: number | null;
-      };
-      const formattedCandles = (data.candles as RawCandle[])
-        .filter(
-          (c) =>
-            c.open !== null &&
-            c.close !== null &&
-            c.high !== null &&
-            c.low !== null
-        )
-        .map((c) => ({
-          time: c.time as Time,
-          open: c.open as number,
-          high: c.high as number,
-          low: c.low as number,
-          close: c.close as number,
-        }));
+    const candleSeries = chart.addSeries(CandlestickSeries, {
+      upColor: accentColor,
+      downColor: "#ef4444",
+      borderUpColor: accentColor,
+      borderDownColor: "#ef4444",
+      wickUpColor: accentColor,
+      wickDownColor: "#ef4444",
+    });
 
-      candleSeries.setData(formattedCandles);
-      chart.timeScale().fitContent();
+    type RawCandle = { time: number; open: number | null; high: number | null; low: number | null; close: number | null; volume: number | null };
+    const formattedCandles = (data.candles as RawCandle[])
+      .filter((c) => c.open !== null && c.close !== null && c.high !== null && c.low !== null)
+      .map((c) => ({
+        time: c.time as Time,
+        open: c.open as number,
+        high: c.high as number,
+        low: c.low as number,
+        close: c.close as number,
+      }));
 
-      // Keep chart in sync with future container width changes
-      const ro = new ResizeObserver((entries) => {
-        const entry = entries[0];
-        if (entry) {
-          const newW = entry.contentRect.width;
-          if (newW > 0) chart.applyOptions({ width: newW });
-        }
-      });
-      ro.observe(container);
+    candleSeries.setData(formattedCandles);
+    chart.timeScale().fitContent();
 
-      const handleResize = () => {
-        if (container.clientWidth > 0) {
-          chart.applyOptions({ width: container.clientWidth });
-        }
-      };
-      window.addEventListener("resize", handleResize);
+    // ResizeObserver keeps chart in sync with container width changes (grid layout, orientation)
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) {
+        const w = entry.contentRect.width;
+        if (w > 0) chart.applyOptions({ width: w });
+      }
+    });
+    ro.observe(container);
 
-      return () => {
-        ro.disconnect();
-        window.removeEventListener("resize", handleResize);
-        chart.remove();
-      };
-    };
-
-    // If container already has a real width, build immediately.
-    if (container.clientWidth > 0) {
-      return buildChart(container.clientWidth);
-    }
-
-    // Container has no width yet (e.g. Drawer mid-animation).
-    // Use a short polling loop — more reliable than ResizeObserver alone
-    // for display:none → display:block transitions on mobile Safari/Chrome.
-    let cleanup: (() => void) | undefined;
-    let built = false;
-    let attempts = 0;
-    const MAX_ATTEMPTS = 20; // 20 × 50ms = 1 second max wait
-
-    const poll = () => {
-      if (built) return;
-      attempts++;
-      const w = container.clientWidth;
-      if (w > 0) {
-        built = true;
-        cleanup = buildChart(w);
-      } else if (attempts < MAX_ATTEMPTS) {
-        pollTimer = setTimeout(poll, 50);
-      } else {
-        // Last resort: use a reasonable fallback width
-        built = true;
-        cleanup = buildChart(320);
+    // Also handle window resize as a fallback
+    const handleResize = () => {
+      if (container.clientWidth > 0) {
+        chart.applyOptions({ width: container.clientWidth });
       }
     };
-
-    let pollTimer = setTimeout(poll, 50);
+    window.addEventListener("resize", handleResize);
 
     return () => {
-      built = true; // prevent any pending poll from running
-      clearTimeout(pollTimer);
-      cleanup?.();
+      ro.disconnect();
+      window.removeEventListener("resize", handleResize);
+      chart.remove();
     };
-  }, [data, range, accentColor, isVisible]);
+  }, [data, range, accentColor]);
 
   return (
     <div className="rounded-lg border border-border bg-card overflow-hidden">
@@ -192,7 +132,7 @@ export function CandlestickChart({
             </span>
           )}
         </div>
-        {/* Range selector */}
+        {/* Range selector — dropdown to avoid overflow on mobile */}
         <Select value={range} onValueChange={(v) => setRange(v as Range)}>
           <SelectTrigger className="h-7 w-20 text-xs">
             <SelectValue />

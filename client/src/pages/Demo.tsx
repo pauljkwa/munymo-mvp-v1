@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
-import { CandlestickChart } from "@/components/CandlestickChart";
+import { ChartSheet } from "@/components/ChartSheet";
 import {
   Brain,
   BookOpen,
@@ -23,13 +23,7 @@ import {
   LineChart,
   X,
 } from "lucide-react";
-import {
-  Drawer,
-  DrawerContent,
-  DrawerHeader,
-  DrawerTitle,
-  DrawerClose,
-} from "@/components/ui/drawer";
+
 import { MetricExplanationSheet } from "@/components/MetricExplanationSheet";
 
 // ─── Demo Data ────────────────────────────────────────────────────────────────
@@ -388,8 +382,10 @@ export default function Demo() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Track which step tooltips have been dismissed
   const [dismissedTips, setDismissedTips] = useState<Set<string>>(new Set());
-  // Chart drawer state
-  const [chartOpen, setChartOpen] = useState<"A" | "B" | null>(null);
+  // Chart sheet state
+  const [chartTicker, setChartTicker] = useState<string | null>(null);
+  const [chartName, setChartName] = useState("");
+  const [chartColor, setChartColor] = useState("#009050");
   const showTip = (s: string) => !dismissedTips.has(s) && step === s && !modalPhase;
   const dismissTip = (s: string) => setDismissedTips(prev => new Set(Array.from(prev).concat(s)));
 
@@ -452,6 +448,14 @@ export default function Demo() {
   return (
     <>
       <DemoBanner />
+      {chartTicker && (
+        <ChartSheet
+          ticker={chartTicker}
+          companyName={chartName}
+          accentColor={chartColor}
+          onClose={() => setChartTicker(null)}
+        />
+      )}
       <PublicLayout>
         {/* Step-by-step guided tooltips */}
         {showTip("gut") && <StepTooltip step="gut" onDismiss={() => dismissTip("gut")} />}
@@ -691,7 +695,7 @@ export default function Demo() {
                   {/* Chart CTA buttons */}
                   <div className="grid grid-cols-2 gap-2 mt-3">
                     <button
-                      onClick={() => setChartOpen("A")}
+                      onClick={() => { setChartTicker("AAPL"); setChartName(DEMO_GAME.companyAName); setChartColor("#009050"); }}
                       className="flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold transition-all active:scale-95"
                       style={{ background: "var(--color-brand-muted)", color: "var(--color-brand)", border: "1px solid var(--color-brand)" }}
                     >
@@ -699,7 +703,7 @@ export default function Demo() {
                       View AAPL Chart
                     </button>
                     <button
-                      onClick={() => setChartOpen("B")}
+                      onClick={() => { setChartTicker("MSFT"); setChartName(DEMO_GAME.companyBName); setChartColor("oklch(0.45 0.18 260)"); }}
                       className="flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold transition-all active:scale-95"
                       style={{ background: "oklch(0.45 0.18 260 / 0.08)", color: "oklch(0.45 0.18 260)", border: "1px solid oklch(0.45 0.18 260 / 0.4)" }}
                     >
@@ -734,47 +738,7 @@ export default function Demo() {
             </div>
           )}
 
-          {/* ── Chart Drawer (slides up from bottom, swipe to dismiss) ── */}
-          <Drawer open={chartOpen !== null} onOpenChange={(open) => { if (!open) setChartOpen(null); }}>
-            <DrawerContent className="max-h-[90vh]">
-              <DrawerHeader className="flex items-center justify-between pb-2">
-                <DrawerTitle className="text-base">
-                  {chartOpen === "A"
-                    ? `AAPL — ${DEMO_GAME.companyAName}`
-                    : `MSFT — ${DEMO_GAME.companyBName}`}
-                </DrawerTitle>
-                <DrawerClose asChild>
-                  <button
-                    className="w-8 h-8 rounded-full flex items-center justify-center transition-colors"
-                    style={{ background: "var(--color-surface-raised)" }}
-                  >
-                    <X size={16} style={{ color: "var(--color-muted)" }} />
-                  </button>
-                </DrawerClose>
-              </DrawerHeader>
-              <div className="px-4 pb-8 overflow-y-auto">
-                {/* Always mount both charts. display:none gives clientWidth=0 so
-                    waitRo fires when display:block is applied, building chart at
-                    correct full width. Confirmed working approach from 3eecb1af. */}
-                <div style={{ display: chartOpen === "A" ? "block" : "none" }}>
-                  <CandlestickChart
-                    ticker="AAPL"
-                    companyName={DEMO_GAME.companyAName}
-                    accentColor="#009050"
-                    isVisible={chartOpen === "A"}
-                  />
-                </div>
-                <div style={{ display: chartOpen === "B" ? "block" : "none" }}>
-                  <CandlestickChart
-                    ticker="MSFT"
-                    companyName={DEMO_GAME.companyBName}
-                    accentColor="oklch(0.45 0.18 260)"
-                    isVisible={chartOpen === "B"}
-                  />
-                </div>
-              </div>
-            </DrawerContent>
-          </Drawer>
+
 
           {/* ── Step: Final ── */}
           {step === "final" && (
