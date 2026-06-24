@@ -753,17 +753,18 @@ export default function Demo() {
                 </DrawerClose>
               </DrawerHeader>
               <div className="px-4 pb-8 overflow-y-auto">
-                {/* Always mount both so each initialises at correct width.
-                    visibility:hidden keeps layout so ResizeObserver fires —
-                    display:none removes layout and the chart never gets a width. */}
-                <div style={chartOpen !== "A" ? { visibility: "hidden", position: "absolute", width: "100%", pointerEvents: "none" } : {}}>
+                {/* Both charts always mounted in normal flow so ResizeObserver gets
+                    the real drawer width. Inactive chart collapsed with height:0 +
+                    overflow:hidden — it still occupies full width in layout.
+                    DO NOT use display:none or position:absolute (both break width). */}
+                <div style={chartOpen !== "A" ? { height: 0, overflow: "hidden", pointerEvents: "none" } : {}}>
                   <CandlestickChart
                     ticker="AAPL"
                     companyName={DEMO_GAME.companyAName}
                     accentColor="#009050"
                   />
                 </div>
-                <div style={chartOpen !== "B" ? { visibility: "hidden", position: "absolute", width: "100%", pointerEvents: "none" } : {}}>
+                <div style={chartOpen !== "B" ? { height: 0, overflow: "hidden", pointerEvents: "none" } : {}}>
                   <CandlestickChart
                     ticker="MSFT"
                     companyName={DEMO_GAME.companyBName}

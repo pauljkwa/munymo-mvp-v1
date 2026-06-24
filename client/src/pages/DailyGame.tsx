@@ -799,12 +799,14 @@ export default function DailyGame() {
               </DrawerClose>
             </DrawerHeader>
             <div className="px-4 pb-8 overflow-y-auto">
-              {/* Always mount both charts so each initialises at the correct width.
-                  Use visibility:hidden + position:absolute (NOT display:none) so the
-                  element still has layout — ResizeObserver fires and the chart builds
-                  at the correct width before the user switches to it. */}
+              {/* Both charts are always mounted in the normal document flow so
+                  ResizeObserver sees the real container width from the first render.
+                  The inactive chart is collapsed to height:0 + overflow:hidden so it
+                  takes no visible space, but its width is still the full drawer width.
+                  DO NOT use display:none (removes from layout) or position:absolute
+                  (width becomes relative to positioned ancestor, often 0). */}
               {game?.companyATicker && (
-                <div style={chartOpen !== "A" ? { visibility: "hidden", position: "absolute", width: "100%", pointerEvents: "none" } : {}}>
+                <div style={chartOpen !== "A" ? { height: 0, overflow: "hidden", pointerEvents: "none" } : {}}>
                   <CandlestickChart
                     ticker={game.companyATicker}
                     companyName={game.companyAName ?? ""}
@@ -813,7 +815,7 @@ export default function DailyGame() {
                 </div>
               )}
               {game?.companyBTicker && (
-                <div style={chartOpen !== "B" ? { visibility: "hidden", position: "absolute", width: "100%", pointerEvents: "none" } : {}}>
+                <div style={chartOpen !== "B" ? { height: 0, overflow: "hidden", pointerEvents: "none" } : {}}>
                   <CandlestickChart
                     ticker={game.companyBTicker}
                     companyName={game.companyBName ?? ""}
