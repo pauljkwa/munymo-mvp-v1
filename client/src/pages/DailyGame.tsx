@@ -598,7 +598,12 @@ export default function DailyGame() {
                     Pairing Rationale
                   </p>
                   <p className="text-sm" style={{ color: "var(--color-muted)" }}>
-                    {game.pairingRationale}
+                    {game.pairingRationale
+                      .replace(/^#{1,6}\s+/gm, "")
+                      .replace(/\*\*([^*]+)\*\*/g, "$1")
+                      .replace(/\*([^*]+)\*/g, "$1")
+                      .replace(/^[-*]\s+/gm, "• ")
+                      .trim()}
                   </p>
                 </div>
               )}
@@ -610,8 +615,13 @@ export default function DailyGame() {
                   >
                     Research Notes
                   </p>
-                  <div className="prose-munymo text-sm whitespace-pre-wrap">
-                    {research.content}
+                  <div className="text-sm whitespace-pre-wrap" style={{ color: "var(--color-muted)" }}>
+                    {research.content
+                      .replace(/^#{1,6}\s+/gm, "")
+                      .replace(/\*\*([^*]+)\*\*/g, "$1")
+                      .replace(/\*([^*]+)\*/g, "$1")
+                      .replace(/^[-*]\s+/gm, "• ")
+                      .trim()}
                   </div>
                 </div>
               ) : (
@@ -790,9 +800,11 @@ export default function DailyGame() {
             </DrawerHeader>
             <div className="px-4 pb-8 overflow-y-auto">
               {/* Always mount both charts so each initialises at the correct width.
-                  CSS visibility hides the inactive one — no remounting on switch. */}
+                  Use visibility:hidden + position:absolute (NOT display:none) so the
+                  element still has layout — ResizeObserver fires and the chart builds
+                  at the correct width before the user switches to it. */}
               {game?.companyATicker && (
-                <div style={{ display: chartOpen === "A" ? "block" : "none" }}>
+                <div style={chartOpen !== "A" ? { visibility: "hidden", position: "absolute", width: "100%", pointerEvents: "none" } : {}}>
                   <CandlestickChart
                     ticker={game.companyATicker}
                     companyName={game.companyAName ?? ""}
@@ -801,7 +813,7 @@ export default function DailyGame() {
                 </div>
               )}
               {game?.companyBTicker && (
-                <div style={{ display: chartOpen === "B" ? "block" : "none" }}>
+                <div style={chartOpen !== "B" ? { visibility: "hidden", position: "absolute", width: "100%", pointerEvents: "none" } : {}}>
                   <CandlestickChart
                     ticker={game.companyBTicker}
                     companyName={game.companyBName ?? ""}

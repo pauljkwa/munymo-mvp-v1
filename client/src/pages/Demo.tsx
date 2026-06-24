@@ -753,15 +753,17 @@ export default function Demo() {
                 </DrawerClose>
               </DrawerHeader>
               <div className="px-4 pb-8 overflow-y-auto">
-                {/* Always mount both so each initialises at correct width */}
-                <div style={{ display: chartOpen === "A" ? "block" : "none" }}>
+                {/* Always mount both so each initialises at correct width.
+                    visibility:hidden keeps layout so ResizeObserver fires —
+                    display:none removes layout and the chart never gets a width. */}
+                <div style={chartOpen !== "A" ? { visibility: "hidden", position: "absolute", width: "100%", pointerEvents: "none" } : {}}>
                   <CandlestickChart
                     ticker="AAPL"
                     companyName={DEMO_GAME.companyAName}
                     accentColor="#009050"
                   />
                 </div>
-                <div style={{ display: chartOpen === "B" ? "block" : "none" }}>
+                <div style={chartOpen !== "B" ? { visibility: "hidden", position: "absolute", width: "100%", pointerEvents: "none" } : {}}>
                   <CandlestickChart
                     ticker="MSFT"
                     companyName={DEMO_GAME.companyBName}
