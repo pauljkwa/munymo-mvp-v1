@@ -811,6 +811,7 @@ export default function DailyGame() {
                     ticker={game.companyATicker}
                     companyName={game.companyAName ?? ""}
                     accentColor="#009050"
+                    isVisible={chartOpen === "A"}
                   />
                 </div>
               )}
@@ -820,6 +821,7 @@ export default function DailyGame() {
                     ticker={game.companyBTicker}
                     companyName={game.companyBName ?? ""}
                     accentColor="oklch(0.45 0.18 260)"
+                    isVisible={chartOpen === "B"}
                   />
                 </div>
               )}

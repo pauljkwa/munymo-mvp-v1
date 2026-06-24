@@ -25,23 +25,34 @@ interface CandlestickChartProps {
   ticker: string;
   companyName: string;
   accentColor?: string;
+  /** Pass true when this chart is the active/visible one in a Drawer.
+   *  Including this in the effect deps ensures the chart re-initialises
+   *  the moment it becomes visible, regardless of ResizeObserver behaviour
+   *  on display:none → display:block transitions. */
+  isVisible?: boolean;
 }
 
-export function CandlestickChart({ ticker, companyName, accentColor = "#009050" }: CandlestickChartProps) {
+export function CandlestickChart({
+  ticker,
+  companyName,
+  accentColor = "#009050",
+  isVisible = true,
+}: CandlestickChartProps) {
   const [range, setRange] = useState<Range>("1mo");
   const chartContainerRef = useRef<HTMLDivElement>(null);
 
   const { data, isLoading, error } = trpc.streaks.getStockChart.useQuery(
     { ticker, range },
-    { staleTime: 5 * 60 * 1000 } // cache for 5 minutes
+    { staleTime: 5 * 60 * 1000 }
   );
 
   useEffect(() => {
+    // Don't build the chart when hidden — wait until isVisible becomes true
+    if (!isVisible) return;
     if (!chartContainerRef.current || !data?.candles?.length) return;
 
     const container = chartContainerRef.current;
 
-    // Chart factory — called once we know the real container width.
     const buildChart = (w: number) => {
       const isDark = document.documentElement.classList.contains("dark");
       const bg = isDark ? "#0f172a" : "#ffffff";
@@ -79,9 +90,22 @@ export function CandlestickChart({ ticker, companyName, accentColor = "#009050" 
         wickDownColor: "#ef4444",
       });
 
-      type RawCandle = { time: number; open: number | null; high: number | null; low: number | null; close: number | null; volume: number | null };
+      type RawCandle = {
+        time: number;
+        open: number | null;
+        high: number | null;
+        low: number | null;
+        close: number | null;
+        volume: number | null;
+      };
       const formattedCandles = (data.candles as RawCandle[])
-        .filter((c) => c.open !== null && c.close !== null && c.high !== null && c.low !== null)
+        .filter(
+          (c) =>
+            c.open !== null &&
+            c.close !== null &&
+            c.high !== null &&
+            c.low !== null
+        )
         .map((c) => ({
           time: c.time as Time,
           open: c.open as number,
@@ -93,7 +117,7 @@ export function CandlestickChart({ ticker, companyName, accentColor = "#009050" 
       candleSeries.setData(formattedCandles);
       chart.timeScale().fitContent();
 
-      // Keep chart in sync with future container width changes (e.g. orientation change)
+      // Keep chart in sync with future container width changes
       const ro = new ResizeObserver((entries) => {
         const entry = entries[0];
         if (entry) {
@@ -117,44 +141,43 @@ export function CandlestickChart({ ticker, companyName, accentColor = "#009050" 
       };
     };
 
-    // If the container already has a real width (e.g. inline chart, first company),
-    // build immediately. Otherwise attach a ResizeObserver that fires as soon as
-    // the Drawer animation settles and the container gets its first non-zero width.
-    // This is more reliable than a single rAF which can fire mid-animation.
+    // If container already has a real width, build immediately.
     if (container.clientWidth > 0) {
       return buildChart(container.clientWidth);
     }
 
+    // Container has no width yet (e.g. Drawer mid-animation).
+    // Use a short polling loop — more reliable than ResizeObserver alone
+    // for display:none → display:block transitions on mobile Safari/Chrome.
     let cleanup: (() => void) | undefined;
     let built = false;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 20; // 20 × 50ms = 1 second max wait
 
-    const waitRo = new ResizeObserver((entries) => {
+    const poll = () => {
       if (built) return;
-      const w = entries[0]?.contentRect.width ?? 0;
+      attempts++;
+      const w = container.clientWidth;
       if (w > 0) {
         built = true;
-        waitRo.disconnect();
         cleanup = buildChart(w);
+      } else if (attempts < MAX_ATTEMPTS) {
+        pollTimer = setTimeout(poll, 50);
+      } else {
+        // Last resort: use a reasonable fallback width
+        built = true;
+        cleanup = buildChart(320);
       }
-    });
-    waitRo.observe(container);
+    };
 
-    // Safety fallback: if the ResizeObserver never fires (e.g. hidden tab),
-    // try again after 300 ms (enough for any CSS transition to complete).
-    const fallbackTimer = setTimeout(() => {
-      if (built) return;
-      built = true;
-      waitRo.disconnect();
-      const w = container.clientWidth > 0 ? container.clientWidth : 320;
-      cleanup = buildChart(w);
-    }, 300);
+    let pollTimer = setTimeout(poll, 50);
 
     return () => {
-      clearTimeout(fallbackTimer);
-      waitRo.disconnect();
+      built = true; // prevent any pending poll from running
+      clearTimeout(pollTimer);
       cleanup?.();
     };
-  }, [data, range, accentColor]);
+  }, [data, range, accentColor, isVisible]);
 
   return (
     <div className="rounded-lg border border-border bg-card overflow-hidden">
@@ -169,7 +192,7 @@ export function CandlestickChart({ ticker, companyName, accentColor = "#009050" 
             </span>
           )}
         </div>
-        {/* Range selector — dropdown to avoid overflow on mobile */}
+        {/* Range selector */}
         <Select value={range} onValueChange={(v) => setRange(v as Range)}>
           <SelectTrigger className="h-7 w-20 text-xs">
             <SelectValue />

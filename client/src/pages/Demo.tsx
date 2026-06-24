@@ -761,6 +761,7 @@ export default function Demo() {
                     ticker="AAPL"
                     companyName={DEMO_GAME.companyAName}
                     accentColor="#009050"
+                    isVisible={chartOpen === "A"}
                   />
                 </div>
                 <div style={{ display: chartOpen === "B" ? "block" : "none" }}>
@@ -768,6 +769,7 @@ export default function Demo() {
                     ticker="MSFT"
                     companyName={DEMO_GAME.companyBName}
                     accentColor="oklch(0.45 0.18 260)"
+                    isVisible={chartOpen === "B"}
                   />
                 </div>
               </div>
