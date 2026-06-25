@@ -39,24 +39,6 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
 
-  // TEMPORARY: one-shot lockout fix for game 150002 — REMOVE AFTER USE
-  app.get("/api/admin/fix-lockout-150002", async (req, res) => {
-    if (req.query.secret !== "munymo-fix-jun25") {
-      return res.status(403).json({ error: "forbidden" });
-    }
-    const { getDb } = await import("../db");
-    const { dailyGames } = await import("../../drizzle/schema.js");
-    const { eq } = await import("drizzle-orm");
-    const db = await getDb();
-    if (!db) return res.status(500).json({ error: "Database unavailable" });
-    await db.update(dailyGames)
-      .set({ lockoutAt: new Date("2026-06-25T13:30:00.000Z") })
-      .where(eq(dailyGames.id, 150002));
-    const [game] = await db.select().from(dailyGames).where(eq(dailyGames.id, 150002));
-    return res.json(game);
-  });
-  // END TEMPORARY
-
   registerOAuthRoutes(app);
   registerMagicLinkRedirect(app);
   registerScheduledCuration(app);
