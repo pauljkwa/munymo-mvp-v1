@@ -1,3 +1,5 @@
+> **Superseded.** See `references/munymo-handover-v2.md` for the current authoritative handover document.
+
 # Munymo — Full Context Briefing for New Chat Session
 *Generated from the original build session — Jun 23, 2026*
 
