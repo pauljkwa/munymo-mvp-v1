@@ -72,6 +72,7 @@ export default function GameResult() {
   const finalPctA  = parseFloat(communityStats?.finalPctA ?? "50");
   const gutPctB    = 100 - gutPctA;
   const finalPctB  = 100 - finalPctA;
+  const totalPlayers = communityStats?.totalParticipants ?? 0;
 
   const scoreColour =
     !myScore ? "var(--color-subtle)"
@@ -217,12 +218,15 @@ export default function GameResult() {
         {/* ── Community stats ── */}
         {communityStats && (
           <div className="card-glass p-6 mb-6 animate-fade-up delay-150">
-            <div className="flex items-center gap-2 mb-5">
+            <div className="flex items-center gap-2 mb-1">
               <Users size={16} style={{ color: "var(--color-brand)" }} />
               <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-brand)" }}>
                 How the Crowd Voted
               </p>
             </div>
+            <p className="text-xs mb-4" style={{ color: "var(--color-subtle)" }}>
+              {totalPlayers} {totalPlayers === 1 ? "player" : "players"} participated
+            </p>
 
             {/* Gut picks */}
             <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--color-subtle)" }}>
