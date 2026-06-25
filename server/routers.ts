@@ -233,9 +233,10 @@ const picksRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const game = await assertNotLocked(input.gameId);
-      if (game.status !== "active") {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Game is not active" });
+      const game = await getGameById(input.gameId);
+      if (!game) throw new TRPCError({ code: "NOT_FOUND", message: "Game not found" });
+      if (game.status === "result_published" || game.status === "cancelled") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Game is already closed" });
       }
       const existing = await getPlayerPick(ctx.user.id, input.gameId);
       if (!existing?.finalSelection) {
@@ -708,6 +709,24 @@ const adminRouter = router({
           throw new TRPCError({ code: "BAD_REQUEST", message: "Result already published" });
         }
         await lockPicksForGame(input.closeGameId);
+
+        // Auto-submit: players who made a Gut Selection but no Final Selection
+        // have their gut copied to final at lockout — per founder Decision 1.
+        const { playerPicks } = await import("../drizzle/schema.js");
+        const { sql, and, eq, isNull, isNotNull } = await import("drizzle-orm");
+        await db.update(playerPicks)
+          .set({
+            finalSelection: sql`gut_selection`,
+            finalSubmittedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(playerPicks.gameId, input.closeGameId),
+              isNotNull(playerPicks.gutSelection),
+              isNull(playerPicks.finalSelection)
+            )
+          );
+
         await snapshotResearch(input.closeGameId);
         const question = await getValidationQuestion(input.closeGameId);
         const picks = await getPicksForGame(input.closeGameId);
