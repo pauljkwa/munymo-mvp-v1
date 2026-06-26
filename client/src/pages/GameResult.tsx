@@ -32,6 +32,10 @@ export default function GameResult() {
   );
   const { data: communityStats } = trpc.games.getCommunityStats.useQuery({ gameId });
   const { data: validationQ } = trpc.games.getValidationQuestion.useQuery({ gameId });
+  const { data: myStreak } = trpc.streaks.getMyStreak.useQuery(
+    undefined,
+    { enabled: isAuthenticated }
+  );
 
   if (isLoading) {
     return (
@@ -187,6 +191,43 @@ export default function GameResult() {
               No score recorded — but you can still read the full debrief below.
             </p>
           </div>
+        )}
+
+        {/* ── Streak summary ── */}
+        {isAuthenticated && myPick && myStreak && (
+          <>
+            {/* Losing streak intervention */}
+            {(myStreak.currentLoseStreak ?? 0) >= 5 && (
+              <div
+                className="card-glass p-4 mb-4 animate-fade-up delay-75"
+                style={{
+                  borderColor: "var(--color-border)",
+                  background: "var(--color-surface-raised)",
+                }}
+              >
+                <p className="text-sm italic" style={{ color: "var(--color-muted)" }}>
+                  {myStreak.currentLoseStreak} losses in a row — even the best analysts hit rough patches. Keep showing up; the edge comes from staying in the game.
+                </p>
+              </div>
+            )}
+            {/* Streak row */}
+            <div
+              className="card-glass p-4 mb-6 flex flex-wrap items-center gap-4 animate-fade-up delay-75"
+              style={{ borderColor: "var(--color-border)" }}
+            >
+              <span className="text-sm" style={{ color: "var(--color-muted)" }}>
+                🔥 {myStreak.currentStreak > 0 ? `${myStreak.currentStreak}-day streak` : "—"}
+              </span>
+              <span className="text-xs" style={{ color: "var(--color-subtle)" }}>·</span>
+              <span className="text-sm" style={{ color: "var(--color-muted)" }}>
+                ✅ {(myStreak.currentWinStreak ?? 0) > 0 ? `${myStreak.currentWinStreak} wins in a row` : "—"}
+              </span>
+              <span className="text-xs" style={{ color: "var(--color-subtle)" }}>·</span>
+              <span className="text-sm" style={{ color: "var(--color-muted)" }}>
+                ❌ {(myStreak.currentLoseStreak ?? 0) > 0 ? `${myStreak.currentLoseStreak} losses in a row` : "—"}
+              </span>
+            </div>
+          </>
         )}
 
         {/* ── Validation question result ── */}

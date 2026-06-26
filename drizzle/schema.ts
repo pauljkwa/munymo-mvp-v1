@@ -231,6 +231,9 @@ export const streakRecords = mysqlTable("streak_records", {
   userId: int("userId").notNull().unique(),
   currentStreak: int("currentStreak").notNull().default(0),
   longestStreak: int("longestStreak").notNull().default(0),
+  currentWinStreak: int("currentWinStreak").notNull().default(0),
+  longestWinStreak: int("longestWinStreak").notNull().default(0),
+  currentLoseStreak: int("currentLoseStreak").notNull().default(0),
   lastParticipationDate: varchar("lastParticipationDate", { length: 10 }), // YYYY-MM-DD
   awayStatus: mysqlEnum("awayStatus", ["active", "away", "missing"])
     .notNull()

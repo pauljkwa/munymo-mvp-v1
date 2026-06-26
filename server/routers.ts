@@ -43,6 +43,7 @@ import {
   submitValidationAnswer,
   updateGame,
   updateStreak,
+  updateWinLoseStreak,
   upsertFinalSelection,
   upsertGutSelection,
   upsertLeaderboardStat,
@@ -546,7 +547,7 @@ const adminRouter = router({
         await upsertLeaderboardStat(pick.userId);
 
         // 6. Update streaks
-        await updateStreakForPlayer(pick.userId, game.gameDate);
+        await updateStreakForPlayer(pick.userId, game.gameDate, pick.finalSelection === input.winner);
       }
 
       // 7. Compute community stats
@@ -742,7 +743,7 @@ const adminRouter = router({
           await insertDailyScore(pick.userId, input.closeGameId, predictionScore, validationScore);
           scoredPicks.push({ userId: pick.userId, predictionScore, validationScore, totalScore: predictionScore + validationScore });
           await upsertLeaderboardStat(pick.userId);
-          await updateStreakForPlayer(pick.userId, game.gameDate);
+          await updateStreakForPlayer(pick.userId, game.gameDate, pick.finalSelection === input.winner);
         }
         await computeAndStoreCommunityStats(input.closeGameId);
         await updateGame(input.closeGameId, {
@@ -960,11 +961,15 @@ const adminRouter = router({
 
 // ─── Streak Helper ────────────────────────────────────────────────────────────
 
-async function updateStreakForPlayer(userId: number, gameDate: string) {
+async function updateStreakForPlayer(userId: number, gameDate: string, isCorrect: boolean) {
   const streak = await getStreakForUser(userId);
   if (!streak) {
     await initStreakForUser(userId);
     await updateStreak(userId, 1, 1, gameDate);
+    // New user: set win/lose streaks from first result
+    const newWinStreak = isCorrect ? 1 : 0;
+    const newLoseStreak = isCorrect ? 0 : 1;
+    await updateWinLoseStreak(userId, newWinStreak, newWinStreak, newLoseStreak);
     return;
   }
   const awayStatus = streak.awayStatus as "active" | "away" | "missing";
@@ -978,6 +983,14 @@ async function updateStreakForPlayer(userId: number, gameDate: string) {
   // Away status: computeNewStreak returns updated=false, so we skip the DB write
   if (!updated) return;
   await updateStreak(userId, newCurrent, newLongest, gameDate);
+  // Update win/lose streaks
+  const freshStreak = await getStreakForUser(userId);
+  if (freshStreak) {
+    const newWinStreak = isCorrect ? (freshStreak.currentWinStreak ?? 0) + 1 : 0;
+    const newLoseStreak = isCorrect ? 0 : (freshStreak.currentLoseStreak ?? 0) + 1;
+    const newLongestWin = Math.max(newWinStreak, freshStreak.longestWinStreak ?? 0);
+    await updateWinLoseStreak(userId, newWinStreak, newLongestWin, newLoseStreak);
+  }
 }
 
 // ─── Dashboard Router ───────────────────────────────────────────────────────────
@@ -1054,6 +1067,9 @@ const dashboardRouter = router({
       validationAccuracy,
       currentStreak: streak?.currentStreak ?? 0,
       longestStreak: streak?.longestStreak ?? 0,
+      currentWinStreak: streak?.currentWinStreak ?? 0,
+      longestWinStreak: streak?.longestWinStreak ?? 0,
+      currentLoseStreak: streak?.currentLoseStreak ?? 0,
       awayStatus: streak?.awayStatus ?? "active",
       leaderboardRank,
       isQualified: stat ? isQualified(stat.gamesPlayed) : false,

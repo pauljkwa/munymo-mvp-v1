@@ -504,6 +504,20 @@ export async function updateStreak(
     .where(eq(streakRecords.userId, userId));
 }
 
+export async function updateWinLoseStreak(
+  userId: number,
+  currentWinStreak: number,
+  longestWinStreak: number,
+  currentLoseStreak: number
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(streakRecords)
+    .set({ currentWinStreak, longestWinStreak, currentLoseStreak })
+    .where(eq(streakRecords.userId, userId));
+}
+
 export async function setAwayStatus(
   userId: number,
   status: "active" | "away" | "missing",
