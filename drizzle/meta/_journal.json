@@ -57,6 +57,13 @@
       "when": 1781943552027,
       "tag": "0007_vengeful_sumo",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1782452178123,
+      "tag": "0008_brainy_norrin_radd",
+      "breakpoints": true
     }
   ]
 }
