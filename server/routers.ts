@@ -802,8 +802,8 @@ const adminRouter = router({
       // ── 3. Send result emails to ALL registered users (only if a game was closed) ──
       // Players who participated get a score summary; non-players get a re-engagement email.
       if (game) {
+        const allUsers = await getAllUsers();
         try {
-          const allUsers = await getAllUsers();
           const scoredMap = new Map(scoredPicks.map((s) => [s.userId, s]));
           // Build next-game teaser data if available
           const nextTicker = nextGame ? { a: input.nextCompanyATicker, b: input.nextCompanyBTicker, aName: input.nextCompanyAName, bName: input.nextCompanyBName } : null;

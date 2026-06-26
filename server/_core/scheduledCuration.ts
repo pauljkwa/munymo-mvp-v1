@@ -202,7 +202,7 @@ async function dailyCurationHandler(req: Request, res: Response) {
     const { appRouter } = await import("../routers");
     // Build a minimal admin context for the cron caller
     const caller = appRouter.createCaller({
-      user: { id: 1, role: "admin" as const, clerkId: null, openId: null, email: null, name: "Cron", loginMethod: null, createdAt: new Date(), updatedAt: new Date(), displayName: null, awayStatus: false, awayStatusUntil: null, deactivated: false, tier: "free" as const, lastSignedIn: new Date() },
+      user: { id: 1, role: "admin" as const, clerkId: null, openId: null, email: null, name: "Cron", loginMethod: null, createdAt: new Date(), updatedAt: new Date(), displayName: null, awayStatus: false, awayStatusUntil: null, deactivated: false, tier: "free" as const, lastSignedIn: new Date(), emailOptIn: true, pushOptIn: true },
       req: req as any,
       res: res as any,
     });
