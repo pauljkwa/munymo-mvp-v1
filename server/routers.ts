@@ -1042,11 +1042,25 @@ const dashboardRouter = router({
 
   /** Get a summary of the user's stats for the dashboard */
   getStats: protectedProcedure.query(async ({ ctx }) => {
-    const [stat, streak, history] = await Promise.all([
+    console.log("[dashboard.getStats] userId:", ctx.user.id);
+
+    // Fetch history and leaderboard stat together; fetch streak separately so a
+    // schema-migration lag (missing win/lose columns) cannot kill the whole query.
+    const [stat, history] = await Promise.all([
       getLeaderboardStatForUser(ctx.user.id),
-      getStreakForUser(ctx.user.id),
       getPlayerScoreHistory(ctx.user.id),
     ]);
+
+    console.log("[dashboard.getStats] history.length:", history.length);
+
+    // Streak is fetched in isolation — if the DB columns don't exist yet (e.g.
+    // pnpm db:push hasn't been run after a schema change) this won't crash stats.
+    let streak: Awaited<ReturnType<typeof getStreakForUser>> | null = null;
+    try {
+      streak = (await getStreakForUser(ctx.user.id)) ?? null;
+    } catch (err) {
+      console.warn("[dashboard.getStats] streak fetch failed (schema migration pending?):", err);
+    }
 
     const totalGames = history.length;
     const correctPredictions = history.filter((h) => h.predictionScore > 0).length;

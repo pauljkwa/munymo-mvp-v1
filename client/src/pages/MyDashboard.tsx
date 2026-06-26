@@ -9,6 +9,7 @@ import {
   Flame,
   Trophy,
   TrendingUp,
+  TrendingDown,
   CheckCircle2,
   XCircle,
   BarChart2,
@@ -212,6 +213,17 @@ export default function MyDashboard() {
                 label="Current Streak"
                 value={stats.currentStreak}
                 sub={`Best: ${stats.longestStreak}`}
+              />
+              <StatCard
+                icon={TrendingUp}
+                label="Win Streak"
+                value={stats.currentWinStreak}
+                sub={`Best: ${stats.longestWinStreak}`}
+              />
+              <StatCard
+                icon={TrendingDown}
+                label="Lose Streak"
+                value={stats.currentLoseStreak}
               />
               <StatCard
                 icon={BookOpen}
