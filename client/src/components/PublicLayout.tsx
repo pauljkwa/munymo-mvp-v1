@@ -5,6 +5,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import MunymoLogo from "@/components/MunymoLogo";
 import { SignInButton, SignOutButton } from "@clerk/clerk-react";
 import { useState } from "react";
+import { trpc } from "@/lib/trpc";
 
 const mainLinks = [
   { href: "/game", label: "Today's Game" },
@@ -35,8 +36,15 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
 
   const close = () => setOpen(false);
 
+  const { data: recentPublished } = trpc.games.listArchive.useQuery(
+    { limit: 1, offset: 0 },
+    { staleTime: 5 * 60 * 1000 }
+  );
+  const previousGame = recentPublished?.[0] ?? null;
+
   const allNavLinks = [
     ...mainLinks,
+    ...(previousGame ? [{ href: `/game/${previousGame.id}/result`, label: "Yesterday's Result" }] : []),
     ...(isAuthenticated ? [{ href: "/dashboard", label: "My Dashboard" }] : []),
     ...(user?.role === "admin" ? [{ href: "/admin", label: "Admin" }] : []),
   ];
