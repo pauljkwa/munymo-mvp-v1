@@ -411,7 +411,7 @@ const adminRouter = router({
       // Notify all registered players that today's game is live
       try {
         const allUsers = await getAllUsers();
-        const players = allUsers.filter((u) => u.role !== "admin");
+        const players = allUsers.filter((u) => u.role !== "admin" && u.emailOptIn !== false);
         const { subject, html } = buildGameAvailableEmail({
           companyAName: game.companyAName,
           companyATicker: game.companyATicker,
@@ -582,6 +582,7 @@ const adminRouter = router({
         for (const scored of scoredPicks) {
           const user = userMap.get(scored.userId);
           if (!user?.email) { emailsFailed++; continue; }
+          if (user.emailOptIn === false) { continue; }
           const { subject, html } = buildResultPublishedEmail({
             playerName: user.name,
             companyAName: game.companyAName,
@@ -829,6 +830,7 @@ const adminRouter = router({
 
           for (const user of allUsers) {
             if (!user.email) continue;
+            if (user.emailOptIn === false) continue;
             const scored = scoredMap.get(user.id);
             let subject: string;
             let html: string;
@@ -884,12 +886,13 @@ const adminRouter = router({
           console.warn("[Email] End-of-day result notifications failed:", err);
         }
 
-        // ── 4. Send push notifications to all subscribed users ──
+        // ── 4. Send push notifications to all subscribed users (respecting pushOptIn) ──
         try {
-          const { sendPushToAll } = await import("./push");
+          const { sendPushToUsers } = await import("./push");
+          const optedInUserIds = allUsers.filter((u) => u.pushOptIn !== false).map((u) => u.id);
           const winnerTicker = input.winner === "A" ? game.companyATicker : game.companyBTicker;
           const loserTicker = input.winner === "A" ? game.companyBTicker : game.companyATicker;
-          const pushResult = await sendPushToAll({
+          const pushResult = await sendPushToUsers(optedInUserIds, {
             title: `Results are in: ${winnerTicker} beats ${loserTicker}`,
             body: input.resultSummary
               ? input.resultSummary.slice(0, 120) + (input.resultSummary.length > 120 ? "…" : "")
@@ -903,11 +906,12 @@ const adminRouter = router({
         }
       }
 
-      // ── 5. Send push notification for new game availability ──
+      // ── 5. Send push notification for new game availability (respecting pushOptIn) ──
       if (nextGame) {
         try {
-          const { sendPushToAll } = await import("./push");
-          await sendPushToAll({
+          const { sendPushToUsers } = await import("./push");
+          const optedInIds = (await getAllUsers()).filter((u) => u.pushOptIn !== false).map((u) => u.id);
+          await sendPushToUsers(optedInIds, {
             title: `Today's game is live: ${input.nextCompanyATicker} vs ${input.nextCompanyBTicker}`,
             body: input.nextSector
               ? `${input.nextCompanyAName} vs ${input.nextCompanyBName} — ${input.nextSector}. Make your pick before lockout!`
@@ -1018,6 +1022,20 @@ const dashboardRouter = router({
         awayStatus: input.active,
         awayStatusUntil: input.active ? null : null,
       });
+      return { success: true };
+    }),
+
+  /** Update email/push notification opt-in preferences */
+  setNotificationPrefs: protectedProcedure
+    .input(z.object({
+      emailOptIn: z.boolean().optional(),
+      pushOptIn: z.boolean().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const data: { emailOptIn?: boolean; pushOptIn?: boolean } = {};
+      if (input.emailOptIn !== undefined) data.emailOptIn = input.emailOptIn;
+      if (input.pushOptIn !== undefined) data.pushOptIn = input.pushOptIn;
+      await updateUserProfile(ctx.user.id, data);
       return { success: true };
     }),
 

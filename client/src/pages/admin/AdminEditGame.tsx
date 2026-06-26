@@ -15,6 +15,7 @@ export default function AdminEditGame() {
   const { data: validationQ, refetch: refetchVQ } = trpc.games.getValidationQuestion.useQuery({ gameId });
 
   const [researchContent, setResearchContent] = useState("");
+  const [lockoutAtInput, setLockoutAtInput] = useState("");
   const [vqForm, setVqForm] = useState({
     questionText: "",
     questionType: "multiple_choice" as "multiple_choice" | "yes_no" | "true_false",
@@ -25,6 +26,14 @@ export default function AdminEditGame() {
   useEffect(() => {
     if (research?.content) setResearchContent(research.content);
   }, [research]);
+
+  // Pre-populate lockoutAt from the game record (convert ISO → datetime-local)
+  useEffect(() => {
+    if (game?.lockoutAt) {
+      const iso = new Date(game.lockoutAt).toISOString();
+      setLockoutAtInput(iso.slice(0, 16)); // "YYYY-MM-DDTHH:mm"
+    }
+  }, [game?.lockoutAt]);
 
   useEffect(() => {
     if (validationQ) {
@@ -38,6 +47,11 @@ export default function AdminEditGame() {
   }, [validationQ]);
 
   const utils = trpc.useUtils();
+
+  const saveLockout = trpc.admin.updateGame.useMutation({
+    onSuccess: () => { toast.success("Lockout time updated."); refetch(); },
+    onError: (e) => toast.error(e.message),
+  });
 
   const saveResearch = trpc.admin.updateResearch.useMutation({
     onSuccess: () => { toast.success("Research saved."); refetchResearch(); },
@@ -70,6 +84,7 @@ export default function AdminEditGame() {
   }
 
   const isEditable = game.status === "draft" || game.status === "active";
+  const canEditLockout = game.status === "active" || game.status === "locked";
 
   return (
     <AdminLayout>
@@ -110,6 +125,42 @@ export default function AdminEditGame() {
             )}
           </div>
         </div>
+
+        {/* Lockout Time */}
+        {canEditLockout && (
+          <div className="card-glass p-6 mb-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Save size={16} style={{ color: "var(--color-brand)" }} />
+              <h2 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-brand)" }}>
+                Lockout Time (UTC)
+              </h2>
+            </div>
+            <p className="text-xs mb-3" style={{ color: "var(--color-subtle)" }}>
+              The time at which the game locks and players can no longer submit picks. All times are UTC.
+            </p>
+            <input
+              type="datetime-local"
+              value={lockoutAtInput}
+              onChange={(e) => setLockoutAtInput(e.target.value)}
+              className="input-field w-full"
+            />
+            <div className="flex justify-end mt-3">
+              <button
+                onClick={() => {
+                  if (!lockoutAtInput) return;
+                  // datetime-local gives "YYYY-MM-DDTHH:mm" — append :00Z to make a valid ISO string
+                  const iso = lockoutAtInput.length === 16 ? lockoutAtInput + ":00.000Z" : new Date(lockoutAtInput).toISOString();
+                  saveLockout.mutate({ gameId, lockoutAt: iso });
+                }}
+                disabled={saveLockout.isPending || !lockoutAtInput}
+                className="btn-brand"
+              >
+                {saveLockout.isPending ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+                Save Lockout Time
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Research */}
         <div className="card-glass p-6 mb-5">

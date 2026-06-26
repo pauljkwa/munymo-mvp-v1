@@ -130,6 +130,8 @@ export async function updateUserProfile(userId: number, data: {
   awayStatusUntil?: Date | null;
   deactivated?: boolean;
   tier?: "free" | "premium";
+  emailOptIn?: boolean;
+  pushOptIn?: boolean;
 }): Promise<void> {
   const db = await getDb();
   if (!db) return;

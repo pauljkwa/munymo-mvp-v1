@@ -33,6 +33,9 @@ export const users = mysqlTable("users", {
   awayStatusUntil: timestamp("awayStatusUntil"),
   // Soft delete — deactivated users cannot sign in
   deactivated: boolean("deactivated").default(false).notNull(),
+  // Notification preferences
+  emailOptIn: boolean("emailOptIn").default(true).notNull(),
+  pushOptIn: boolean("pushOptIn").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
