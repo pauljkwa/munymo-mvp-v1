@@ -277,6 +277,11 @@ function ValidationModal({
 export default function DailyGame() {
   const { isAuthenticated } = useAuth();
   const { data: game, isLoading } = trpc.games.getToday.useQuery();
+  const { data: recentPublished } = trpc.games.listArchive.useQuery(
+    { limit: 1, offset: 0 },
+    { staleTime: 5 * 60 * 1000 }
+  );
+  const previousGame = recentPublished?.[0] ?? null;
 
   const { data: myPick, isLoading: isLoadingPick } = trpc.picks.getMyPick.useQuery(
     { gameId: game?.id ?? 0 },
@@ -563,6 +568,19 @@ export default function DailyGame() {
             );
           })}
         </div>
+
+        {/* Yesterday's result link */}
+        {previousGame && (
+          <div className="text-center mt-3 mb-2">
+            <a
+              href={`/game/${previousGame.id}/result`}
+              className="text-xs underline"
+              style={{ color: "var(--color-subtle)" }}
+            >
+              Yesterday's result →
+            </a>
+          </div>
+        )}
 
         {/* ── Step: Gut ── */}
         {step === "gut" && !isLocked && (
