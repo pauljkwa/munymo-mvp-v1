@@ -6,6 +6,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerMagicLinkRedirect } from "./magicLinkRedirect";
 import { registerScheduledCuration } from "./scheduledCuration";
+import { autoSubmitLockedPicksHandler } from "../autoSubmitHandler";
 import { registerReferralRoutes } from "../referral";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
@@ -43,6 +44,7 @@ async function startServer() {
   registerMagicLinkRedirect(app);
   registerScheduledCuration(app);
   registerReferralRoutes(app);
+  app.post("/api/scheduled/auto-submit-locked-picks", autoSubmitLockedPicksHandler);
   // tRPC API
   app.use(
     "/api/trpc",

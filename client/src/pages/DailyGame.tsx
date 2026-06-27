@@ -418,6 +418,12 @@ export default function DailyGame() {
 
   const isLocked = game.status === "locked" || game.status === "result_published";
   const lockoutTime = game.lockoutAt ? new Date(game.lockoutAt) : null;
+  // True when the cron auto-submitted the gut pick as the final pick (gut === final, no manual final submission)
+  const wasAutoSubmitted =
+    !!myPick?.gutSelection &&
+    !!myPick?.finalSelection &&
+    myPick.finalSelection === myPick.gutSelection &&
+    !myPick?.validationAnswer;
 
   const stepLabels: GameStep[] = ["gut", "research", "final", "submitted"];
   const stepDisplayLabels = ["Gut Pick", "Research", "Final Pick", "Done"];
@@ -857,7 +863,7 @@ export default function DailyGame() {
         )}
 
         {/* ── Submitted ── */}
-        {step === "submitted" && (
+        {step === "submitted" && !wasAutoSubmitted && (
           <div
             className="card-glass p-6 text-center animate-scale-in"
             style={{
@@ -879,6 +885,56 @@ export default function DailyGame() {
             <Link href="/leaderboard" className="btn-ghost text-sm">
               View Leaderboard
             </Link>
+          </div>
+        )}
+
+        {/* ── Auto-submitted (gut pick was submitted by cron at lockout) ── */}
+        {(step === "submitted" && wasAutoSubmitted) && (
+          <div
+            className="card-glass p-6 animate-scale-in"
+            style={{ borderColor: "var(--color-warning)", boxShadow: "0 0 0 1px var(--color-warning)" }}
+          >
+            <div className="flex items-center gap-3 mb-3">
+              <Timer size={24} style={{ color: "var(--color-warning)", flexShrink: 0 }} />
+              <div>
+                <h3 style={{ color: "var(--color-foreground)" }}>Time Ran Out</h3>
+                <p className="text-xs" style={{ color: "var(--color-muted)" }}>Your gut pick was automatically submitted</p>
+              </div>
+            </div>
+            <p className="text-sm mb-5" style={{ color: "var(--color-muted)" }}>
+              The submission window closed while you were away. Your gut pick —{" "}
+              <strong style={{ color: "var(--color-foreground)" }}>
+                {myPick?.finalSelection === "A" ? game.companyAName : game.companyBName}
+              </strong>{" "}
+              — was automatically locked in as your final selection.
+            </p>
+            {validationQ && (
+              <div
+                className="p-4 rounded-xl mb-4"
+                style={{ background: "var(--color-warning)18", border: "1px solid var(--color-warning)40" }}
+              >
+                <p className="text-sm font-semibold mb-1" style={{ color: "var(--color-foreground)" }}>
+                  You can still earn bonus points
+                </p>
+                <p className="text-sm" style={{ color: "var(--color-muted)" }}>
+                  Answer the Research Validation Question to earn{" "}
+                  <strong style={{ color: "var(--color-foreground)" }}>20% of your score</strong> as a bonus.
+                </p>
+              </div>
+            )}
+            {validationQ ? (
+              <button
+                className="btn-brand w-full justify-center"
+                onClick={() => setModalPhase("confirm")}
+              >
+                Answer Validation Question
+                <ArrowRight size={16} />
+              </button>
+            ) : (
+              <Link href="/leaderboard" className="btn-ghost text-sm">
+                View Leaderboard
+              </Link>
+            )}
           </div>
         )}
 
