@@ -1066,7 +1066,7 @@ export default function Home() {
               {/* CTA */}
               <div className="text-center">
                 {isAuthenticated ? (
-                  <Link href="/daily-game">
+                  <Link href="/game">
                     <button className="btn-gold text-sm px-8 py-3.5 mb-4">
                       Play Today's Game
                       <ArrowRight size={16} />
