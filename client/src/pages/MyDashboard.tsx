@@ -286,7 +286,9 @@ export default function MyDashboard() {
                     )}
                     <div>
                       <p className="text-xs font-mono" style={{ color: "var(--color-muted)" }}>
-                        Game #{entry.gameId}
+                        {entry.gameDate
+                          ? new Date(entry.gameDate + "T12:00:00Z").toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short" })
+                          : `Game #${entry.gameId}`}
                       </p>
                     </div>
                   </div>

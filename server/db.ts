@@ -402,8 +402,18 @@ export async function getPlayerScoreHistory(userId: number) {
   const db = await getDb();
   if (!db) return [];
   return db
-    .select()
+    .select({
+      id: dailyScores.id,
+      userId: dailyScores.userId,
+      gameId: dailyScores.gameId,
+      predictionScore: dailyScores.predictionScore,
+      validationScore: dailyScores.validationScore,
+      totalScore: dailyScores.totalScore,
+      calculatedAt: dailyScores.calculatedAt,
+      gameDate: dailyGames.gameDate,
+    })
     .from(dailyScores)
+    .leftJoin(dailyGames, eq(dailyScores.gameId, dailyGames.id))
     .where(eq(dailyScores.userId, userId))
     .orderBy(desc(dailyScores.calculatedAt));
 }
