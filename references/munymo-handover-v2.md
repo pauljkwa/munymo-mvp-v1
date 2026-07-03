@@ -111,7 +111,7 @@ The handover from the previous session said "all phases 1–24 are functionally 
 |------|--------|
 | Auto-submission at lockout (Decision 1) | **Not implemented** |
 | Validation question staying open after lockout (Decision 1) | **Not implemented** — currently blocked by lockout middleware |
-| Three streak types (Decision 2) | **Not implemented** — only current/longest streak tracked |
+| Three streak types (Decision 2) | Playing + win + lose streaks tracked. Playing-streak weekend-reset bug fixed (T1, 2026-07-03, commit 34112de). Losing-streak-of-5 intervention UX still outstanding (deferred, P5). |
 | Losing streak intervention at 5 (Decision 2) | **Not implemented** |
 | Community stats showing raw counts (Decision 7) | **Not implemented** — percentages only |
 | `AdminSettings` page at `/admin/settings` | **Does not exist** — no file, no route |

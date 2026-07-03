@@ -436,7 +436,7 @@ Per the review, these are correctly deferrable at current scale:
 
 Copy into the working session; check off as each passes its acceptance criteria.
 
-- [ ] T1 — Weekend streak reset fixed + tests
+- [x] T1 — Weekend streak reset fixed + tests (verified 2026-07-03, commit 34112de)
 - [ ] T2 — Away-status unified + protection actually works
 - [ ] T3 — Curation winner/perf validation
 - [ ] T4 — Validation re-entry + `wasAutoSubmitted` fix
