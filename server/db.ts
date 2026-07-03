@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, lt, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -541,6 +541,35 @@ export async function setAwayStatus(
     .update(streakRecords)
     .set({ awayStatus: status, awayStatusSetAt: new Date(), awayStatusSetBy: adminId })
     .where(eq(streakRecords.userId, userId));
+}
+
+/**
+ * Count the number of result_published game days strictly between two dates
+ * (exclusive of both ends). Used by the streak engine to determine whether a
+ * player missed any trading days — a gap containing 0 published game days
+ * (e.g. Friday → Monday) should NOT reset the streak.
+ *
+ * @param lastDate - YYYY-MM-DD of the player's last participation
+ * @param currentDate - YYYY-MM-DD of the current game being scored
+ * @returns count of published game days strictly between the two dates
+ */
+export async function countPublishedGameDaysBetween(
+  lastDate: string,
+  currentDate: string
+): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const result = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(dailyGames)
+    .where(
+      and(
+        eq(dailyGames.status, "result_published"),
+        gt(dailyGames.gameDate, lastDate),
+        lt(dailyGames.gameDate, currentDate)
+      )
+    );
+  return Number(result[0]?.count ?? 0);
 }
 
 // ─── Community Stats ──────────────────────────────────────────────────────────

@@ -122,7 +122,8 @@ describe("computeNewStreak — streak rules (production function)", () => {
   });
 
   it("resets streak to 1 when gap of 2+ days (Missing status effect)", () => {
-    const r = computeNewStreak("active", "2025-01-01", 5, 10, "2025-01-04");
+    // 3 calendar days gap; pass missedTradingDays=2 to simulate two skipped published games
+    const r = computeNewStreak("active", "2025-01-01", 5, 10, "2025-01-04", 2);
     expect(r.newCurrent).toBe(1);
     expect(r.newLongest).toBe(10); // longest preserved
   });
@@ -140,14 +141,16 @@ describe("computeNewStreak — streak rules (production function)", () => {
   });
 
   it("does not reduce longest streak when current resets", () => {
-    const r = computeNewStreak("active", "2025-01-01", 5, 12, "2025-01-10");
+    // 9 calendar days gap; pass missedTradingDays=7 to simulate skipped published games
+    const r = computeNewStreak("active", "2025-01-01", 5, 12, "2025-01-10", 7);
     expect(r.newCurrent).toBe(1);
     expect(r.newLongest).toBe(12);
   });
 
   it("Missing status player who participates after gap gets streak reset to 1", () => {
     // Missing status means awayStatus !== 'away', so gap logic applies normally
-    const r = computeNewStreak("missing", "2025-01-01", 8, 8, "2025-01-05");
+    // 4 calendar days gap; pass missedTradingDays=3 to simulate skipped published games
+    const r = computeNewStreak("missing", "2025-01-01", 8, 8, "2025-01-05", 3);
     expect(r.newCurrent).toBe(1);
     expect(r.updated).toBe(true);
   });
@@ -155,6 +158,40 @@ describe("computeNewStreak — streak rules (production function)", () => {
   it("does not update streak for same-day duplicate (diffDays === 0)", () => {
     const r = computeNewStreak("active", "2025-01-01", 5, 5, "2025-01-01");
     expect(r.newCurrent).toBe(5); // unchanged
+  });
+
+  // ─── T1 regression tests: trading-day streak logic ───────────────────────
+
+  it("T1: Fri→Mon with 0 missed trading days increments streak (weekend gap)", () => {
+    // 2026-06-26 is Friday, 2026-06-29 is Monday — no published game between them
+    const r = computeNewStreak("active", "2026-06-26", 5, 5, "2026-06-29", 0);
+    expect(r.newCurrent).toBe(6);
+    expect(r.updated).toBe(true);
+  });
+
+  it("T1: Mon→Wed with 1 missed trading day (Tue published game) resets streak", () => {
+    // Player played Mon, skipped Tue (a published game), plays Wed
+    const r = computeNewStreak("active", "2026-06-29", 5, 5, "2026-07-01", 1);
+    expect(r.newCurrent).toBe(1);
+    expect(r.updated).toBe(true);
+  });
+
+  it("T1: Mon→Tue consecutive (0 missed) increments streak (regression)", () => {
+    const r = computeNewStreak("active", "2026-06-29", 3, 5, "2026-06-30", 0);
+    expect(r.newCurrent).toBe(4);
+    expect(r.updated).toBe(true);
+  });
+
+  it("T1: first participation always yields streak=1 regardless of missedTradingDays", () => {
+    const r = computeNewStreak("active", null, 0, 0, "2026-06-29", 0);
+    expect(r.newCurrent).toBe(1);
+    expect(r.updated).toBe(true);
+  });
+
+  it("T1: same-day or earlier gameDate returns unchanged streak (guard)", () => {
+    const r = computeNewStreak("active", "2026-06-29", 5, 5, "2026-06-29", 0);
+    expect(r.newCurrent).toBe(5);
+    expect(r.updated).toBe(true);
   });
 });
 

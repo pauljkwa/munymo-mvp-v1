@@ -54,6 +54,7 @@ import {
   writeAuditLog,
   getMetricExplanation,
   upsertMetricExplanation,
+  countPublishedGameDaysBetween,
 } from "./db";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -977,12 +978,19 @@ async function updateStreakForPlayer(userId: number, gameDate: string, isCorrect
     return;
   }
   const awayStatus = streak.awayStatus as "active" | "away" | "missing";
+  // Count published game days strictly between last participation and today.
+  // A gap of 0 means only non-trading days (weekends/holidays) were skipped
+  // and the streak should increment, not reset (T1 fix).
+  const missedTradingDays = streak.lastParticipationDate
+    ? await countPublishedGameDaysBetween(streak.lastParticipationDate, gameDate)
+    : 0;
   const { newCurrent, newLongest, updated } = computeNewStreak(
     awayStatus,
     streak.lastParticipationDate,
     streak.currentStreak,
     streak.longestStreak,
-    gameDate
+    gameDate,
+    missedTradingDays
   );
   // Away status: computeNewStreak returns updated=false, so we skip the DB write
   if (!updated) return;

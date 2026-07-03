@@ -79,17 +79,25 @@ export function checkLockout(
  * Rules:
  *   - Away status → streak is preserved unchanged (no update)
  *   - Missing status → treated as a gap; streak resets on next participation
- *   - Consecutive day (diffDays === 1) → streak increments
- *   - Gap of 2+ days → streak resets to 1
+ *   - missedTradingDays === 0 → no published game was skipped (e.g. Fri→Mon
+ *     over a weekend) → streak increments
+ *   - missedTradingDays > 0 → at least one published game was skipped → reset
+ *   - missedTradingDays < 0 → same day or earlier (shouldn't occur) → no change
  *   - Cancelled / market-closed days → caller should NOT invoke this function
  *     (neutral days are handled by not calling updateStreakForPlayer at all)
+ *
+ * @param missedTradingDays - count of result_published game days strictly
+ *   between lastParticipationDate and gameDate (exclusive of both ends).
+ *   Pass 0 for first participation (lastParticipationDate === null).
+ *   Obtained from countPublishedGameDaysBetween() in db.ts.
  */
 export function computeNewStreak(
   awayStatus: "active" | "away" | "missing",
   lastParticipationDate: string | null,
   currentStreak: number,
   longestStreak: number,
-  gameDate: string
+  gameDate: string,
+  missedTradingDays: number = 0
 ): { newCurrent: number; newLongest: number; updated: boolean } {
   // Away status: preserve streak, do not update
   if (awayStatus === "away") {
@@ -102,20 +110,18 @@ export function computeNewStreak(
     return { newCurrent, newLongest: Math.max(newCurrent, longestStreak), updated: true };
   }
 
-  const last = new Date(lastParticipationDate);
-  const current = new Date(gameDate);
-  const diffDays = Math.round((current.getTime() - last.getTime()) / 86400000);
+  // Same day or earlier — no change (shouldn't occur in normal flow)
+  if (gameDate <= lastParticipationDate) {
+    return { newCurrent: currentStreak, newLongest: longestStreak, updated: true };
+  }
 
   let newCurrent: number;
-  if (diffDays === 1) {
-    // Consecutive day
+  if (missedTradingDays === 0) {
+    // No published game was skipped between last and current (e.g. Fri→Mon)
     newCurrent = currentStreak + 1;
-  } else if (diffDays > 1) {
-    // Gap detected (includes Missing status gap effect)
-    newCurrent = 1;
   } else {
-    // Same day — no change (shouldn't occur in normal flow)
-    newCurrent = currentStreak;
+    // At least one published game day was missed — streak resets
+    newCurrent = 1;
   }
 
   const newLongest = Math.max(newCurrent, longestStreak);
