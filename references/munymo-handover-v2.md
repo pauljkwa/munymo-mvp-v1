@@ -7,6 +7,12 @@
 **GitHub repo:** `pauljkwa/munymo-mvp-v1`  
 **Live site:** `munymo.com`
 
+> **ACTIVE WORK (July 2026):** Remediation of Fable 5's code review is tracked in
+> `references/munymo-fable5-remediation-plan.md` — 17 prioritized tasks (T1–T17), one change at a time.
+> After each task, Manus writes a Deploy Prompt (into the Deploy Task) and a Completion Report under
+> `references/task-reports/`. Claude Code verifies each report against the diff and keeps **this doc's
+> Section 4 table accurate**. If you change a feature's status, update Section 4 in the same commit.
+
 ---
 
 ## CRITICAL RULES — READ BEFORE TOUCHING ANYTHING
