@@ -128,6 +128,45 @@ export function computeNewStreak(
   return { newCurrent, newLongest, updated: true };
 }
 
+// ─── Winner Resolution (T3) ──────────────────────────────────────────────────
+/**
+ * Resolves the winner side ("A" | "B") from a curation payload.
+ * Returns an error string instead of throwing so callers can format their own response.
+ *
+ * Guard 1: winnerTicker must match exactly one company (no silent fallback to "B").
+ * Guard 2: if both perf numbers are present, ticker-derived winner must agree with
+ *   the higher % move (Decision 6 — higher absolute move wins).
+ */
+export function resolveWinner(
+  tickerA: string,
+  tickerB: string,
+  winnerTicker: string,
+  perfA?: number,
+  perfB?: number
+): { winner: "A" | "B" } | { error: string } {
+  const a = tickerA.toUpperCase();
+  const b = tickerB.toUpperCase();
+  const w = winnerTicker.toUpperCase();
+
+  let winner: "A" | "B";
+  if (w === a) {
+    winner = "A";
+  } else if (w === b) {
+    winner = "B";
+  } else {
+    return { error: `winnerTicker '${winnerTicker}' matches neither ${tickerA} nor ${tickerB}` };
+  }
+
+  if (perfA !== undefined && perfB !== undefined) {
+    const perfWinner = perfA >= perfB ? "A" : "B";
+    if (winner !== perfWinner) {
+      return { error: `Winner '${winner}' (${winnerTicker}) contradicts perf numbers (A: ${perfA}%, B: ${perfB}% → expected '${perfWinner}')` };
+    }
+  }
+
+  return { winner };
+}
+
 // ─── Leaderboard Qualification ────────────────────────────────────────────────
 /** The exact qualification threshold — never change without a documented decision. */
 export const LEADERBOARD_QUALIFICATION_THRESHOLD = 20;

@@ -9,6 +9,7 @@ import type { Express, Request, Response } from "express";
 import { sdk } from "./sdk";
 import { notifyOwner } from "./notification";
 import { ENV } from "./env";
+import { resolveWinner } from "../scoring";
 
 // ─── Freshness rule constants ────────────────────────────────────────────────
 const SECTOR_REPEAT_DAYS = 7;
@@ -158,7 +159,19 @@ async function dailyCurationHandler(req: Request, res: Response) {
     if (!marketClosed && today && today.winnerTicker && closeGameId) {
       const game = await db.select().from(dailyGames).where(eq(dailyGames.id, closeGameId)).limit(1);
       if (game[0]) {
-        winner = game[0].companyATicker.toUpperCase() === today.winnerTicker.toUpperCase() ? "A" : "B";
+        const resolved = resolveWinner(
+          game[0].companyATicker,
+          game[0].companyBTicker,
+          today.winnerTicker,
+          today.companyAPerf,
+          today.companyBPerf
+        );
+        if ("error" in resolved) {
+          console.error("[daily-curation] T3 winner validation failed:", resolved.error);
+          await notifyOwner({ title: "⚠️ Curation rejected — winner validation failed", content: resolved.error });
+          return res.status(422).json({ error: "Winner validation failed", detail: resolved.error });
+        }
+        winner = resolved.winner;
       }
     }
 

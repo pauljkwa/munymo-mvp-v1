@@ -8,6 +8,7 @@ import {
   calculateScore,
   checkLockout,
   computeNewStreak,
+  resolveWinner,
   isQualified,
   computeAverageDailyScore,
   LEADERBOARD_QUALIFICATION_THRESHOLD,
@@ -217,6 +218,59 @@ describe("T2: away status — streak protected and date advances", () => {
     const r = computeNewStreak("away", "2026-07-01", 5, 5, "2026-07-01", 0);
     expect(r.newCurrent).toBe(5);
     expect(r.updated).toBe(true);
+  });
+});
+
+// ─── T3: Winner Resolution ────────────────────────────────────────────────────
+describe("T3: resolveWinner — ticker guard + perf cross-check", () => {
+  it("resolves A when winnerTicker matches company A", () => {
+    const r = resolveWinner("AAPL", "MSFT", "AAPL");
+    expect(r).toEqual({ winner: "A" });
+  });
+
+  it("resolves B when winnerTicker matches company B", () => {
+    const r = resolveWinner("AAPL", "MSFT", "MSFT");
+    expect(r).toEqual({ winner: "B" });
+  });
+
+  it("is case-insensitive on tickers", () => {
+    const r = resolveWinner("AAPL", "MSFT", "aapl");
+    expect(r).toEqual({ winner: "A" });
+  });
+
+  it("returns error when winnerTicker matches neither company", () => {
+    const r = resolveWinner("AAPL", "MSFT", "GOOG");
+    expect("error" in r).toBe(true);
+  });
+
+  it("allows winner A when perf agrees (A higher)", () => {
+    const r = resolveWinner("AAPL", "MSFT", "AAPL", 3.5, 1.2);
+    expect(r).toEqual({ winner: "A" });
+  });
+
+  it("allows winner B when perf agrees (B higher)", () => {
+    const r = resolveWinner("AAPL", "MSFT", "MSFT", 1.2, 3.5);
+    expect(r).toEqual({ winner: "B" });
+  });
+
+  it("returns error when ticker says A but perf says B", () => {
+    const r = resolveWinner("AAPL", "MSFT", "AAPL", 1.2, 3.5);
+    expect("error" in r).toBe(true);
+  });
+
+  it("returns error when ticker says B but perf says A", () => {
+    const r = resolveWinner("AAPL", "MSFT", "MSFT", 3.5, 1.2);
+    expect("error" in r).toBe(true);
+  });
+
+  it("allows on ticker alone when perf numbers are absent", () => {
+    const r = resolveWinner("AAPL", "MSFT", "MSFT");
+    expect(r).toEqual({ winner: "B" });
+  });
+
+  it("A wins when both perfs are equal (Decision 6: A >= B → A wins)", () => {
+    const r = resolveWinner("AAPL", "MSFT", "AAPL", 2.0, 2.0);
+    expect(r).toEqual({ winner: "A" });
   });
 });
 
