@@ -12,7 +12,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// ─── Mock Resend SDK before any imports ──────────────────────────────────────
+// ─── Mock Resend SDK and ENV before any imports ───────────────────────────────
 
 const mockSend = vi.fn();
 
@@ -23,6 +23,10 @@ vi.mock("resend", () => {
     })),
   };
 });
+
+vi.mock("./_core/env", () => ({
+  ENV: { resendApiKey: "re_test_key_for_testing" },
+}));
 
 import {
   buildGameAvailableEmail,
@@ -310,12 +314,3 @@ describe("broadcastEmail", () => {
   });
 });
 
-// ─── API key validation ───────────────────────────────────────────────────────────────────────────────
-
-describe("RESEND_API_KEY environment variable", () => {
-  it("is set and starts with re_", () => {
-    const key = process.env.RESEND_API_KEY;
-    expect(key).toBeTruthy();
-    expect(key?.startsWith("re_")).toBe(true);
-  });
-});

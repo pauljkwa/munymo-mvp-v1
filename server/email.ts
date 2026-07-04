@@ -155,7 +155,7 @@ export function buildGameAvailableEmail(data: GameAvailableData): { subject: str
 
   const lockoutLine = data.lockoutAt
     ? `<p style="margin:0 0 24px 0;font-size:14px;color:${TEXT_MUTED};">
-        Picks lock at <strong style="color:${TEXT_MAIN};">${data.lockoutAt.toUTCString()}</strong>
+        ${label("Lockout")} <strong style="color:${TEXT_MAIN};margin-left:8px;">${data.lockoutAt.toUTCString()}</strong>
       </p>`
     : "";
 
@@ -199,11 +199,17 @@ export function buildResultPublishedEmail(data: ResultPublishedData): { subject:
   const winnerName   = data.winner === "A" ? data.companyAName   : data.companyBName;
   const winnerTicker = data.winner === "A" ? data.companyATicker : data.companyBTicker;
   const greeting     = data.playerName ? `Hi ${data.playerName},` : "Hi,";
-  const scoreColour  = data.totalScore >= 80 ? "#009050" : data.totalScore >= 50 ? "#b07d00" : "#c0392b";
+  const scoreColour  = data.totalScore >= 80 ? "#4ade80" : data.totalScore >= 50 ? "#b07d00" : "#f87171";
   const resultUrl = data.resultMagicLink ?? `${BASE_URL}/game`;
   const playUrl   = data.magicLink        ?? `${BASE_URL}/game`;
 
   const subject = `Munymo result: ${winnerTicker} wins — your score is ${data.totalScore}`;
+
+  const commentaryBlock = data.resultCommentary
+    ? `${divider}
+       <p style="margin:0 0 8px 0;">${label("Commentary")}</p>
+       <p style="margin:0 0 20px 0;font-size:14px;color:${TEXT_MUTED};line-height:1.6;">${data.resultCommentary}</p>`
+    : "";
 
   const html = emailWrapper(`
     <p style="margin:0 0 20px 0;font-size:15px;color:${TEXT_MAIN};">${greeting}</p>
@@ -235,6 +241,7 @@ export function buildResultPublishedEmail(data: ResultPublishedData): { subject:
       </tr>
     </table>
 
+    ${commentaryBlock}
     ${divider}
     <p style="margin:0 0 20px 0;font-size:14px;color:${TEXT_MUTED};line-height:1.6;">
       See the full result breakdown, Hindsight Spotlight, and how the crowd voted — all on the site.
