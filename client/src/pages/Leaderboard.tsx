@@ -6,6 +6,7 @@ import { Trophy, Medal, Info, Loader2, TrendingUp } from "lucide-react";
 export default function Leaderboard() {
   const { isAuthenticated, user } = useAuth();
   const { data: leaderboard, isLoading } = trpc.leaderboard.get.useQuery();
+  const { data: provisional } = trpc.leaderboard.getProvisional.useQuery();
   const { data: myStat } = trpc.scores.getMyLeaderboardStat.useQuery(undefined, {
     enabled: isAuthenticated,
   });
@@ -173,6 +174,86 @@ export default function Leaderboard() {
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* Provisional Rankings */}
+        {provisional && provisional.length > 0 && (
+          <div className="mt-10 animate-fade-up delay-150">
+            <div className="flex items-center gap-2 mb-3">
+              <TrendingUp size={18} style={{ color: "var(--color-muted)" }} />
+              <h2 className="font-display text-lg" style={{ color: "var(--color-muted)" }}>
+                Provisional Rankings
+              </h2>
+              <span
+                className="text-xs px-2 py-0.5 rounded-full"
+                style={{ background: "var(--color-surface-raised)", color: "var(--color-subtle)" }}
+              >
+                &lt; 20 games
+              </span>
+            </div>
+            <p className="text-xs mb-4" style={{ color: "var(--color-subtle)" }}>
+              Players still working toward the 20-game qualification threshold. Scores are not yet official.
+            </p>
+            <div className="card-glass overflow-hidden opacity-70">
+              <table className="w-full">
+                <thead>
+                  <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
+                    <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-subtle)" }}>Rank</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-subtle)" }}>Player</th>
+                    <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-subtle)" }}>Avg Score</th>
+                    <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider hidden sm:table-cell" style={{ color: "var(--color-subtle)" }}>Games</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {provisional.map((entry, i) => {
+                    const isMe = user && entry.userId === user.id;
+                    return (
+                      <tr
+                        key={entry.userId}
+                        style={{
+                          borderBottom: i < provisional.length - 1 ? "1px solid var(--color-border)" : undefined,
+                          background: isMe ? "oklch(0.78 0.14 75 / 0.06)" : undefined,
+                        }}
+                      >
+                        <td className="px-5 py-3">
+                          <span className="text-sm font-semibold tabular-nums" style={{ color: "var(--color-subtle)" }}>
+                            {i + 1}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3">
+                          <div className="flex items-center gap-3">
+                            <div
+                              className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+                              style={{
+                                background: isMe ? "var(--color-brand)" : "var(--color-surface-raised)",
+                                color: isMe ? "var(--color-brand-foreground)" : "var(--color-muted)",
+                              }}
+                            >
+                              {(entry.userName ?? "?")[0]?.toUpperCase()}
+                            </div>
+                            <p className="text-sm" style={{ color: isMe ? "var(--color-brand)" : "var(--color-foreground)" }}>
+                              {entry.userName ?? "Anonymous"}
+                              {isMe && <span className="ml-2 text-xs" style={{ color: "var(--color-brand)" }}>(you)</span>}
+                            </p>
+                          </div>
+                        </td>
+                        <td className="px-5 py-3 text-right">
+                          <span className="font-display text-base font-bold tabular-nums" style={{ color: "var(--color-muted)" }}>
+                            {parseFloat(entry.averageDailyScore).toFixed(1)}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3 text-right hidden sm:table-cell">
+                          <span className="text-xs tabular-nums" style={{ color: "var(--color-subtle)" }}>
+                            {entry.gamesPlayed} / 20
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>

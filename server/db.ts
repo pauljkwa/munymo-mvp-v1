@@ -437,6 +437,23 @@ export async function getLeaderboard() {
     .orderBy(desc(leaderboardStats.averageDailyScore));
 }
 
+export async function getProvisionalLeaderboard() {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      userId: leaderboardStats.userId,
+      userName: users.name,
+      gamesPlayed: leaderboardStats.gamesPlayed,
+      averageDailyScore: leaderboardStats.averageDailyScore,
+    })
+    .from(leaderboardStats)
+    .innerJoin(users, eq(leaderboardStats.userId, users.id))
+    .where(eq(leaderboardStats.qualificationStatus, "pending"))
+    .orderBy(desc(leaderboardStats.averageDailyScore))
+    .limit(20);
+}
+
 export async function getLeaderboardStatForUser(userId: number) {
   const db = await getDb();
   if (!db) return undefined;

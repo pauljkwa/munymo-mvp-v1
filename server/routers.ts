@@ -23,6 +23,7 @@ import {
   getGameById,
   getLeaderboard,
   getLeaderboardStatForUser,
+  getProvisionalLeaderboard,
   getUserById,
   getPicksForGame,
   getPlayerPick,
@@ -289,6 +290,9 @@ const scoresRouter = router({
 const leaderboardRouter = router({
   get: publicProcedure.query(async () => {
     return getLeaderboard();
+  }),
+  getProvisional: publicProcedure.query(async () => {
+    return getProvisionalLeaderboard();
   }),
 });
 
