@@ -418,12 +418,12 @@ export default function DailyGame() {
 
   const isLocked = game.status === "locked" || game.status === "result_published";
   const lockoutTime = game.lockoutAt ? new Date(game.lockoutAt) : null;
-  // True when the cron auto-submitted the gut pick as the final pick (gut === final, no manual final submission)
-  const wasAutoSubmitted =
-    !!myPick?.gutSelection &&
-    !!myPick?.finalSelection &&
-    myPick.finalSelection === myPick.gutSelection &&
-    !myPick?.validationAnswer;
+  // True only when the cron auto-submitted at lockout (finalSubmittedAt >= lockoutAt).
+  // Using timing avoids false positives for players who rationally pick the same gut+final.
+  const wasAutoSubmitted = (() => {
+    if (!myPick?.finalSubmittedAt || !lockoutTime) return false;
+    return new Date(myPick.finalSubmittedAt) >= lockoutTime;
+  })();
 
   const stepLabels: GameStep[] = ["gut", "research", "final", "submitted"];
   const stepDisplayLabels = ["Gut Pick", "Research", "Final Pick", "Done"];
@@ -882,6 +882,15 @@ export default function DailyGame() {
             <p className="text-sm mb-5" style={{ color: "var(--color-muted)" }}>
               Your final selection is locked in. Results will be published after the game closes.
             </p>
+            {validationQ && !myPick?.validationAnswer ? (
+              <button
+                className="btn-brand w-full justify-center mb-3"
+                onClick={() => setModalPhase("confirm")}
+              >
+                Answer Validation Question
+                <ArrowRight size={16} />
+              </button>
+            ) : null}
             <Link href="/leaderboard" className="btn-ghost text-sm">
               View Leaderboard
             </Link>
