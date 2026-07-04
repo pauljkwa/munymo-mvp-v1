@@ -360,28 +360,6 @@ export default function DailyGame() {
     toast.success("All done — your picks are locked in!");
   };
 
-  if (!isAuthenticated) {
-    return (
-      <PublicLayout>
-        <div className="container py-24 text-center">
-          <Brain size={48} className="mx-auto mb-6" style={{ color: "var(--color-brand)" }} />
-          <h2 className="font-display mb-3" style={{ color: "var(--color-foreground)" }}>
-            Sign in to Play
-          </h2>
-          <p className="mb-8" style={{ color: "var(--color-muted)" }}>
-            Create a free account to make your daily prediction.
-          </p>
-          <SignInButton mode="modal">
-            <button className="btn-brand">
-              Sign in to Play
-              <ArrowRight size={16} />
-            </button>
-          </SignInButton>
-        </div>
-      </PublicLayout>
-    );
-  }
-
   if (isLoading) {
     return (
       <PublicLayout>
@@ -603,20 +581,29 @@ export default function DailyGame() {
               Before reading any research, pick the company you instinctively believe will
               outperform today. Your raw, unfiltered intuition.
             </p>
-            <button
-              className="btn-brand w-full justify-center"
-              disabled={!gutSelection || submitGut.isPending}
-              onClick={() => {
-                if (!gutSelection || !game.id) return;
-                submitGut.mutate({ gameId: game.id, selection: gutSelection });
-              }}
-            >
-              {submitGut.isPending ? (
-                <Loader2 size={16} className="animate-spin" />
-              ) : (
-                <>Confirm Gut Selection <ArrowRight size={16} /></>
-              )}
-            </button>
+            {isAuthenticated ? (
+              <button
+                className="btn-brand w-full justify-center"
+                disabled={!gutSelection || submitGut.isPending}
+                onClick={() => {
+                  if (!gutSelection || !game.id) return;
+                  submitGut.mutate({ gameId: game.id, selection: gutSelection });
+                }}
+              >
+                {submitGut.isPending ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <>Confirm Gut Selection <ArrowRight size={16} /></>
+                )}
+              </button>
+            ) : (
+              <SignInButton mode="modal">
+                <button className="btn-brand w-full justify-center">
+                  Sign in to Play
+                  <ArrowRight size={16} />
+                </button>
+              </SignInButton>
+            )}
           </div>
         )}
 
