@@ -20,6 +20,7 @@ import crypto from "crypto";
 import { getDb } from "./db";
 import { referralCodes, referralEvents } from "../drizzle/schema";
 import { eq, and, gte } from "drizzle-orm";
+import { sdk } from "./_core/sdk";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -139,6 +140,16 @@ export function registerReferralRoutes(app: Express): void {
    * Body: { referralCookieValue: string, newUserId: number }
    */
   app.post("/api/referral/attribute", async (req: Request, res: Response) => {
+    // Must be called from a cron/server context — not accessible to browser clients
+    try {
+      const caller = await sdk.authenticateRequest(req);
+      if (!caller.isCron) {
+        return res.status(403).json({ ok: false, error: "cron-only endpoint" });
+      }
+    } catch {
+      return res.status(403).json({ ok: false, error: "Unauthorized" });
+    }
+
     const { referralCookieValue, newUserId } = req.body ?? {};
 
     if (!referralCookieValue || !newUserId) {
@@ -148,6 +159,22 @@ export function registerReferralRoutes(app: Express): void {
     try {
       const db = await getDb();
       if (!db) return res.status(500).json({ ok: false, error: "DB unavailable" });
+
+      // Dedup: a given referredUserId may only ever produce one signup attribution
+      const [existing] = await db
+        .select({ id: referralEvents.id })
+        .from(referralEvents)
+        .where(
+          and(
+            eq(referralEvents.eventType, "signup"),
+            eq(referralEvents.referredUserId, newUserId)
+          )
+        )
+        .limit(1);
+
+      if (existing) {
+        return res.json({ ok: false, reason: "Already attributed" });
+      }
 
       // Parse code from cookie value (format: "CODE:timestamp")
       const codeStr = String(referralCookieValue).split(":")[0].toUpperCase();
