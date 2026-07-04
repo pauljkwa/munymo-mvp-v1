@@ -15,7 +15,7 @@ const BORDER      = "#d8e4dc";
 const TEXT_MAIN   = "#111c16";
 const TEXT_MUTED  = "#4a6358";
 const TEXT_LABEL  = "#7a9e8a";
-const LOGO_URL    = `${BASE_URL}/manus-storage/munymo-logo-cropped_75fe3c86.png`;
+const LOGO_URL    = `${BASE_URL}/munymo-logo-cropped_e625fcf7.png`;
 
 const emailWrapper = (content) => `
 <!DOCTYPE html>

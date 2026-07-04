@@ -60,8 +60,8 @@ async function sendToSubscription(
         title: payload.title,
         body: payload.body,
         url: payload.url ?? "/",
-        icon: payload.icon ?? "https://munymo.com/manus-storage/munymo-logo-cropped_75fe3c86.png",
-        badge: payload.badge ?? "https://munymo.com/manus-storage/munymo-logo-cropped_75fe3c86.png",
+        icon: payload.icon ?? "https://munymo.com/munymo-logo-cropped_e625fcf7.png",
+        badge: payload.badge ?? "https://munymo.com/munymo-logo-cropped_e625fcf7.png",
         tag: payload.tag,
       }),
       { TTL: 86400 } // 24 hours TTL
