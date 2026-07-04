@@ -372,6 +372,93 @@ async function fetchYahooOHLCV(
   return { candles, meta: result.meta };
 }
 
+// ─── Shared close-game logic (T5) ─────────────────────────────────────────────
+/**
+ * Single source of truth for closing and scoring a game.
+ * Called by both publishResult (admin manual) and endOfDay (cron automated).
+ * Returns the scored picks so callers can send notifications.
+ */
+async function closeAndScoreGame(
+  gameId: number,
+  opts: {
+    winner: "A" | "B";
+    companyAPerf?: number;
+    companyBPerf?: number;
+    resultSummary?: string;
+    hindsightSpotlight?: string;
+    resultCommentary?: string;
+  }
+): Promise<Array<{ userId: number; predictionScore: number; validationScore: number; totalScore: number }>> {
+  const game = await getGameById(gameId);
+  if (!game) throw new TRPCError({ code: "NOT_FOUND", message: "Game not found" });
+  if (game.status === "result_published") {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Result already published" });
+  }
+  if (game.status === "cancelled") {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot publish result for cancelled game" });
+  }
+
+  // 1. Auto-submit: players who made a Gut Selection but no Final Selection
+  //    have their gut copied to final at lockout — per founder Decision 1.
+  const db = await import("./db").then((m) => m.getDb());
+  if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+  const { playerPicks: playerPicksTable } = await import("../drizzle/schema.js");
+  const { sql: drizzleSql, and: drizzleAnd, eq: drizzleEq, isNull, isNotNull } = await import("drizzle-orm");
+  await db.update(playerPicksTable)
+    .set({ finalSelection: drizzleSql`gut_selection`, finalSubmittedAt: new Date() })
+    .where(
+      drizzleAnd(
+        drizzleEq(playerPicksTable.gameId, gameId),
+        isNotNull(playerPicksTable.gutSelection),
+        isNull(playerPicksTable.finalSelection)
+      )
+    );
+
+  // 2. Lock all picks
+  await lockPicksForGame(gameId);
+
+  // 3. Snapshot research
+  await snapshotResearch(gameId);
+
+  // 4. Score all participants
+  const question = await getValidationQuestion(gameId);
+  const picks = await getPicksForGame(gameId);
+  const scoredPicks: Array<{ userId: number; predictionScore: number; validationScore: number; totalScore: number }> = [];
+
+  for (const pick of picks) {
+    if (!pick.finalSelection) continue;
+    const { predictionScore, validationScore } = calculateScore(
+      pick.finalSelection,
+      opts.winner,
+      pick.validationAnswer,
+      question?.correctAnswer ?? ""
+    );
+    await insertDailyScore(pick.userId, gameId, predictionScore, validationScore);
+    scoredPicks.push({ userId: pick.userId, predictionScore, validationScore, totalScore: predictionScore + validationScore });
+
+    // 5. Update leaderboard and streaks
+    await upsertLeaderboardStat(pick.userId);
+    await updateStreakForPlayer(pick.userId, game.gameDate, pick.finalSelection === opts.winner);
+  }
+
+  // 6. Compute community stats
+  await computeAndStoreCommunityStats(gameId);
+
+  // 7. Mark game as result_published
+  await updateGame(gameId, {
+    status: "result_published",
+    winner: opts.winner,
+    companyAPerf: opts.companyAPerf !== undefined ? String(opts.companyAPerf) : undefined,
+    companyBPerf: opts.companyBPerf !== undefined ? String(opts.companyBPerf) : undefined,
+    resultSummary: opts.resultSummary,
+    hindsightSpotlight: opts.hindsightSpotlight,
+    resultCommentary: opts.resultCommentary,
+    publishedAt: new Date(),
+  });
+
+  return scoredPicks;
+}
+
 // ─── Admin Router ─────────────────────────────────────────────────────────────
 
 const adminRouter = router({
@@ -510,63 +597,14 @@ const adminRouter = router({
     .mutation(async ({ ctx, input }) => {
       const game = await getGameById(input.gameId);
       if (!game) throw new TRPCError({ code: "NOT_FOUND" });
-      if (game.status === "result_published") {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Result already published" });
-      }
-      if (game.status === "cancelled") {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot publish result for cancelled game" });
-      }
 
-      // 1. Lock all picks
-      await lockPicksForGame(input.gameId);
-
-      // 2. Snapshot research
-      await snapshotResearch(input.gameId);
-
-      // 3. Get validation question
-      const question = await getValidationQuestion(input.gameId);
-
-      // 4. Calculate and store scores for all participants
-      const picks = await getPicksForGame(input.gameId);
-      // Collect scored picks for email notifications after all DB writes
-      const scoredPicks: Array<{
-        userId: number;
-        predictionScore: number;
-        validationScore: number;
-        totalScore: number;
-      }> = [];
-
-      for (const pick of picks) {
-        if (!pick.finalSelection) continue; // skip players who only submitted Gut
-        const { predictionScore, validationScore } = calculateScore(
-          pick.finalSelection,
-          input.winner,
-          pick.validationAnswer,
-          question?.correctAnswer ?? ""
-        );
-        await insertDailyScore(pick.userId, input.gameId, predictionScore, validationScore);
-        scoredPicks.push({ userId: pick.userId, predictionScore, validationScore, totalScore: predictionScore + validationScore });
-
-        // 5. Update leaderboard stats
-        await upsertLeaderboardStat(pick.userId);
-
-        // 6. Update streaks
-        await updateStreakForPlayer(pick.userId, game.gameDate, pick.finalSelection === input.winner);
-      }
-
-      // 7. Compute community stats
-      await computeAndStoreCommunityStats(input.gameId);
-
-      // 8. Mark game as result_published
-      await updateGame(input.gameId, {
-        status: "result_published",
+      const scoredPicks = await closeAndScoreGame(input.gameId, {
         winner: input.winner,
-        companyAPerf: input.companyAPerf !== undefined ? String(input.companyAPerf) : undefined,
-        companyBPerf: input.companyBPerf !== undefined ? String(input.companyBPerf) : undefined,
+        companyAPerf: input.companyAPerf,
+        companyBPerf: input.companyBPerf,
         resultSummary: input.resultSummary,
         hindsightSpotlight: input.hindsightSpotlight,
         resultCommentary: input.resultCommentary,
-        publishedAt: new Date(),
       });
 
       await writeAuditLog(
@@ -577,7 +615,7 @@ const adminRouter = router({
         JSON.stringify({ winner: input.winner })
       );
 
-      // 9. Send personalised result emails to each participant
+      // Send personalised result emails to each participant
       try {
         const allUsers = await getAllUsers();
         const userMap = new Map(allUsers.map((u) => [u.id, u]));
@@ -701,9 +739,6 @@ const adminRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const db = await import("./db").then((m) => m.getDb());
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-
       // ── 1. Close today's game (skipped if no closeGameId — Game 1 / first game) ──
       let game: Awaited<ReturnType<typeof getGameById>> | null = null;
       const scoredPicks: Array<{ userId: number; predictionScore: number; validationScore: number; totalScore: number }> = [];
@@ -711,55 +746,15 @@ const adminRouter = router({
       if (input.closeGameId) {
         game = await getGameById(input.closeGameId);
         if (!game) throw new TRPCError({ code: "NOT_FOUND", message: "Game not found" });
-        if (game.status === "result_published") {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "Result already published" });
-        }
-        await lockPicksForGame(input.closeGameId);
 
-        // Auto-submit: players who made a Gut Selection but no Final Selection
-        // have their gut copied to final at lockout — per founder Decision 1.
-        const { playerPicks } = await import("../drizzle/schema.js");
-        const { sql, and, eq, isNull, isNotNull } = await import("drizzle-orm");
-        await db.update(playerPicks)
-          .set({
-            finalSelection: sql`gut_selection`,
-            finalSubmittedAt: new Date(),
-          })
-          .where(
-            and(
-              eq(playerPicks.gameId, input.closeGameId),
-              isNotNull(playerPicks.gutSelection),
-              isNull(playerPicks.finalSelection)
-            )
-          );
-
-        await snapshotResearch(input.closeGameId);
-        const question = await getValidationQuestion(input.closeGameId);
-        const picks = await getPicksForGame(input.closeGameId);
-
-        for (const pick of picks) {
-          if (!pick.finalSelection) continue;
-          const { predictionScore, validationScore } = calculateScore(
-            pick.finalSelection,
-            input.winner!,
-            pick.validationAnswer,
-            question?.correctAnswer ?? ""
-          );
-          await insertDailyScore(pick.userId, input.closeGameId, predictionScore, validationScore);
-          scoredPicks.push({ userId: pick.userId, predictionScore, validationScore, totalScore: predictionScore + validationScore });
-          await upsertLeaderboardStat(pick.userId);
-          await updateStreakForPlayer(pick.userId, game.gameDate, pick.finalSelection === input.winner);
-        }
-        await computeAndStoreCommunityStats(input.closeGameId);
-        await updateGame(input.closeGameId, {
-          status: "result_published",
+        const closed = await closeAndScoreGame(input.closeGameId, {
           winner: input.winner!,
-          companyAPerf: String(input.companyAPerf ?? 0),
-          companyBPerf: String(input.companyBPerf ?? 0),
-          resultSummary: input.resultSummary ?? "",
-          hindsightSpotlight: input.hindsightSpotlight ?? "",
-          publishedAt: new Date(),
+          companyAPerf: input.companyAPerf,
+          companyBPerf: input.companyBPerf,
+          resultSummary: input.resultSummary,
+          hindsightSpotlight: input.hindsightSpotlight,
         });
+        scoredPicks.push(...closed);
       }
 
       // ── 2. Create tomorrow's game ──
