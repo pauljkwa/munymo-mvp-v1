@@ -254,11 +254,13 @@ const picksRouter = router({
           message: "Validation question already answered — no second chances",
         });
       }
-      await submitValidationAnswer(ctx.user.id, input.gameId, input.answer, input.answerTimeMs);
-      // Immediately reveal whether the answer was correct
+      // Clamp implausible timing — no human answers in under 300ms (code-only guard)
+      const sanitisedTimeMs = input.answerTimeMs < 300 ? 0 : input.answerTimeMs;
+      await submitValidationAnswer(ctx.user.id, input.gameId, input.answer, sanitisedTimeMs);
+      // Return isCorrect only — correctAnswer is not revealed until result_published
       const question = await getValidationQuestion(input.gameId);
       const isCorrect = question?.correctAnswer === input.answer;
-      return { success: true, isCorrect, correctAnswer: question?.correctAnswer ?? "" };
+      return { success: true, isCorrect };
     }),
 });
 

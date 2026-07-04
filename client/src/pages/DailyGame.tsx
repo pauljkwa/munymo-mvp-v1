@@ -39,7 +39,7 @@ interface ValidationModalProps {
   onOpenQuestion: () => void;
   onSubmitAnswer: (answer: string, timeMs: number) => void;
   isSubmitting: boolean;
-  result: { isCorrect: boolean; correctAnswer: string } | null;
+  result: { isCorrect: boolean; correctAnswer?: string } | null;
   onClose: () => void;
 }
 
@@ -121,14 +121,18 @@ function ValidationModal({
           ) : (
             <div className="mb-8">
               <p className="text-base mb-4" style={{ color: "oklch(0.9 0.06 25)" }}>
-                Not quite. The correct answer was:
+                {result.correctAnswer
+                  ? "Not quite. The correct answer was:"
+                  : "Not quite. The correct answer will be revealed when results are published."}
               </p>
-              <div
-                className="inline-block px-6 py-3 rounded-xl font-bold text-lg"
-                style={{ background: "oklch(0.2 0.1 25)", color: "#fff", border: "1px solid oklch(0.5 0.15 25)" }}
-              >
-                {result.correctAnswer}
-              </div>
+              {result.correctAnswer && (
+                <div
+                  className="inline-block px-6 py-3 rounded-xl font-bold text-lg"
+                  style={{ background: "oklch(0.2 0.1 25)", color: "#fff", border: "1px solid oklch(0.5 0.15 25)" }}
+                >
+                  {result.correctAnswer}
+                </div>
+              )}
             </div>
           )}
           <button
@@ -309,7 +313,7 @@ export default function DailyGame() {
 
   // Validation modal state
   const [modalPhase, setModalPhase] = useState<"confirm" | "question" | "result" | null>(null);
-  const [validationResult, setValidationResult] = useState<{ isCorrect: boolean; correctAnswer: string } | null>(null);
+  const [validationResult, setValidationResult] = useState<{ isCorrect: boolean; correctAnswer?: string } | null>(null);
 
   // Sync step with existing pick on load
   useEffect(() => {
@@ -340,7 +344,7 @@ export default function DailyGame() {
 
   const submitValidation = trpc.picks.submitValidation.useMutation({
     onSuccess: (data) => {
-      setValidationResult({ isCorrect: data.isCorrect, correctAnswer: data.correctAnswer });
+      setValidationResult({ isCorrect: data.isCorrect });
       setModalPhase("result");
     },
     onError: (e: { message: string }) => {
