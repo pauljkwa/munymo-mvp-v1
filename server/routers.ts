@@ -927,7 +927,7 @@ const adminRouter = router({
 
   resetPlayerPick: adminProcedure
     .input(z.object({ userId: z.number(), gameId: z.number() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const db = await import("./db").then((m) => m.getDb());
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
       const { playerPicks } = await import("../drizzle/schema.js");
@@ -935,6 +935,7 @@ const adminRouter = router({
       await db.delete(playerPicks).where(
         and(eq(playerPicks.userId, input.userId), eq(playerPicks.gameId, input.gameId))
       );
+      await writeAuditLog(ctx.user.id, "reset_player_pick", "game", input.gameId, JSON.stringify({ targetUserId: input.userId }));
       return { success: true };
     }),
 
@@ -1047,17 +1048,6 @@ const dashboardRouter = router({
     .mutation(async ({ ctx }) => {
       await updateUserProfile(ctx.user.id, { deactivated: true });
       return { success: true };
-    }),
-
-  /** Get paginated game history for the dashboard */
-  getHistory: protectedProcedure
-    .input(z.object({ page: z.number().int().min(1).default(1), pageSize: z.number().int().min(1).max(50).default(20) }))
-    .query(async ({ ctx, input }) => {
-      const all = await getPlayerScoreHistory(ctx.user.id);
-      const total = all.length;
-      const start = (input.page - 1) * input.pageSize;
-      const items = all.slice(start, start + input.pageSize);
-      return { items, total, page: input.page, pageSize: input.pageSize, totalPages: Math.ceil(total / input.pageSize) };
     }),
 
   /** Get a summary of the user's stats for the dashboard */

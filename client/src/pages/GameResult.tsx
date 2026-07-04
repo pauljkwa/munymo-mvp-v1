@@ -72,11 +72,12 @@ export default function GameResult() {
   const validationCorrect =
     validationQ && myPick?.validationAnswer === validationQ.correctAnswer;
 
-  const gutPctA    = parseFloat(communityStats?.gutPctA   ?? "50");
-  const finalPctA  = parseFloat(communityStats?.finalPctA ?? "50");
-  const gutPctB    = 100 - gutPctA;
-  const finalPctB  = 100 - finalPctA;
   const totalPlayers = communityStats?.totalParticipants ?? 0;
+  const hasParticipants = totalPlayers > 0;
+  const gutPctA    = hasParticipants ? parseFloat(communityStats?.gutPctA   ?? "0") : null;
+  const finalPctA  = hasParticipants ? parseFloat(communityStats?.finalPctA ?? "0") : null;
+  const gutPctB    = gutPctA !== null ? 100 - gutPctA : null;
+  const finalPctB  = finalPctA !== null ? 100 - finalPctA : null;
 
   const scoreColour =
     !myScore ? "var(--color-subtle)"
@@ -127,7 +128,7 @@ export default function GameResult() {
                 Gut Selection
               </p>
               <p className="font-semibold text-sm mb-2" style={{ color: "var(--color-foreground)" }}>
-                {myPick.gutSelection === "A" ? game.companyATicker : game.companyBTicker}
+                {myPick.gutSelection === "A" ? game.companyATicker : myPick.gutSelection === "B" ? game.companyBTicker : "—"}
               </p>
               {gutCorrect ? (
                 <span className="text-xs flex items-center justify-center gap-1" style={{ color: "var(--color-success)" }}>
@@ -147,7 +148,7 @@ export default function GameResult() {
                 Final Selection
               </p>
               <p className="font-semibold text-sm mb-2" style={{ color: "var(--color-foreground)" }}>
-                {myPick.finalSelection === "A" ? game.companyATicker : game.companyBTicker}
+                {myPick.finalSelection === "A" ? game.companyATicker : myPick.finalSelection === "B" ? game.companyBTicker : "—"}
               </p>
               {finalCorrect ? (
                 <span className="text-xs flex items-center justify-center gap-1" style={{ color: "var(--color-success)" }}>
@@ -269,71 +270,79 @@ export default function GameResult() {
               {totalPlayers} {totalPlayers === 1 ? "player" : "players"} participated
             </p>
 
-            {/* Gut picks */}
-            <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--color-subtle)" }}>
-              Gut Picks
-            </p>
-            <div className="flex items-center gap-3 mb-1">
-              <span className="text-xs w-12 text-right font-semibold" style={{ color: "var(--color-foreground)" }}>
-                {game.companyATicker}
-              </span>
-              <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: "var(--color-surface-raised)" }}>
-                <div
-                  className="h-full rounded-full transition-all duration-700"
-                  style={{ width: `${gutPctA}%`, background: "var(--color-brand)" }}
-                />
-              </div>
-              <span className="text-xs w-10 font-semibold" style={{ color: "var(--color-foreground)" }}>
-                {gutPctA.toFixed(1)}%
-              </span>
-            </div>
-            <div className="flex items-center gap-3 mb-5">
-              <span className="text-xs w-12 text-right font-semibold" style={{ color: "var(--color-foreground)" }}>
-                {game.companyBTicker}
-              </span>
-              <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: "var(--color-surface-raised)" }}>
-                <div
-                  className="h-full rounded-full transition-all duration-700"
-                  style={{ width: `${gutPctB}%`, background: "var(--color-gold)" }}
-                />
-              </div>
-              <span className="text-xs w-10 font-semibold" style={{ color: "var(--color-foreground)" }}>
-                {gutPctB.toFixed(1)}%
-              </span>
-            </div>
+            {!hasParticipants ? (
+              <p className="text-sm py-4 text-center" style={{ color: "var(--color-subtle)" }}>
+                No participants for this game.
+              </p>
+            ) : (
+              <>
+                {/* Gut picks */}
+                <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--color-subtle)" }}>
+                  Gut Picks
+                </p>
+                <div className="flex items-center gap-3 mb-1">
+                  <span className="text-xs w-12 text-right font-semibold" style={{ color: "var(--color-foreground)" }}>
+                    {game.companyATicker}
+                  </span>
+                  <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: "var(--color-surface-raised)" }}>
+                    <div
+                      className="h-full rounded-full transition-all duration-700"
+                      style={{ width: `${gutPctA}%`, background: "var(--color-brand)" }}
+                    />
+                  </div>
+                  <span className="text-xs w-10 font-semibold" style={{ color: "var(--color-foreground)" }}>
+                    {gutPctA!.toFixed(1)}%
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 mb-5">
+                  <span className="text-xs w-12 text-right font-semibold" style={{ color: "var(--color-foreground)" }}>
+                    {game.companyBTicker}
+                  </span>
+                  <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: "var(--color-surface-raised)" }}>
+                    <div
+                      className="h-full rounded-full transition-all duration-700"
+                      style={{ width: `${gutPctB}%`, background: "var(--color-gold)" }}
+                    />
+                  </div>
+                  <span className="text-xs w-10 font-semibold" style={{ color: "var(--color-foreground)" }}>
+                    {gutPctB!.toFixed(1)}%
+                  </span>
+                </div>
 
-            {/* Final picks */}
-            <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--color-subtle)" }}>
-              Final Picks
-            </p>
-            <div className="flex items-center gap-3 mb-1">
-              <span className="text-xs w-12 text-right font-semibold" style={{ color: "var(--color-foreground)" }}>
-                {game.companyATicker}
-              </span>
-              <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: "var(--color-surface-raised)" }}>
-                <div
-                  className="h-full rounded-full transition-all duration-700"
-                  style={{ width: `${finalPctA}%`, background: "var(--color-brand)" }}
-                />
-              </div>
-              <span className="text-xs w-10 font-semibold" style={{ color: "var(--color-foreground)" }}>
-                {finalPctA.toFixed(1)}%
-              </span>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="text-xs w-12 text-right font-semibold" style={{ color: "var(--color-foreground)" }}>
-                {game.companyBTicker}
-              </span>
-              <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: "var(--color-surface-raised)" }}>
-                <div
-                  className="h-full rounded-full transition-all duration-700"
-                  style={{ width: `${finalPctB}%`, background: "var(--color-gold)" }}
-                />
-              </div>
-              <span className="text-xs w-10 font-semibold" style={{ color: "var(--color-foreground)" }}>
-                {finalPctB.toFixed(1)}%
-              </span>
-            </div>
+                {/* Final picks */}
+                <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--color-subtle)" }}>
+                  Final Picks
+                </p>
+                <div className="flex items-center gap-3 mb-1">
+                  <span className="text-xs w-12 text-right font-semibold" style={{ color: "var(--color-foreground)" }}>
+                    {game.companyATicker}
+                  </span>
+                  <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: "var(--color-surface-raised)" }}>
+                    <div
+                      className="h-full rounded-full transition-all duration-700"
+                      style={{ width: `${finalPctA}%`, background: "var(--color-brand)" }}
+                    />
+                  </div>
+                  <span className="text-xs w-10 font-semibold" style={{ color: "var(--color-foreground)" }}>
+                    {finalPctA!.toFixed(1)}%
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs w-12 text-right font-semibold" style={{ color: "var(--color-foreground)" }}>
+                    {game.companyBTicker}
+                  </span>
+                  <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: "var(--color-surface-raised)" }}>
+                    <div
+                      className="h-full rounded-full transition-all duration-700"
+                      style={{ width: `${finalPctB}%`, background: "var(--color-gold)" }}
+                    />
+                  </div>
+                  <span className="text-xs w-10 font-semibold" style={{ color: "var(--color-foreground)" }}>
+                    {finalPctB!.toFixed(1)}%
+                  </span>
+                </div>
+              </>
+            )}
           </div>
         )}
 
