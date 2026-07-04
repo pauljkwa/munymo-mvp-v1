@@ -212,11 +212,11 @@ export async function listPublishedGames(limit = 20, offset = 0) {
     .offset(offset);
 }
 
-export async function createGame(data: Omit<typeof dailyGames.$inferInsert, "id" | "createdAt" | "updatedAt">) {
+export async function createGame(data: Omit<typeof dailyGames.$inferInsert, "id" | "createdAt" | "updatedAt">): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const result = await db.insert(dailyGames).values(data);
-  return result[0];
+  const [result] = await db.insert(dailyGames).values(data);
+  return (result as unknown as { insertId: number }).insertId;
 }
 
 export async function updateGame(id: number, data: Partial<typeof dailyGames.$inferInsert>) {

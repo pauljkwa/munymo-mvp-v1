@@ -757,8 +757,8 @@ const adminRouter = router({
         scoredPicks.push(...closed);
       }
 
-      // ── 2. Create tomorrow's game ──
-      await createGame({
+      // ── 2. Create tomorrow's game — use returned insertId directly ──
+      const nextGameId = await createGame({
         gameDate: input.nextGameDate,
         exchange: input.nextExchange,
         companyAName: input.nextCompanyAName,
@@ -772,23 +772,14 @@ const adminRouter = router({
         status: "active",
       });
 
-      // Get the newly created game to attach research/question
-      const allGames = await listGames(1, 0);
-      const nextGame = allGames[0];
-
-      if (nextGame && input.nextResearchContent) {
-        // Convert record to label/value array for upsertResearchWithMetrics
+      if (input.nextResearchContent) {
         const metricsArray = input.nextResearchMetrics
           ? Object.entries(input.nextResearchMetrics).map(([label, value]) => ({ label, value: String(value) }))
           : [];
-        await upsertResearchWithMetrics(
-          nextGame.id,
-          input.nextResearchContent,
-          metricsArray
-        );
+        await upsertResearchWithMetrics(nextGameId, input.nextResearchContent, metricsArray);
       }
-      if (nextGame && input.nextQuestionType && input.nextQuestionText && input.nextCorrectAnswer) {
-        await upsertValidationQuestion(nextGame.id, {
+      if (input.nextQuestionType && input.nextQuestionText && input.nextCorrectAnswer) {
+        await upsertValidationQuestion(nextGameId, {
           questionType: input.nextQuestionType,
           questionText: input.nextQuestionText,
           options: input.nextQuestionOptions,
@@ -805,7 +796,7 @@ const adminRouter = router({
         try {
           const scoredMap = new Map(scoredPicks.map((s) => [s.userId, s]));
           // Build next-game teaser data if available
-          const nextTicker = nextGame ? { a: input.nextCompanyATicker, b: input.nextCompanyBTicker, aName: input.nextCompanyAName, bName: input.nextCompanyBName } : null;
+          const nextTicker = nextGameId ? { a: input.nextCompanyATicker, b: input.nextCompanyBTicker, aName: input.nextCompanyAName, bName: input.nextCompanyBName } : null;
           let emailsSent = 0;
           let emailsFailed = 0;
 
@@ -906,7 +897,7 @@ const adminRouter = router({
       }
 
       // ── 5. Send push notification for new game availability (respecting pushOptIn) ──
-      if (nextGame) {
+      if (nextGameId) {
         try {
           const { sendPushToUsers } = await import("./push");
           const optedInIds = (await getAllUsers()).filter((u) => u.pushOptIn !== false).map((u) => u.id);
@@ -916,14 +907,14 @@ const adminRouter = router({
               ? `${input.nextCompanyAName} vs ${input.nextCompanyBName} — ${input.nextSector}. Make your pick before lockout!`
               : `${input.nextCompanyAName} vs ${input.nextCompanyBName}. Make your pick before lockout!`,
             url: `/game`,
-            tag: `munymo-game-${nextGame.id}`,
+            tag: `munymo-game-${nextGameId}`,
           });
         } catch (err) {
           console.warn("[Push] New game push notification failed:", err);
         }
       }
 
-      return { success: true, nextGameId: nextGame?.id };
+      return { success: true, nextGameId };
     }),
 
   listPlayers: adminProcedure.query(async () => {
