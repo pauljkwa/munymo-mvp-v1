@@ -251,7 +251,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
               Navigate
             </p>
             <ul className="flex flex-col gap-2">
-              {[...mainLinks, { href: "/profile", label: "My Dashboard" }].map((l) => (
+              {[...mainLinks, { href: "/dashboard", label: "My Dashboard" }].map((l) => (
                 <li key={l.href}>
                   <Link
                     href={l.href}

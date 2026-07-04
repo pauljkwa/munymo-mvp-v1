@@ -295,8 +295,98 @@ interface CurationPayload {
   };
 }
 
+// ─── POST /api/scheduled/streak-at-risk ──────────────────────────────────────
+/**
+ * Sends streak-at-risk emails to players who:
+ *   - have an active streak > 0
+ *   - have NOT yet submitted a final pick for today's game
+ *   - the game's lockoutAt is within the next 2 hours
+ *   - emailOptIn is not false
+ *
+ * Called by the agent cron 1–2 hours before lockout each trading day.
+ * Dedup: only fires while game status is "active" (not yet "locked"), so
+ * the cron can safely call it once per hour without double-sending.
+ */
+async function streakAtRiskHandler(req: Request, res: Response) {
+  try {
+    const user = await sdk.authenticateRequest(req);
+    if (!user.isCron) {
+      return res.status(403).json({ error: "cron-only endpoint" });
+    }
+
+    const { getDb } = await import("../db");
+    const { getActiveOrUpcomingGame, getAllUsers, getPlayerPick, getStreakForUser } = await import("../db");
+    const { buildStreakAtRiskEmail, sendEmail } = await import("../email");
+    const { ENV } = await import("./env");
+
+    const game = await getActiveOrUpcomingGame();
+    if (!game || game.status !== "active" || !game.lockoutAt) {
+      return res.json({ ok: true, skipped: true, reason: "No active game with lockoutAt" });
+    }
+
+    const now = new Date();
+    const lockoutAt = new Date(game.lockoutAt);
+    const msUntilLockout = lockoutAt.getTime() - now.getTime();
+    const twoHoursMs = 2 * 60 * 60 * 1000;
+
+    if (msUntilLockout > twoHoursMs || msUntilLockout <= 0) {
+      return res.json({ ok: true, skipped: true, reason: `Lockout not within 2h window (${Math.round(msUntilLockout / 60000)}min away)` });
+    }
+
+    const allUsers = await getAllUsers();
+    let sent = 0;
+    let skipped = 0;
+
+    for (const u of allUsers) {
+      if (!u.email || u.emailOptIn === false || u.deactivated) { skipped++; continue; }
+
+      const streak = await getStreakForUser(u.id);
+      if (!streak || (streak.currentStreak ?? 0) <= 0 || streak.awayStatus === "away") { skipped++; continue; }
+
+      const pick = await getPlayerPick(u.id, game.id);
+      if (pick?.finalSelection) { skipped++; continue; } // already submitted
+
+      // Generate magic link if Clerk is configured
+      let magicLink: string | null = null;
+      if (u.clerkId && ENV.clerkSecretKey) {
+        try {
+          const res2 = await fetch("https://api.clerk.com/v1/sign_in_tokens", {
+            method: "POST",
+            headers: { "Authorization": `Bearer ${ENV.clerkSecretKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ user_id: u.clerkId, expires_in_seconds: 7200 }),
+          });
+          const data = await res2.json() as { id?: string };
+          if (data.id) magicLink = `https://munymo.com/api/magic?token=${encodeURIComponent(data.id)}&to=${encodeURIComponent("/game")}`;
+        } catch { /* non-fatal */ }
+      }
+
+      const { subject, html } = buildStreakAtRiskEmail({
+        playerName: u.name,
+        currentStreak: streak.currentStreak ?? 1,
+        companyAName: game.companyAName,
+        companyATicker: game.companyATicker,
+        companyBName: game.companyBName,
+        companyBTicker: game.companyBTicker,
+        lockoutAt,
+        magicLink,
+      });
+
+      const result = await sendEmail({ to: u.email, subject, html });
+      if (result.success) sent++; else skipped++;
+    }
+
+    console.log(`[streak-at-risk] Sent: ${sent}, skipped: ${skipped}`);
+    return res.json({ ok: true, sent, skipped });
+
+  } catch (err) {
+    console.error("[streak-at-risk] Error:", err);
+    return res.status(500).json({ error: String(err) });
+  }
+}
+
 // ─── Registration ─────────────────────────────────────────────────────────────
 export function registerScheduledCuration(app: Express) {
   app.get("/api/scheduled/recent-games", recentGamesHandler);
   app.post("/api/scheduled/daily-curation", dailyCurationHandler);
+  app.post("/api/scheduled/streak-at-risk", streakAtRiskHandler);
 }
