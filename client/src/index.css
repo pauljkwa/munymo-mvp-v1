@@ -49,6 +49,7 @@
   --color-success-muted:   oklch(0.52 0.16 145 / 0.10);
   --color-danger:          oklch(0.55 0.22 25);
   --color-danger-muted:    oklch(0.55 0.22 25 / 0.10);
+  --color-error:           var(--color-danger);
   --color-warning:         oklch(0.62 0.16 65);
   --color-warning-muted:   oklch(0.62 0.16 65 / 0.10);
   --color-info:            oklch(0.52 0.16 230);
@@ -103,6 +104,7 @@
   --color-success-muted:   oklch(0.72 0.18 145 / 0.15);
   --color-danger:          oklch(0.65 0.22 25);
   --color-danger-muted:    oklch(0.65 0.22 25 / 0.15);
+  --color-error:           var(--color-danger);
   --color-warning:         oklch(0.80 0.18 65);
   --color-warning-muted:   oklch(0.80 0.18 65 / 0.15);
   --color-info:            oklch(0.68 0.18 230);
