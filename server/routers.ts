@@ -54,6 +54,7 @@ import {
   writeAuditLog,
   getMetricExplanation,
   upsertMetricExplanation,
+  isKnownMetricLabel,
   countPublishedGameDaysBetween,
 } from "./db";
 
@@ -1134,7 +1135,11 @@ const metricsRouter = router({
       const cached = await getMetricExplanation(input.metricLabel);
       if (cached) return { explanation: cached.explanation, aiGenerated: cached.aiGenerated };
 
-      // 2. Generate via LLM
+      // 2. Reject unknown labels — only generate for metrics that exist in game research
+      const known = await isKnownMetricLabel(input.metricLabel);
+      if (!known) return { explanation: "No explanation available.", aiGenerated: false };
+
+      // 3. Generate via LLM
       const { invokeLLM } = await import("./_core/llm");
       const response = await invokeLLM({
         messages: [
@@ -1158,7 +1163,7 @@ const metricsRouter = router({
         (response as { choices?: Array<{ message?: { content?: string } }> })
           ?.choices?.[0]?.message?.content ?? "No explanation available.";
 
-      // 3. Cache for future use
+      // 4. Cache for future use
       await upsertMetricExplanation(input.metricLabel, explanation, true);
 
       return { explanation, aiGenerated: true };

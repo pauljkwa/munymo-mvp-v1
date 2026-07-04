@@ -670,6 +670,25 @@ export function normaliseMetricKey(label: string): string {
   return label.toLowerCase().trim().replace(/\s+/g, " ");
 }
 
+/**
+ * Returns true if the label matches a metric label used in any game_research row.
+ * Used to gate LLM calls — unknown labels get a static fallback, no LLM invoked.
+ */
+export async function isKnownMetricLabel(metricLabel: string): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+  const key = normaliseMetricKey(metricLabel);
+  const rows = await db.select({ metrics: gameResearch.researchMetrics }).from(gameResearch);
+  for (const row of rows) {
+    const metrics = row.metrics as Array<{ label: string }> | null;
+    if (!metrics) continue;
+    for (const m of metrics) {
+      if (normaliseMetricKey(m.label) === key) return true;
+    }
+  }
+  return false;
+}
+
 export async function getMetricExplanation(metricLabel: string) {
   const db = await getDb();
   if (!db) return undefined;
