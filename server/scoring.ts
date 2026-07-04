@@ -99,9 +99,9 @@ export function computeNewStreak(
   gameDate: string,
   missedTradingDays: number = 0
 ): { newCurrent: number; newLongest: number; updated: boolean } {
-  // Away status: preserve streak, do not update
+  // Away status: advance date but preserve streak (protection actually works)
   if (awayStatus === "away") {
-    return { newCurrent: currentStreak, newLongest: longestStreak, updated: false };
+    return { newCurrent: currentStreak, newLongest: longestStreak, updated: true };
   }
 
   // First participation ever

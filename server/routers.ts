@@ -1026,10 +1026,11 @@ const dashboardRouter = router({
   setAwayStatus: protectedProcedure
     .input(z.object({ active: z.boolean() }))
     .mutation(async ({ ctx, input }) => {
-      await updateUserProfile(ctx.user.id, {
-        awayStatus: input.active,
-        awayStatusUntil: input.active ? null : null,
-      });
+      // Write to streak_records.awayStatus — the canonical field the streak engine reads
+      const streakStatus = input.active ? "away" : "active";
+      await setAwayStatus(ctx.user.id, streakStatus, ctx.user.id);
+      // Keep users.awayStatus in sync for display purposes
+      await updateUserProfile(ctx.user.id, { awayStatus: input.active });
       return { success: true };
     }),
 

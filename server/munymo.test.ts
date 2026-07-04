@@ -128,10 +128,11 @@ describe("computeNewStreak — streak rules (production function)", () => {
     expect(r.newLongest).toBe(10); // longest preserved
   });
 
-  it("preserves streak without updating when Away status is set", () => {
+  it("preserves streak and advances date when Away status is set (T2)", () => {
     const r = computeNewStreak("away", "2025-01-01", 7, 7, "2025-01-03");
     expect(r.newCurrent).toBe(7);
-    expect(r.updated).toBe(false);
+    expect(r.newLongest).toBe(7);
+    expect(r.updated).toBe(true); // date must advance so gap doesn't accumulate
   });
 
   it("updates longest streak when current exceeds previous longest", () => {
@@ -190,6 +191,30 @@ describe("computeNewStreak — streak rules (production function)", () => {
 
   it("T1: same-day or earlier gameDate returns unchanged streak (guard)", () => {
     const r = computeNewStreak("active", "2026-06-29", 5, 5, "2026-06-29", 0);
+    expect(r.newCurrent).toBe(5);
+    expect(r.updated).toBe(true);
+  });
+});
+
+// ─── T2: Away Status Protection ───────────────────────────────────────────────
+describe("T2: away status — streak protected and date advances", () => {
+  it("away player: streak unchanged, updated=true so date advances", () => {
+    const r = computeNewStreak("away", "2026-06-29", 10, 10, "2026-07-01", 1);
+    expect(r.newCurrent).toBe(10);
+    expect(r.newLongest).toBe(10);
+    expect(r.updated).toBe(true);
+  });
+
+  it("away player returning: first active game after many away days increments (0 missed because date was advanced)", () => {
+    // Simulates: player was away Mon–Fri, lastParticipationDate advanced to Fri via away logic,
+    // returns Monday — missedTradingDays=0 (Fri→Mon, no published game between)
+    const r = computeNewStreak("active", "2026-07-03", 10, 10, "2026-07-06", 0);
+    expect(r.newCurrent).toBe(11);
+    expect(r.updated).toBe(true);
+  });
+
+  it("away player: same-day call is a no-op (gameDate <= lastParticipationDate guard)", () => {
+    const r = computeNewStreak("away", "2026-07-01", 5, 5, "2026-07-01", 0);
     expect(r.newCurrent).toBe(5);
     expect(r.updated).toBe(true);
   });
