@@ -118,6 +118,57 @@ export default function GameResult() {
           </p>
         </div>
 
+        {/* ── Performance comparison ── */}
+        {(game.companyAPerf != null || game.companyBPerf != null) && (() => {
+          const perfA = game.companyAPerf != null ? parseFloat(String(game.companyAPerf)) : null;
+          const perfB = game.companyBPerf != null ? parseFloat(String(game.companyBPerf)) : null;
+          const fmt = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`;
+          const margin = perfA != null && perfB != null ? Math.abs(perfA - perfB) : null;
+          return (
+            <div className="card-glass p-5 mb-6 animate-fade-up delay-75">
+              <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--color-brand)" }}>
+                Price Movement
+              </p>
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                {(["A", "B"] as const).map((side) => {
+                  const ticker = side === "A" ? game.companyATicker : game.companyBTicker;
+                  const name = side === "A" ? game.companyAName : game.companyBName;
+                  const perf = side === "A" ? perfA : perfB;
+                  const isWinner = game.winner === side;
+                  const perfColor = perf == null ? "var(--color-subtle)" : perf >= 0 ? "var(--color-success)" : "var(--color-danger)";
+                  return (
+                    <div
+                      key={side}
+                      className="rounded-xl p-4 text-center"
+                      style={{
+                        background: isWinner ? "var(--color-brand)10" : "var(--color-surface-raised)",
+                        border: `1px solid ${isWinner ? "var(--color-brand)40" : "var(--color-border)"}`,
+                      }}
+                    >
+                      <div className="flex items-center justify-center gap-1.5 mb-1">
+                        {isWinner && <Trophy size={12} style={{ color: "var(--color-brand)" }} />}
+                        <span className="text-xs font-bold uppercase tracking-wider" style={{ color: isWinner ? "var(--color-brand)" : "var(--color-subtle)" }}>
+                          {ticker}
+                        </span>
+                      </div>
+                      <p className="text-[10px] mb-2 truncate" style={{ color: "var(--color-subtle)" }}>{name}</p>
+                      <p className="text-2xl font-bold font-mono" style={{ color: perfColor }}>
+                        {perf != null ? fmt(perf) : "—"}
+                      </p>
+                      <p className="text-[10px] mt-1" style={{ color: "var(--color-subtle)" }}>day's change</p>
+                    </div>
+                  );
+                })}
+              </div>
+              {margin != null && (
+                <p className="text-xs text-center" style={{ color: "var(--color-muted)" }}>
+                  Winning margin: <span className="font-semibold" style={{ color: "var(--color-foreground)" }}>{margin.toFixed(2)}%</span>
+                </p>
+              )}
+            </div>
+          );
+        })()}
+
         {/* ── Player result (played) ── */}
         {isAuthenticated && myPick && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 animate-fade-up delay-75">

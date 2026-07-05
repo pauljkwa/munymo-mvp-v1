@@ -557,18 +557,69 @@ export default function DailyGame() {
           })}
         </div>
 
-        {/* Yesterday's result link */}
-        {previousGame && (
-          <div className="text-center mt-3 mb-2">
+        {/* Yesterday's result card */}
+        {previousGame && (() => {
+          const perfA = previousGame.companyAPerf != null ? parseFloat(String(previousGame.companyAPerf)) : null;
+          const perfB = previousGame.companyBPerf != null ? parseFloat(String(previousGame.companyBPerf)) : null;
+          const fmt = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`;
+          const winnerTicker = previousGame.winner === "A" ? previousGame.companyATicker : previousGame.companyBTicker;
+          return (
             <a
               href={`/game/${previousGame.id}/result`}
-              className="text-xs underline"
-              style={{ color: "var(--color-subtle)" }}
+              className="block mb-6 animate-fade-up"
+              style={{ textDecoration: "none" }}
             >
-              Yesterday's result →
+              <div
+                className="card-glass p-4 transition-all hover:shadow-md"
+                style={{ borderColor: "var(--color-border)" }}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-subtle)" }}>
+                    Yesterday's Result
+                  </p>
+                  <span className="text-xs font-semibold" style={{ color: "var(--color-brand)" }}>
+                    View full result →
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {(["A", "B"] as const).map((side) => {
+                    const ticker = side === "A" ? previousGame.companyATicker : previousGame.companyBTicker;
+                    const perf = side === "A" ? perfA : perfB;
+                    const isWinner = previousGame.winner === side;
+                    const perfColor = perf == null ? "var(--color-subtle)" : perf >= 0 ? "var(--color-success)" : "var(--color-danger)";
+                    return (
+                      <div
+                        key={side}
+                        className="rounded-xl p-3 flex items-center justify-between gap-2"
+                        style={{
+                          background: isWinner ? "var(--color-brand)10" : "var(--color-surface-raised)",
+                          border: `1px solid ${isWinner ? "var(--color-brand)40" : "var(--color-border)"}`,
+                        }}
+                      >
+                        <div className="flex items-center gap-2">
+                          {isWinner && <Trophy size={12} style={{ color: "var(--color-brand)", flexShrink: 0 }} />}
+                          <span className="text-sm font-bold" style={{ color: isWinner ? "var(--color-brand)" : "var(--color-foreground)" }}>
+                            {ticker}
+                          </span>
+                        </div>
+                        {perf != null && (
+                          <span className="text-sm font-bold font-mono" style={{ color: perfColor }}>
+                            {fmt(perf)}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                {winnerTicker && (
+                  <p className="text-xs mt-2 text-center" style={{ color: "var(--color-muted)" }}>
+                    <span style={{ color: "var(--color-brand)", fontWeight: 600 }}>{winnerTicker}</span> outperformed
+                  </p>
+                )}
+              </div>
             </a>
-          </div>
-        )}
+          );
+        })()}
 
         {/* ── Step: Gut ── */}
         {step === "gut" && !isLocked && (
@@ -961,28 +1012,66 @@ export default function DailyGame() {
         {/* ── Result + Hindsight Spotlight (shown when result_published) ── */}
         {game.status === "result_published" && (
           <div className="space-y-4 mt-4 animate-fade-up">
-            {/* Winner announcement */}
-            {game.winner && (
-              <div
-                className="card-glass p-5 flex items-center gap-4"
-                style={{ borderColor: "var(--color-brand)", boxShadow: "0 0 0 1px var(--color-brand)" }}
-              >
-                <Trophy size={28} style={{ color: "var(--color-brand)", flexShrink: 0 }} />
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider mb-0.5" style={{ color: "var(--color-brand)" }}>
-                    Result
-                  </p>
-                  <p className="font-semibold" style={{ color: "var(--color-foreground)" }}>
-                    {game.winner === "A" ? game.companyAName : game.companyBName} outperformed
-                  </p>
-                  {myPick?.finalSelection && (
-                    <p className="text-sm mt-0.5" style={{ color: myPick.finalSelection === game.winner ? "var(--color-success)" : "var(--color-error)" }}>
-                      {myPick.finalSelection === game.winner ? "✓ Your prediction was correct" : "✗ Your prediction was incorrect"}
-                    </p>
+            {/* Winner announcement + performance */}
+            {game.winner && (() => {
+              const perfA = game.companyAPerf != null ? parseFloat(String(game.companyAPerf)) : null;
+              const perfB = game.companyBPerf != null ? parseFloat(String(game.companyBPerf)) : null;
+              const fmt = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`;
+              return (
+                <div className="card-glass p-5" style={{ borderColor: "var(--color-brand)", boxShadow: "0 0 0 1px var(--color-brand)" }}>
+                  <div className="flex items-center gap-4 mb-4">
+                    <Trophy size={28} style={{ color: "var(--color-brand)", flexShrink: 0 }} />
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider mb-0.5" style={{ color: "var(--color-brand)" }}>
+                        Result
+                      </p>
+                      <p className="font-semibold" style={{ color: "var(--color-foreground)" }}>
+                        {game.winner === "A" ? game.companyAName : game.companyBName} outperformed
+                      </p>
+                      {myPick?.finalSelection && (
+                        <p className="text-sm mt-0.5" style={{ color: myPick.finalSelection === game.winner ? "var(--color-success)" : "var(--color-error)" }}>
+                          {myPick.finalSelection === game.winner ? "✓ Your prediction was correct" : "✗ Your prediction was incorrect"}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  {(perfA != null || perfB != null) && (
+                    <div className="grid grid-cols-2 gap-2">
+                      {(["A", "B"] as const).map((side) => {
+                        const ticker = side === "A" ? game.companyATicker : game.companyBTicker;
+                        const name = side === "A" ? game.companyAName : game.companyBName;
+                        const perf = side === "A" ? perfA : perfB;
+                        const isWinner = game.winner === side;
+                        const perfColor = perf == null ? "var(--color-subtle)" : perf >= 0 ? "var(--color-success)" : "var(--color-danger)";
+                        return (
+                          <div
+                            key={side}
+                            className="rounded-xl p-3"
+                            style={{
+                              background: isWinner ? "var(--color-brand)10" : "var(--color-surface-raised)",
+                              border: `1px solid ${isWinner ? "var(--color-brand)40" : "var(--color-border)"}`,
+                            }}
+                          >
+                            <div className="flex items-center gap-1.5 mb-1">
+                              {isWinner && <Trophy size={11} style={{ color: "var(--color-brand)" }} />}
+                              <span className="text-xs font-bold" style={{ color: isWinner ? "var(--color-brand)" : "var(--color-foreground)" }}>
+                                {ticker}
+                              </span>
+                            </div>
+                            <p className="text-[10px] mb-1" style={{ color: "var(--color-subtle)" }}>{name}</p>
+                            {perf != null && (
+                              <span className="text-lg font-bold font-mono" style={{ color: perfColor }}>
+                                {fmt(perf)}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Hindsight Spotlight */}
             {research?.hindsightSpotlight && (
