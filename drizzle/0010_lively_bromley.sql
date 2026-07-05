@@ -1,0 +1,1 @@
+ALTER TABLE `game_research` ADD `researchSummary` text;
