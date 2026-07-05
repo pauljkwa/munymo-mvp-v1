@@ -1,1 +1,1 @@
-ALTER TABLE `game_research` ADD `researchSummary` text;
+ALTER TABLE `game_research` ADD COLUMN IF NOT EXISTS `researchSummary` text;
