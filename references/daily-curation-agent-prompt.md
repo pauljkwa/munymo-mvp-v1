@@ -52,7 +52,16 @@ Record:
 
 ## Step 3 — Select Tomorrow's Companies
 
-Choose two companies listed on NASDAQ or NYSE that:
+**First, read today's market news.** Before selecting any companies, browse at least two of the following sources for what is moving markets today:
+- finance.yahoo.com/news
+- reuters.com/finance
+- bloomberg.com/markets
+- marketwatch.com
+- cnbc.com/markets
+
+You are looking for: earnings releases, analyst upgrades/downgrades, major price movers, M&A activity, product launches, regulatory decisions, or macro events affecting specific sectors. The matchup you choose must be directly connected to something that happened or is happening in the market in the last 48 hours. If you cannot find a timely news hook, keep reading until you find one — do not fall back on generic or evergreen picks.
+
+**Then, select two companies that meet ALL of the following:**
 
 1. Are in **different sectors** from any game in the last 7 days
 2. Have **not appeared** in any game in the last 30 days
@@ -60,8 +69,16 @@ Choose two companies listed on NASDAQ or NYSE that:
 4. Are genuine rivals or natural comparisons (same sub-industry, competing products, similar market cap range)
 5. Are well-known enough that a general audience will recognise them
 6. Have a genuine investment debate — there should be a real reason a reasonable person might pick either company
+7. Are **directly relevant to a specific news story from the last 48 hours** — you must be able to name the story
 
 Avoid: penny stocks, micro-caps, ETFs, index funds, or companies with no retail investor recognition.
+
+**Mandatory self-check before proceeding:** After choosing your two tickers, explicitly verify them against the recent games list from Step 1:
+- List every game in the last 7 days and confirm neither company's sector appears
+- List every game in the last 30 days and confirm neither ticker appears
+- List every game in the last 365 days and confirm this exact pair has not been used
+
+If any check fails, discard the pick and choose different companies. Do not proceed to Step 4 until all three checks pass. Document your self-check in your reasoning before moving on.
 
 ---
 
@@ -78,7 +95,7 @@ For each company, gather the following metrics. Use Yahoo Finance, financial new
 - Analyst Consensus (Buy / Hold / Sell and average price target)
 - Recent news headline (1 sentence, most relevant to the matchup)
 
-**Pairing Rationale:** Write 2–3 sentences explaining why these two companies are a compelling matchup right now. What is the investment debate? Why would a reasonable person pick either one?
+**Pairing Rationale:** Write 2–3 sentences explaining what is happening in the market **today specifically** that makes this matchup timely. Reference the actual news event, earnings release, analyst call, sector move, or macro development from the last 48 hours that motivated this pick. This is not a description of the companies or their general rivalry — it is the reason a player opening the app today will immediately understand why *these two, right now*. If you cannot point to a specific recent event, you have chosen the wrong companies.
 
 **Research Content:** Write 4–6 paragraphs of balanced research covering:
 - The competitive landscape between the two companies
@@ -212,7 +229,7 @@ The game is live. Players will receive result emails automatically. You are done
 ```json
 { "error": "Freshness rule violations", "violations": ["..."] }
 ```
-Go back to Step 3 and choose different companies. Try again with a compliant matchup.
+This means your self-check in Step 3 failed or was skipped. Read the `violations` array carefully — it will tell you exactly which rule was broken. Go back to Step 3, discard your pick, re-read the recent games list, and choose different companies. You **must** retry until you get a 200 — do not stop, do not notify the owner, do not exit. A 422 is not an error, it is a signal to try again.
 
 **Server error (HTTP 500):**
 The owner will be notified automatically. Log the error details for diagnosis.
