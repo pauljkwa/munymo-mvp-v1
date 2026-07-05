@@ -89,6 +89,14 @@ For each company, gather the following metrics. Use Yahoo Finance, financial new
 
 This content is shown to players before they make their pick. It should be informative, balanced, and genuinely educational — not promotional.
 
+**Research Summary (Beginner):** Write a plain-English summary (3–4 short paragraphs, no jargon) for players who are new to investing. Cover:
+- What each company actually does, in one simple sentence each
+- One concrete reason someone might pick Company A
+- One concrete reason someone might pick Company B
+- One thing to keep in mind (a risk, an upcoming event, or a simple question to ask yourself)
+
+Avoid all financial jargon (P/E ratio, EPS, TTM, EBITDA, etc.). Write as if explaining to a smart friend who has never bought a stock. This is the `researchSummary` field.
+
 ---
 
 ## Step 5 — Write the Validation Question
@@ -160,6 +168,7 @@ The JSON structure to POST:
     "pairingRationale": "<2-3 sentences>",
     "lockoutAt": "<YYYY-MM-DDTHH:MM:SS.000Z>",
     "researchContent": "<4-6 paragraphs of balanced research>",
+    "researchSummary": "<3-4 paragraph plain-English beginner summary, no jargon>",
     "researchMetrics": {
       "<CompanyA ticker> Market Cap": "<value>",
       "<CompanyA ticker> P/E Ratio": "<value>",

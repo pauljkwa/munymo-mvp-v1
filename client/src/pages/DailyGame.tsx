@@ -303,6 +303,7 @@ export default function DailyGame() {
   );
 
   const [step, setStep] = useState<GameStep>("gut");
+  const [showFullResearch, setShowFullResearch] = useState(false);
   const [gutSelection, setGutSelection] = useState<"A" | "B" | null>(null);
   const [finalSelection, setFinalSelection] = useState<"A" | "B" | null>(null);
 
@@ -681,15 +682,40 @@ export default function DailyGame() {
               )}
               {research?.content ? (
                 <div>
-                  <p
-                    className="text-xs font-semibold uppercase tracking-wider mb-2"
-                    style={{ color: "var(--color-brand)" }}
-                  >
-                    Research Notes
-                  </p>
-                  <div className="prose-munymo text-sm whitespace-pre-wrap">
-                    {research.content}
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-brand)" }}>
+                      {research.researchSummary && !showFullResearch ? "Summary" : "Research Notes"}
+                    </p>
+                    {research.researchSummary && (
+                      <button
+                        onClick={() => setShowFullResearch(v => !v)}
+                        className="text-xs font-semibold"
+                        style={{ color: "var(--color-brand)" }}
+                      >
+                        {showFullResearch ? "← Show summary" : "Show full analysis →"}
+                      </button>
+                    )}
                   </div>
+                  {research.researchSummary && !showFullResearch ? (
+                    <div>
+                      <div className="prose-munymo text-sm whitespace-pre-wrap">
+                        {research.researchSummary}
+                      </div>
+                      <div
+                        className="mt-4 rounded-xl p-3 flex items-start gap-2"
+                        style={{ background: "var(--color-brand)0d", border: "1px solid var(--color-brand)30" }}
+                      >
+                        <Lightbulb size={14} className="mt-0.5 shrink-0" style={{ color: "var(--color-brand)" }} />
+                        <p className="text-xs" style={{ color: "var(--color-muted)" }}>
+                          This is the beginner summary. Tap <strong style={{ color: "var(--color-brand)" }}>Show full analysis</strong> above for the complete research breakdown.
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="prose-munymo text-sm whitespace-pre-wrap">
+                      {research.content}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <p className="text-sm" style={{ color: "var(--color-subtle)" }}>

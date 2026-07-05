@@ -121,6 +121,7 @@ const gamesRouter = router({
       if (game.status === "result_published" && research.researchSnapshot) {
         return {
           content: research.researchSnapshot,
+          researchSummary: research.researchSummary ?? null,
           isSnapshot: true,
           metrics,
           hindsightSpotlight: game.hindsightSpotlight ?? null,
@@ -128,7 +129,7 @@ const gamesRouter = router({
           winnerName: game.winner === "A" ? game.companyAName : game.winner === "B" ? game.companyBName : null,
         };
       }
-      return { content: research.content, isSnapshot: false, metrics, hindsightSpotlight: null, winner: null, winnerName: null };
+      return { content: research.content, researchSummary: research.researchSummary ?? null, isSnapshot: false, metrics, hindsightSpotlight: null, winner: null, winnerName: null };
     }),
 
   getValidationQuestion: publicProcedure
@@ -734,6 +735,7 @@ const adminRouter = router({
         nextLockoutAt: z.string().datetime().optional(),
         // ── Tomorrow's research ──
         nextResearchContent: z.string().optional(),
+        nextResearchSummary: z.string().optional(),
         nextResearchMetrics: z.record(z.string(), z.string()).optional(),
         // ── Tomorrow's validation question ──
         nextQuestionType: z.enum(["multiple_choice", "yes_no", "true_false"]).optional(),
@@ -780,7 +782,7 @@ const adminRouter = router({
         const metricsArray = input.nextResearchMetrics
           ? Object.entries(input.nextResearchMetrics).map(([label, value]) => ({ label, value: String(value) }))
           : [];
-        await upsertResearchWithMetrics(nextGameId, input.nextResearchContent, metricsArray);
+        await upsertResearchWithMetrics(nextGameId, input.nextResearchContent, metricsArray, input.nextResearchSummary);
       }
       if (input.nextQuestionType && input.nextQuestionText && input.nextCorrectAnswer) {
         await upsertValidationQuestion(nextGameId, {

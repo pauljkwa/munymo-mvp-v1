@@ -204,6 +204,7 @@ async function dailyCurationHandler(req: Request, res: Response) {
       nextPairingRationale: tomorrow.pairingRationale,
       nextLockoutAt: lockoutAt ? new Date(lockoutAt).toISOString() : undefined,
       nextResearchContent: tomorrow.researchContent,
+      nextResearchSummary: tomorrow.researchSummary,
       nextResearchMetrics: tomorrow.researchMetrics as Record<string, string> | undefined,
       nextQuestionType: questionType,
       nextQuestionText: tomorrow.validationQuestion?.questionText,
@@ -285,6 +286,7 @@ interface CurationPayload {
     lockoutTime?: string;
     lockoutAt?: string;
     researchContent?: string;
+    researchSummary?: string;
     researchMetrics?: Record<string, string>;
     validationQuestion?: {
       questionType: string;

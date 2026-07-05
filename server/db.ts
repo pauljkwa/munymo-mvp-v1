@@ -246,14 +246,15 @@ export async function upsertResearch(gameId: number, content: string) {
 export async function upsertResearchWithMetrics(
   gameId: number,
   content: string,
-  researchMetrics: Array<{ label: string; value: string }>
+  researchMetrics: Array<{ label: string; value: string }>,
+  researchSummary?: string
 ) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db
     .insert(gameResearch)
-    .values({ gameId, content, researchMetrics })
-    .onDuplicateKeyUpdate({ set: { content, researchMetrics } });
+    .values({ gameId, content, researchMetrics, researchSummary })
+    .onDuplicateKeyUpdate({ set: { content, researchMetrics, researchSummary } });
 }
 
 export async function snapshotResearch(gameId: number) {

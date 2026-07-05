@@ -109,6 +109,7 @@ export const gameResearch = mysqlTable("game_research", {
   id: int("id").autoincrement().primaryKey(),
   gameId: int("gameId").notNull().unique(),
   content: text("content").notNull(), // Markdown/rich text narrative
+  researchSummary: text("researchSummary"), // plain-English beginner summary (Free tier)
   researchMetrics: json("researchMetrics").$type<ResearchMetric[]>(), // flexible key-value metrics
   researchSnapshot: text("researchSnapshot"), // immutable copy taken at publish
   metricsSnapshot: json("metricsSnapshot").$type<ResearchMetric[]>(), // immutable metrics copy
