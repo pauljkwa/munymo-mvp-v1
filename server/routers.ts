@@ -433,6 +433,11 @@ async function closeAndScoreGame(
 
   for (const pick of picks) {
     if (!pick.finalSelection) continue;
+    // Retry-safety: if this player already has a score row for this game (a
+    // prior run got partway through before failing), still refresh the score
+    // but skip the streak update — it already ran once and would otherwise
+    // double-increment on retry.
+    const alreadyScored = await getPlayerScoreForGame(pick.userId, gameId);
     const { predictionScore, validationScore } = calculateScore(
       pick.finalSelection,
       opts.winner,
@@ -445,7 +450,9 @@ async function closeAndScoreGame(
 
     // 5. Update leaderboard and streaks
     await upsertLeaderboardStat(pick.userId);
-    await updateStreakForPlayer(pick.userId, game.gameDate, pick.finalSelection === opts.winner);
+    if (!alreadyScored) {
+      await updateStreakForPlayer(pick.userId, game.gameDate, pick.finalSelection === opts.winner);
+    }
   }
 
   // 6. Compute community stats
@@ -775,6 +782,16 @@ const adminRouter = router({
       }
 
       // ── 2. Create tomorrow's game — use returned insertId directly ──
+      // Guard against the duplicate-game/pileup vector: reject if a
+      // non-cancelled game already exists for this date.
+      const existingNextGame = await getTodayGame(input.nextGameDate);
+      if (existingNextGame && existingNextGame.status !== "cancelled") {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: `A game already exists for ${input.nextGameDate} (id ${existingNextGame.id}, status ${existingNextGame.status})`,
+        });
+      }
+
       const nextGameId = await createGame({
         gameDate: input.nextGameDate,
         exchange: input.nextExchange,
