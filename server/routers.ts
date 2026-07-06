@@ -1,4 +1,5 @@
 import { TRPCError } from "@trpc/server";
+import type Anthropic from "@anthropic-ai/sdk";
 import { calculateScore, checkLockout, computeNewStreak, isQualified } from "./scoring";
 import { hashEndpoint } from "./push";
 import {
@@ -1123,29 +1124,37 @@ const metricsRouter = router({
       const known = await isKnownMetricLabel(input.metricLabel);
       if (!known) return { explanation: "No explanation available.", aiGenerated: false };
 
-      // 3. Generate via LLM
-      const { invokeLLM } = await import("./_core/llm");
-      const response = await invokeLLM({
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a financial educator writing for beginner investors. " +
-              "Explain financial metrics clearly, concisely, and without jargon. " +
-              "Always include: what the metric measures, what a high vs low value typically signals, " +
-              "and why it might matter when comparing two companies. " +
-              "Write in a friendly, conversational tone. Keep it under 120 words.",
-          },
-          {
-            role: "user",
-            content: `Please explain the financial metric: "${input.metricLabel}"`,
-          },
-        ],
-      });
+      // 3. Generate via Claude
+      if (!ENV.anthropicApiKey) {
+        console.error("[metrics.getExplanation] ANTHROPIC_API_KEY is not configured");
+        return { explanation: "No explanation available.", aiGenerated: false };
+      }
 
-      const explanation: string =
-        (response as { choices?: Array<{ message?: { content?: string } }> })
-          ?.choices?.[0]?.message?.content ?? "No explanation available.";
+      let explanation: string;
+      try {
+        const { default: AnthropicClient } = await import("@anthropic-ai/sdk");
+        const client = new AnthropicClient({ apiKey: ENV.anthropicApiKey });
+        const response = await client.messages.create({
+          model: "claude-opus-4-8",
+          max_tokens: 400,
+          system:
+            "You are a financial educator writing for beginner investors. " +
+            "Explain financial metrics clearly, concisely, and without jargon. " +
+            "Always include: what the metric measures, what a high vs low value typically signals, " +
+            "and why it might matter when comparing two companies. " +
+            "Write in a friendly, conversational tone. Keep it under 120 words.",
+          messages: [
+            { role: "user", content: `Please explain the financial metric: "${input.metricLabel}"` },
+          ],
+        });
+        const textBlock = response.content.find(
+          (b): b is Anthropic.TextBlock => b.type === "text"
+        );
+        explanation = textBlock?.text?.trim() || "No explanation available.";
+      } catch (err) {
+        console.error("[metrics.getExplanation] Claude call failed:", err);
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Could not generate explanation" });
+      }
 
       // 4. Cache for future use
       await upsertMetricExplanation(input.metricLabel, explanation, true);

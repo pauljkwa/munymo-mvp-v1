@@ -486,7 +486,7 @@ All procedures are defined in `server/routers.ts`. The `appRouter` composes thes
 - `dashboard.getStats` — comprehensive stats: accuracy, streak, leaderboard rank, validation accuracy, gut-vs-final agreement rate
 
 ### `metrics`
-- `metrics.getExplanation` — public; checks DB cache first; if missing, calls LLM to generate a plain-English explanation, stores it, and returns it
+- `metrics.getExplanation` — public; checks DB cache first; if missing, calls Claude (`claude-opus-4-8` via `ANTHROPIC_API_KEY`) to generate a plain-English explanation, stores it, and returns it. **Was calling `server/_core/llm.ts` (Manus "Forge" proxy via `BUILT_IN_FORGE_API_KEY`), which was never set in Railway — every call 500'd instantly with no server-side log (tRPC has no `onError` handler, so uncaught errors are silent). Fixed 2026-07-06 by calling Anthropic directly inline in the procedure; `server/_core/llm.ts` is now unused dead code, left in place.** If other unexplained silent 500s show up, add an `onError` to `createExpressMiddleware` in `server/_core/index.ts` — there currently is none.
 
 ### `push`
 - `push.subscribe` — store a push subscription for the current user
