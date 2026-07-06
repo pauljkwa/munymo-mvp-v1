@@ -98,21 +98,21 @@ export function computeNewStreak(
   longestStreak: number,
   gameDate: string,
   missedTradingDays: number = 0
-): { newCurrent: number; newLongest: number; updated: boolean } {
+): { newCurrent: number; newLongest: number } {
   // Away status: advance date but preserve streak (protection actually works)
   if (awayStatus === "away") {
-    return { newCurrent: currentStreak, newLongest: longestStreak, updated: true };
+    return { newCurrent: currentStreak, newLongest: longestStreak };
   }
 
   // First participation ever
   if (!lastParticipationDate) {
     const newCurrent = 1;
-    return { newCurrent, newLongest: Math.max(newCurrent, longestStreak), updated: true };
+    return { newCurrent, newLongest: Math.max(newCurrent, longestStreak) };
   }
 
   // Same day or earlier — no change (shouldn't occur in normal flow)
   if (gameDate <= lastParticipationDate) {
-    return { newCurrent: currentStreak, newLongest: longestStreak, updated: true };
+    return { newCurrent: currentStreak, newLongest: longestStreak };
   }
 
   let newCurrent: number;
@@ -125,7 +125,7 @@ export function computeNewStreak(
   }
 
   const newLongest = Math.max(newCurrent, longestStreak);
-  return { newCurrent, newLongest, updated: true };
+  return { newCurrent, newLongest };
 }
 
 // ─── Winner Resolution (T3) ──────────────────────────────────────────────────

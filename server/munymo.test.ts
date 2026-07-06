@@ -150,7 +150,6 @@ describe("computeNewStreak — streak rules (production function)", () => {
   it("starts streak at 1 for first participation", () => {
     const r = computeNewStreak("active", null, 0, 0, "2025-01-01");
     expect(r.newCurrent).toBe(1);
-    expect(r.updated).toBe(true);
   });
 
   it("increments streak on consecutive day", () => {
@@ -169,7 +168,6 @@ describe("computeNewStreak — streak rules (production function)", () => {
     const r = computeNewStreak("away", "2025-01-01", 7, 7, "2025-01-03");
     expect(r.newCurrent).toBe(7);
     expect(r.newLongest).toBe(7);
-    expect(r.updated).toBe(true); // date must advance so gap doesn't accumulate
   });
 
   it("updates longest streak when current exceeds previous longest", () => {
@@ -190,7 +188,6 @@ describe("computeNewStreak — streak rules (production function)", () => {
     // 4 calendar days gap; pass missedTradingDays=3 to simulate skipped published games
     const r = computeNewStreak("missing", "2025-01-01", 8, 8, "2025-01-05", 3);
     expect(r.newCurrent).toBe(1);
-    expect(r.updated).toBe(true);
   });
 
   it("does not update streak for same-day duplicate (diffDays === 0)", () => {
@@ -204,42 +201,36 @@ describe("computeNewStreak — streak rules (production function)", () => {
     // 2026-06-26 is Friday, 2026-06-29 is Monday — no published game between them
     const r = computeNewStreak("active", "2026-06-26", 5, 5, "2026-06-29", 0);
     expect(r.newCurrent).toBe(6);
-    expect(r.updated).toBe(true);
   });
 
   it("T1: Mon→Wed with 1 missed trading day (Tue published game) resets streak", () => {
     // Player played Mon, skipped Tue (a published game), plays Wed
     const r = computeNewStreak("active", "2026-06-29", 5, 5, "2026-07-01", 1);
     expect(r.newCurrent).toBe(1);
-    expect(r.updated).toBe(true);
   });
 
   it("T1: Mon→Tue consecutive (0 missed) increments streak (regression)", () => {
     const r = computeNewStreak("active", "2026-06-29", 3, 5, "2026-06-30", 0);
     expect(r.newCurrent).toBe(4);
-    expect(r.updated).toBe(true);
   });
 
   it("T1: first participation always yields streak=1 regardless of missedTradingDays", () => {
     const r = computeNewStreak("active", null, 0, 0, "2026-06-29", 0);
     expect(r.newCurrent).toBe(1);
-    expect(r.updated).toBe(true);
   });
 
   it("T1: same-day or earlier gameDate returns unchanged streak (guard)", () => {
     const r = computeNewStreak("active", "2026-06-29", 5, 5, "2026-06-29", 0);
     expect(r.newCurrent).toBe(5);
-    expect(r.updated).toBe(true);
   });
 });
 
 // ─── T2: Away Status Protection ───────────────────────────────────────────────
 describe("T2: away status — streak protected and date advances", () => {
-  it("away player: streak unchanged, updated=true so date advances", () => {
+  it("away player: streak unchanged, date advances", () => {
     const r = computeNewStreak("away", "2026-06-29", 10, 10, "2026-07-01", 1);
     expect(r.newCurrent).toBe(10);
     expect(r.newLongest).toBe(10);
-    expect(r.updated).toBe(true);
   });
 
   it("away player returning: first active game after many away days increments (0 missed because date was advanced)", () => {
@@ -247,13 +238,11 @@ describe("T2: away status — streak protected and date advances", () => {
     // returns Monday — missedTradingDays=0 (Fri→Mon, no published game between)
     const r = computeNewStreak("active", "2026-07-03", 10, 10, "2026-07-06", 0);
     expect(r.newCurrent).toBe(11);
-    expect(r.updated).toBe(true);
   });
 
   it("away player: same-day call is a no-op (gameDate <= lastParticipationDate guard)", () => {
     const r = computeNewStreak("away", "2026-07-01", 5, 5, "2026-07-01", 0);
     expect(r.newCurrent).toBe(5);
-    expect(r.updated).toBe(true);
   });
 });
 

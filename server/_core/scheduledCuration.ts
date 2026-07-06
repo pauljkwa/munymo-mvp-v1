@@ -328,9 +328,10 @@ interface CurationPayload {
  *   - the game's lockoutAt is within the next 2 hours
  *   - emailOptIn is not false
  *
- * Called by the agent cron 1–2 hours before lockout each trading day.
- * Dedup: only fires while game status is "active" (not yet "locked"), so
- * the cron can safely call it once per hour without double-sending.
+ * Called once daily by the internal node-cron 60 min before lockout (see
+ * server/_core/index.ts). Dedup: only fires while game status is "active" —
+ * once runLockoutSweep() flips the game to "locked" at lockout (Phase 1),
+ * this handler stops sending for that game even if invoked again.
  */
 async function streakAtRiskHandler(req: Request, res: Response) {
   try {

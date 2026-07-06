@@ -109,8 +109,8 @@ The handover from the previous session said "all phases 1–24 are functionally 
 
 | Item | Status |
 |------|--------|
-| Auto-submission at lockout (Decision 1) | **Not implemented** |
-| Validation question staying open after lockout (Decision 1) | **Not implemented** — currently blocked by lockout middleware |
+| Auto-submission at lockout (Decision 1) | **Complete (2026-07-06)** — new `runLockoutSweep()` in `server/autoSubmitHandler.ts` runs via an internal `node-cron` at 9:35 AM `America/New_York` (5 min after the 9:30 ET lockout, DST-safe). Finds every `active` game whose `lockoutAt` has passed (no time window — a missed run self-heals on the next sweep), copies `gutSelection → finalSelection` for picks missing a final, and flips the game to `locked`. `POST /api/scheduled/auto-submit-locked-picks` now calls the same function, authenticated via shared secret (`x-curation-secret`) instead of the retired Manus cron session — the `sdk` dependency is gone. `closeAndScoreGame`'s own gut→final copy remains as an idempotent safety net. |
+| Validation question staying open after lockout (Decision 1) | **Complete** — confirmed `picks.submitValidation` (`server/routers.ts`) only blocks `result_published`/`cancelled`, so it already accepts answers on `locked` games; no code change needed. Now that games actually reach `locked` status (see row above), this behavior is live for the first time. |
 | Three streak types (Decision 2) | Playing + win + lose streaks tracked. Playing-streak weekend-reset bug fixed (T1, 2026-07-03, commit 34112de). Losing-streak-of-5 intervention UX still outstanding (deferred, P5). |
 | Losing streak intervention at 5 (Decision 2) | **Not implemented** |
 | Community stats showing raw counts (Decision 7) | **Not implemented** — percentages only |

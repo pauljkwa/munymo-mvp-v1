@@ -993,7 +993,7 @@ async function updateStreakForPlayer(userId: number, gameDate: string, isCorrect
   const missedTradingDays = streak.lastParticipationDate
     ? await countPublishedGameDaysBetween(streak.lastParticipationDate, gameDate)
     : 0;
-  const { newCurrent, newLongest, updated } = computeNewStreak(
+  const { newCurrent, newLongest } = computeNewStreak(
     awayStatus,
     streak.lastParticipationDate,
     streak.currentStreak,
@@ -1001,8 +1001,6 @@ async function updateStreakForPlayer(userId: number, gameDate: string, isCorrect
     gameDate,
     missedTradingDays
   );
-  // Away status: computeNewStreak returns updated=false, so we skip the DB write
-  if (!updated) return;
   await updateStreak(userId, newCurrent, newLongest, gameDate);
   // Update win/lose streaks
   const freshStreak = await getStreakForUser(userId);

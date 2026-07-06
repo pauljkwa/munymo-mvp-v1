@@ -9,7 +9,7 @@ import { registerMagicLinkRedirect } from "./magicLinkRedirect";
 import { registerScheduledCuration } from "./scheduledCuration";
 import { registerTesterAgent } from "./testerAgent";
 import { registerCurationAgent } from "./curationAgent";
-import { autoSubmitLockedPicksHandler } from "../autoSubmitHandler";
+import { autoSubmitLockedPicksHandler, runLockoutSweep } from "../autoSubmitHandler";
 import { registerReferralRoutes } from "../referral";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
@@ -119,6 +119,20 @@ async function startServer() {
       await runTesterPicks();
     } catch (err) {
       console.error("[tester-agent] Cron error:", err);
+    }
+  }, { timezone: "America/New_York" });
+
+  // Lockout sweep — 9:35 AM America/New_York, 5 min after the 9:30 ET lockout.
+  // Auto-submits gut→final picks and flips games to "locked". No time window:
+  // a missed run self-heals by picking up every still-active, past-lockout
+  // game on the next sweep.
+  cron.schedule("35 9 * * 1-5", async () => {
+    console.log("[lockout-sweep] Cron triggered");
+    try {
+      const result = await runLockoutSweep();
+      console.log("[lockout-sweep] Complete:", result);
+    } catch (err) {
+      console.error("[lockout-sweep] Cron error:", err);
     }
   }, { timezone: "America/New_York" });
 }
