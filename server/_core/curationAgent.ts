@@ -58,7 +58,16 @@ Read today's market news FIRST, then pick two companies that: are in different s
 - researchContent: 4–6 balanced, educational paragraphs (competitive landscape, performance drivers, risks/catalysts, current debate, upcoming events). Do not telegraph a winner.
 - researchSummary: 3–4 short plain-English paragraphs for beginners, NO jargon (no P/E, EPS, TTM, EBITDA). What each company does in one sentence; one reason to pick each; one thing to keep in mind.
 - researchMetrics: for each ticker — Market Cap, P/E Ratio, Revenue Growth, EPS (TTM), 52-Week Range, Analyst Consensus (with avg target).
-- validationQuestion: one multiple_choice question (4 options) testing a verifiable fact answerable from your research; correctAnswer must be the EXACT text of one option.
+- validationQuestion: one question testing a verifiable fact answerable from your research.
+
+## Validation question type — vary it, don't default to multiple choice
+Each recent game in the list you were given includes its "questionType" (may be null for older games). Look at the most recent game(s) and pick a DIFFERENT type than whatever was used last time — never repeat the immediately-previous type. Choose randomly among the other two eligible types (don't always alternate in the same fixed order; keep it unpredictable but never a repeat).
+
+- **multiple_choice**: 4 options; correctAnswer must be the EXACT text of one option; set "options" to the array of 4 strings.
+- **true_false**: a statement Claude judges as verifiably true or false from the research; correctAnswer is exactly "True" or "False"; set "options" to null.
+- **yes_no**: a yes/no question about the companies/matchup; correctAnswer is exactly "Yes" or "No"; set "options" to null.
+
+If there is no prior game (first game ever) or no questionType history, pick any of the three at random.
 
 ## Dates
 - gameDate: the next valid US trading day (YYYY-MM-DD). Skip weekends and US market holidays.
@@ -106,13 +115,15 @@ Your FINAL message must contain ONLY the JSON object below — no markdown fence
       "<B ticker> Analyst Consensus": "<Buy/Hold/Sell, avg target $X>"
     },
     "validationQuestion": {
-      "questionType": "multiple_choice",
+      "questionType": "<multiple_choice | true_false | yes_no — see 'Validation question type' rule above>",
       "questionText": "<question text>",
-      "options": ["<A>", "<B>", "<C>", "<D>"],
-      "correctAnswer": "<exact text of the correct option>"
+      "options": ["<A>", "<B>", "<C>", "<D>"] or null,
+      "correctAnswer": "<exact text of the correct option, or 'True'/'False', or 'Yes'/'No'>"
     }
   }
-}`;
+}
+
+Note: "options" must be a real JSON array of 4 strings when questionType is "multiple_choice", and JSON null for "true_false" or "yes_no". Do not write literal "or null" into the output — that placeholder is only for this instruction.`;
 
 // ─── Recent games (freshness context) ────────────────────────────────────────
 async function fetchRecentGames(): Promise<string> {

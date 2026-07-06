@@ -36,8 +36,8 @@ const MATCHUP_REPEAT_DAYS = 365;
 async function recentGamesHandler(_req: Request, res: Response) {
   try {
     const { getDb } = await import("../db");
-    const { dailyGames } = await import("../../drizzle/schema.js");
-    const { desc, gte } = await import("drizzle-orm");
+    const { dailyGames, validationQuestions } = await import("../../drizzle/schema.js");
+    const { desc, gte, eq } = await import("drizzle-orm");
     const db = await getDb();
     if (!db) return res.status(500).json({ error: "Database unavailable" });
 
@@ -55,8 +55,12 @@ async function recentGamesHandler(_req: Request, res: Response) {
         companyAName: dailyGames.companyAName,
         companyBName: dailyGames.companyBName,
         status: dailyGames.status,
+        // Included so the curation agent can see recent validation-question
+        // types and avoid repeating the same one two days running.
+        questionType: validationQuestions.questionType,
       })
       .from(dailyGames)
+      .leftJoin(validationQuestions, eq(validationQuestions.gameId, dailyGames.id))
       .where(gte(dailyGames.gameDate, cutoffStr))
       .orderBy(desc(dailyGames.gameDate))
       .limit(100);

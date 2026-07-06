@@ -21,7 +21,7 @@ Make a GET request to:
 https://munymo.com/api/scheduled/recent-games
 ```
 
-This returns a list of recent games with their dates, sectors, and company tickers, plus the freshness rules:
+This returns a list of recent games with their dates, sectors, company tickers, and validation-question type (`questionType`), plus the freshness rules:
 
 - **Sector**: may not repeat within 7 days
 - **Company**: may not appear in any game within 30 days
@@ -118,14 +118,17 @@ Avoid all financial jargon (P/E ratio, EPS, TTM, EBITDA, etc.). Write as if expl
 
 ## Step 5 — Write the Validation Question
 
-Create one multiple-choice question (4 options) that:
-- Tests a specific, verifiable fact about one of the two companies
-- Is answerable from the research content you wrote
-- Has one clearly correct answer
-- Has three plausible but incorrect distractors
-- Is educational — teaches the player something meaningful about investing or the companies
+Vary the question type — do not default to multiple choice every day. The recent games list includes each game's `questionType` (may be `null` for older games). Look at the most recently used type and pick a **different** one this time, chosen randomly between the other two eligible types (don't just alternate in a fixed order — keep it unpredictable, but never repeat the immediately-previous type). If there is no prior game or no type history, pick any of the three at random.
 
-The correct answer must be the **exact text** of one of the four options.
+- **multiple_choice**: 4 options, one clearly correct answer, three plausible distractors. `correctAnswer` must be the **exact text** of one of the four options. `options` is the array of 4 strings.
+- **true_false**: a single statement that is verifiably true or false from your research. `correctAnswer` is exactly `"True"` or `"False"`. `options` is `null`.
+- **yes_no**: a single yes/no question about the companies or matchup. `correctAnswer` is exactly `"Yes"` or `"No"`. `options` is `null`.
+
+Whichever type you choose, the question must:
+- Test a specific, verifiable fact about one of the two companies
+- Be answerable from the research content you wrote
+- Have one clearly correct answer
+- Be educational — teach the player something meaningful about investing or the companies
 
 ---
 
@@ -201,7 +204,7 @@ The JSON structure to POST:
       "<CompanyB ticker> Analyst Consensus": "<Buy/Hold/Sell, avg target $X>"
     },
     "validationQuestion": {
-      "questionType": "multiple_choice",
+      "questionType": "multiple_choice | true_false | yes_no  (see Step 5 — vary this, don't always use multiple_choice)",
       "questionText": "<question text>",
       "options": [
         "<option A text>",
@@ -209,11 +212,13 @@ The JSON structure to POST:
         "<option C text>",
         "<option D text>"
       ],
-      "correctAnswer": "<exact text of correct option>"
+      "correctAnswer": "<exact text of correct option, or 'True'/'False', or 'Yes'/'No'>"
     }
   }
 }
 ```
+
+For `true_false` and `yes_no`, set `"options"` to `null` instead of an array.
 
 ---
 
