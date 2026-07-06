@@ -8,6 +8,7 @@ import {
   calculateScore,
   checkLockout,
   computeNewStreak,
+  computeValidationScore,
   resolveWinner,
   isQualified,
   computeAverageDailyScore,
@@ -64,6 +65,41 @@ describe("calculateScore — 80/20 model (production function)", () => {
   it("works correctly for company B winning", () => {
     const r = calculateScore("B", "B", "True", "True");
     expect(r.dailyScore).toBe(100);
+  });
+
+  it("applies time-decay when answerTimeMs is passed and mid-range", () => {
+    const r = calculateScore("A", "A", "Yes", "Yes", 40_000);
+    expect(r.validationScore).toBeGreaterThan(12);
+    expect(r.validationScore).toBeLessThan(20);
+  });
+});
+
+describe("computeValidationScore — time-decay (production function)", () => {
+  it("returns 0 when answer is incorrect, regardless of timing", () => {
+    expect(computeValidationScore(false, 1_000)).toBe(0);
+    expect(computeValidationScore(false, null)).toBe(0);
+  });
+
+  it("returns full 20 when correct and no timing data (backward compatible)", () => {
+    expect(computeValidationScore(true, null)).toBe(20);
+    expect(computeValidationScore(true, undefined)).toBe(20);
+  });
+
+  it("returns full 20 at and below the fast threshold (15_000ms)", () => {
+    expect(computeValidationScore(true, 15_000)).toBe(20);
+    expect(computeValidationScore(true, 0)).toBe(20);
+    expect(computeValidationScore(true, 5_000)).toBe(20);
+  });
+
+  it("returns minimum 12 at and above the slow threshold (60_000ms)", () => {
+    expect(computeValidationScore(true, 60_000)).toBe(12);
+    expect(computeValidationScore(true, 120_000)).toBe(12);
+  });
+
+  it("decays linearly between the fast and slow thresholds", () => {
+    const midway = computeValidationScore(true, 37_500); // halfway between 15s and 60s
+    expect(midway).toBeGreaterThan(12);
+    expect(midway).toBeLessThan(20);
   });
 });
 

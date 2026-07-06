@@ -116,7 +116,7 @@ function ValidationModal({
           </h2>
           {isCorrect ? (
             <p className="text-lg mb-8" style={{ color: "oklch(0.9 0.06 145)" }}>
-              Well done — your research paid off. The 20% validation bonus has been added to your score.
+              Well done — your research paid off. Your validation bonus has been added to your score.
             </p>
           ) : (
             <div className="mb-8">

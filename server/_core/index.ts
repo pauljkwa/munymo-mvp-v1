@@ -57,6 +57,9 @@ async function startServer() {
     createExpressMiddleware({
       router: appRouter,
       createContext,
+      onError({ path, error }) {
+        console.error(`[tRPC] ${path ?? "<unknown>"} — ${error.code}: ${error.message}`, error.stack);
+      },
     })
   );
   // development mode uses Vite, production mode uses static files
@@ -77,9 +80,10 @@ async function startServer() {
     console.log(`Server running on http://localhost:${port}/`);
   });
 
-  // Daily curation agent — runs at 20:15 UTC Monday–Friday (4:15 AM Perth),
-  // ~15 min after NASDAQ closes. Claude-powered replacement for the Manus cron.
-  cron.schedule("15 20 * * 1-5", async () => {
+  // Daily curation agent — runs at 4:15 PM America/New_York, ~15 min after
+  // NASDAQ closes. IANA timezone keeps this correct across DST. Claude-powered
+  // replacement for the Manus cron.
+  cron.schedule("15 16 * * 1-5", async () => {
     console.log("[curation-agent] Cron triggered");
     try {
       const { runDailyCuration } = await import("./curationAgent");
@@ -87,13 +91,13 @@ async function startServer() {
     } catch (err) {
       console.error("[curation-agent] Cron error:", err);
     }
-  }, { timezone: "UTC" });
+  }, { timezone: "America/New_York" });
 
-  // Streak-at-risk reminder emails — 13:00 UTC Mon–Fri. This lands inside the
-  // endpoint's own "lockout within 2h" guard for both US DST (lockout 13:30 UTC)
-  // and non-DST (lockout 14:30 UTC); the handler self-skips if there's no active
-  // game or the window isn't open. Replaces the old Manus cron (now shared-secret).
-  cron.schedule("0 13 * * 1-5", async () => {
+  // Streak-at-risk reminder emails — 8:30 AM America/New_York, always 60 min
+  // before the 9:30 ET lockout regardless of DST. The handler self-skips if
+  // there's no active game or the window isn't open. Replaces the old Manus
+  // cron (now shared-secret).
+  cron.schedule("30 8 * * 1-5", async () => {
     console.log("[streak-at-risk] Cron triggered");
     try {
       const res = await fetch(`${ENV.curationBaseUrl}/api/scheduled/streak-at-risk`, {
@@ -105,10 +109,10 @@ async function startServer() {
     } catch (err) {
       console.error("[streak-at-risk] Cron error:", err);
     }
-  }, { timezone: "UTC" });
+  }, { timezone: "America/New_York" });
 
-  // Tester agent — runs at 10:00 PM UTC Monday–Friday (6:00 AM Perth)
-  cron.schedule("0 22 * * 1-5", async () => {
+  // Tester agent — runs at 6:00 PM America/New_York Monday–Friday, after curation.
+  cron.schedule("0 18 * * 1-5", async () => {
     console.log("[tester-agent] Cron triggered");
     try {
       const { runTesterPicks } = await import("./testerAgent");
@@ -116,7 +120,7 @@ async function startServer() {
     } catch (err) {
       console.error("[tester-agent] Cron error:", err);
     }
-  }, { timezone: "UTC" });
+  }, { timezone: "America/New_York" });
 }
 
 startServer().catch(console.error);

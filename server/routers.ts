@@ -437,7 +437,8 @@ async function closeAndScoreGame(
       pick.finalSelection,
       opts.winner,
       pick.validationAnswer,
-      question?.correctAnswer ?? ""
+      question?.correctAnswer ?? "",
+      pick.validationAnswerTimeMs
     );
     await insertDailyScore(pick.userId, gameId, predictionScore, validationScore);
     scoredPicks.push({ userId: pick.userId, predictionScore, validationScore, totalScore: predictionScore + validationScore });
@@ -744,18 +745,27 @@ const adminRouter = router({
         nextQuestionOptions: z.array(z.string()).optional(),
         nextCorrectAnswer: z.string().optional(),
       })
+      .refine((d) => !d.closeGameId || d.winner !== undefined, {
+        message: "winner is required when closeGameId is set",
+        path: ["winner"],
+      })
     )
     .mutation(async ({ ctx, input }) => {
       // ── 1. Close today's game (skipped if no closeGameId — Game 1 / first game) ──
       let game: Awaited<ReturnType<typeof getGameById>> | null = null;
+      let winner: "A" | "B" | undefined;
       const scoredPicks: Array<{ userId: number; predictionScore: number; validationScore: number; totalScore: number }> = [];
 
       if (input.closeGameId) {
+        if (input.winner === undefined) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "winner is required when closeGameId is set" });
+        }
+        winner = input.winner;
         game = await getGameById(input.closeGameId);
         if (!game) throw new TRPCError({ code: "NOT_FOUND", message: "Game not found" });
 
         const closed = await closeAndScoreGame(input.closeGameId, {
-          winner: input.winner!,
+          winner,
           companyAPerf: input.companyAPerf,
           companyBPerf: input.companyBPerf,
           resultSummary: input.resultSummary,
@@ -799,6 +809,8 @@ const adminRouter = router({
       // ── 3. Send result emails to ALL registered users (only if a game was closed) ──
       // Players who participated get a score summary; non-players get a re-engagement email.
       if (game) {
+        // `game` and `winner` are always set together above, so this is safe.
+        const closedWinner = winner as "A" | "B";
         const allUsers = await getAllUsers();
         try {
           const scoredMap = new Map(scoredPicks.map((s) => [s.userId, s]));
@@ -848,7 +860,7 @@ const adminRouter = router({
                 companyATicker: game.companyATicker,
                 companyBName: game.companyBName,
                 companyBTicker: game.companyBTicker,
-                winner: input.winner!,
+                winner: closedWinner,
                 predictionScore: scored.predictionScore,
                 validationScore: scored.validationScore,
                 totalScore: scored.totalScore,
@@ -865,7 +877,7 @@ const adminRouter = router({
                 companyATicker: game.companyATicker,
                 companyBName: game.companyBName,
                 companyBTicker: game.companyBTicker,
-                winner: input.winner!,
+                winner: closedWinner,
                 gameDate: game.gameDate,
                 nextCompanyAName: nextTicker?.aName ?? null,
                 nextCompanyATicker: nextTicker?.a ?? null,
