@@ -101,7 +101,7 @@ async function dailyCurationHandler(req: Request, res: Response) {
 
     const { getDb } = await import("../db");
     const { dailyGames } = await import("../../drizzle/schema.js");
-    const { desc, gte, or, eq, and } = await import("drizzle-orm");
+    const { desc, gte, or, eq, and, asc } = await import("drizzle-orm");
     const db = await getDb();
     if (!db) return res.status(500).json({ error: "Database unavailable" });
 
@@ -163,12 +163,16 @@ async function dailyCurationHandler(req: Request, res: Response) {
     // Skip closing if the market was closed today (holiday) or no winner data provided.
     let closeGameId: number | undefined;
     if (!marketClosed && today && today.winnerTicker) {
-      // Find the active/locked game to close
+      // Find the active/locked game to close — the EARLIEST-dated one, i.e. the
+      // game whose trading day has just concluded. Using desc() here would pick
+      // the latest (a future, not-yet-played) game instead if more than one
+      // active/locked game ever exists at once — which is exactly how games
+      // piled up unresolved in the past (see references/munymo-handover-v2.md).
       const activeGame = await db
         .select({ id: dailyGames.id, companyATicker: dailyGames.companyATicker, companyBTicker: dailyGames.companyBTicker })
         .from(dailyGames)
         .where(or(eq(dailyGames.status, "active"), eq(dailyGames.status, "locked")))
-        .orderBy(desc(dailyGames.gameDate))
+        .orderBy(asc(dailyGames.gameDate))
         .limit(1);
       if (activeGame[0]) closeGameId = activeGame[0].id;
     }

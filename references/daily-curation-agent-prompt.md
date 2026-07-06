@@ -33,7 +33,7 @@ Study this list carefully before selecting tomorrow's companies. Any violation w
 
 ## Step 2 — Determine Today's Winner
 
-From the recent games list, identify the game with the most recent date and status `active` or `locked`. Note its `companyATicker` and `companyBTicker`.
+From the recent games list, identify the game with status `active` or `locked` that has the EARLIEST `gameDate` — the one whose trading day has just concluded. Do not pick a game with a later/future `gameDate` just because it happens to be listed first; if more than one game is active/locked at once, the earliest-dated one is always the correct one to score. Note its `companyATicker` and `companyBTicker`.
 
 Look up the **closing prices** for both companies on Yahoo Finance (finance.yahoo.com) for today's trading session. The company with the **higher closing price percentage change** from the previous close is the winner.
 

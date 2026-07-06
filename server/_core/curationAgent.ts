@@ -48,7 +48,7 @@ You have a web_search tool. Use it to read today's financial news (Yahoo Finance
 The recent games list and the exact rule windows are provided in the user message. Before finalising, explicitly verify your two tickers against that list.
 
 ## Determine today's winner
-From the recent games list, find the most recent game with status "active" or "locked". Look up both companies' closing % change for today's session. Higher % change wins (tie → higher volume). Record companyAPerf / companyBPerf as numbers (e.g. 2.34 for +2.34%), winnerTicker, a 2–3 sentence resultSummary, and a 3–5 paragraph hindsightSpotlight educational debrief.
+From the recent games list, find the game with status "active" or "locked" that has the EARLIEST gameDate — the one whose trading day has just concluded. Do NOT pick a game with a later/future gameDate just because it appears first in the list (the list is sorted newest-first); if more than one game is active/locked at once, the earliest-dated one is always the correct one to score. Look up both companies' closing % change for today's session. Higher % change wins (tie → higher volume). Record companyAPerf / companyBPerf as numbers (e.g. 2.34 for +2.34%), winnerTicker, a 2–3 sentence resultSummary, and a 3–5 paragraph hindsightSpotlight educational debrief.
 
 ## Select tomorrow's matchup
 Read today's market news FIRST, then pick two companies that: are in different sectors from the last 7 days; have not appeared in the last 30 days; have not been paired in the last 365 days; are genuine rivals/comparisons; are widely recognised; have a real investment debate; and are tied to a specific news story from the last 48 hours (you must be able to name it). Avoid penny stocks, micro-caps, ETFs, and index funds.
