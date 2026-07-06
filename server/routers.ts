@@ -1116,15 +1116,22 @@ const metricsRouter = router({
   getExplanation: publicProcedure
     .input(z.object({ metricLabel: z.string().min(1).max(256) }))
     .query(async ({ input }) => {
-      // 1. Check cache
+      // 1. Static, hand-written explanation for the standard metrics — instant,
+      // no DB round trip, no LLM call. Covers every metric the curation agent
+      // produces (labels are ticker-prefixed, matched by suffix).
+      const { getStaticMetricExplanation } = await import("./_core/metricExplanations");
+      const staticExplanation = getStaticMetricExplanation(input.metricLabel);
+      if (staticExplanation) return { explanation: staticExplanation, aiGenerated: false };
+
+      // 2. Check cache (for any previously-generated one-off/custom labels)
       const cached = await getMetricExplanation(input.metricLabel);
       if (cached) return { explanation: cached.explanation, aiGenerated: cached.aiGenerated };
 
-      // 2. Reject unknown labels — only generate for metrics that exist in game research
+      // 3. Reject unknown labels — only generate for metrics that exist in game research
       const known = await isKnownMetricLabel(input.metricLabel);
       if (!known) return { explanation: "No explanation available.", aiGenerated: false };
 
-      // 3. Generate via Claude
+      // 4. Generate via Claude (rare — only reached for custom/admin-entered labels)
       if (!ENV.anthropicApiKey) {
         console.error("[metrics.getExplanation] ANTHROPIC_API_KEY is not configured");
         return { explanation: "No explanation available.", aiGenerated: false };
@@ -1156,7 +1163,7 @@ const metricsRouter = router({
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Could not generate explanation" });
       }
 
-      // 4. Cache for future use
+      // 5. Cache for future use
       await upsertMetricExplanation(input.metricLabel, explanation, true);
 
       return { explanation, aiGenerated: true };
