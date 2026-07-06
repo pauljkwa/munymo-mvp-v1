@@ -129,8 +129,8 @@ The handover from the previous session said "all phases 1–24 are functionally 
 | Tester agent (synthetic players) | **Complete** — 6 accounts (IDs 870002–870012), `node-cron` inside server at 6:00 PM `America/New_York` Mon–Fri (DST-safe, after curation), endpoint at `/api/scheduled/tester-picks` (commit ed89d50) |
 | Replace Manus curation with Claude agent | **Complete** — Claude-powered agent in `server/_core/curationAgent.ts` (`claude-opus-4-8` + `web_search`), `node-cron` inside server at 4:15 PM `America/New_York` Mon–Fri (DST-safe IANA timezone, ~15 min after NASDAQ close year-round), manual trigger at `/api/scheduled/run-curation`. Endpoint auth switched from Manus session cookie to shared secret `CURATION_AGENT_SECRET`. Env vars set in Railway; both Manus scheduled tasks (curation + streak-at-risk) deactivated. Live smoke-tested (403 on unauthenticated probe). |
 | Validation question type rotation | **Complete** — curation agent and reference prompt now instruct varying `questionType` (multiple_choice / true_false / yes_no) using the prior game's type (returned by `/api/scheduled/recent-games`), picking randomly among the other two so the same type never repeats two days running. Previously always defaulted to multiple_choice. |
-| Streak double-increment on scoring retry | **Fixed 2026-07-06.** `closeAndScoreGame` (`server/routers.ts`) now checks `getPlayerScoreForGame` before scoring each pick; if a score row already exists (a prior run got partway through before failing), the score is still refreshed but `updateStreakForPlayer` is skipped, so a retry after a mid-loop failure no longer double-increments streaks. The daily-scores table still lacks a unique index (deferred to Phase 2.3, schema-gated), so this is an app-level guard, not a DB constraint. |
-| Duplicate-game/pileup protection | **Fixed 2026-07-06.** `endOfDay` (`server/routers.ts`) now checks for an existing non-cancelled game on `nextGameDate` before calling `createGame`, throwing `CONFLICT` if one is found — an app-level guard against the same class of bug described in the "Multiple simultaneous active games" row below (schema-level uniqueness on `daily_games.gameDate` is deferred to Phase 2.3/D1). |
+| Streak double-increment on scoring retry | **Fixed 2026-07-06.** `closeAndScoreGame` (`server/routers.ts`) now checks `getPlayerScoreForGame` before scoring each pick; if a score row already exists (a prior run got partway through before failing), the score is still refreshed but `updateStreakForPlayer` is skipped, so a retry after a mid-loop failure no longer double-increments streaks. `daily_scores` also now has a DB-level unique index on (userId, gameId) (migration 0011), so `insertDailyScore`'s `onDuplicateKeyUpdate` actually fires instead of silently no-oping. |
+| Duplicate-game/pileup protection | **Fixed 2026-07-06.** `endOfDay` (`server/routers.ts`) checks for an existing non-cancelled game on `nextGameDate` before calling `createGame`, throwing `CONFLICT` if one is found. `daily_games.gameDate` also now has a strict DB-level unique index (migration 0011, D1 approved by Paul) — a historical duplicate (two different games both published for 2026-06-18, ids 30001/60001) was found during the pre-flight check and resolved by re-dating id 60001 to 2026-06-19 before the index could be added. |
 | Multiple simultaneous "active" games pileup | **Fixed 2026-07-06.** Root cause: the close-game query in `scheduledCuration.ts` (`dailyCurationHandler`) ordered candidates by `desc(gameDate)` — picking the LATEST (a future, not-yet-played) active/locked game to close instead of the earliest. The old curation-agent prompt had the same ambiguity ("find the most recent game with active/locked status" over a newest-first list). Once more than one active game existed, each night's run would close the wrong (future) game with fabricated data while the real one from that day sat forever unresolved, and a new game kept getting added — exactly the "cron timing issue" symptom seen across several days. By 2026-07-06 this had produced three unresolved rows: July 6 (AMZN/TSLA, manually cancelled by Paul), July 7 (NVDA/AVGO, `lockoutAt` wrongly `13:00 UTC` instead of `13:30 UTC` — a recurrence of the bug "fixed" once before in commit `633c3ae`), and July 8 (GOOGL/META, pre-curated ahead of time, which should never happen). **Manual cleanup performed:** July 8 (GOOGL/META) and the cancelled July 6 (AMZN/TSLA) rows deleted entirely (with their `game_research`/`validation_questions` children); NVDA/AVGO's `gameDate` moved to `2026-07-06` and `lockoutAt` corrected to `2026-07-06T13:30:00.000Z`, so it now correctly stands in as today's game. July 7 and July 8 are blank and will be freshly curated when those dates actually arrive. **Code fix:** the close-game query now orders by `asc(gameDate)`; both `curationAgent.ts`'s system prompt and `daily-curation-agent-prompt.md` now explicitly say to pick the EARLIEST-dated active/locked game, not the first one in the (newest-first) list. |
 
 ---
@@ -166,7 +166,7 @@ The remote is named `github`. The Manus internal remote is `origin`. Never push 
 
 ## 6. Full Database Schema
 
-Schema lives in `drizzle/schema.ts`. Migrations are in `drizzle/`. Seven migrations have been applied (0000–0007). Run `pnpm db:push` to apply schema changes.
+Schema lives in `drizzle/schema.ts`. Migrations are in `drizzle/`. Twelve migrations have been applied (0000–0011). Run `pnpm db:push` to apply schema changes.
 
 ### `users`
 Players and admins.
@@ -191,6 +191,7 @@ Players and admins.
 
 ### `daily_games`
 One row per game day. Status lifecycle: `draft → active → locked → result_published | cancelled`.
+Unique index on `gameDate` (migration 0011, 2026-07-06).
 
 | Column | Type | Notes |
 |--------|------|-------|
@@ -265,7 +266,9 @@ One row per user per game. Unique index on (userId, gameId).
 | `updatedAt` | timestamp | |
 
 ### `daily_scores`
-Server-side only. Never accepted from client.
+Server-side only. Never accepted from client. Unique index on (userId, gameId)
+(migration 0011, 2026-07-06) — `insertDailyScore`'s `onDuplicateKeyUpdate` now
+actually fires on a repeat write instead of silently no-oping.
 
 | Column | Type | Notes |
 |--------|------|-------|
@@ -1026,7 +1029,7 @@ Before making any change to `drizzle/schema.ts`:
 3. Only use `pnpm db:push` to **add** new columns or tables — never to drop or rename existing ones without a documented migration plan
 4. Never change `DATABASE_URL` or `MUNYMO_DATABASE_URL`
 
-The live database contains real player data. Eight migrations (0000–0007) have been applied. Any destructive schema change is irreversible without a backup restore.
+The live database contains real player data. Twelve migrations (0000–0011) have been applied. Any destructive schema change is irreversible without a backup restore.
 
 ---
 

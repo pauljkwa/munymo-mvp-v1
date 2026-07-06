@@ -56,38 +56,44 @@ export type InsertUser = typeof users.$inferInsert;
  * result_published:  Admin has published the outcome; scores calculated.
  * cancelled:         Game was cancelled; neutral for all players.
  */
-export const dailyGames = mysqlTable("daily_games", {
-  id: int("id").autoincrement().primaryKey(),
-  gameDate: varchar("gameDate", { length: 10 }).notNull(), // YYYY-MM-DD
-  exchange: varchar("exchange", { length: 16 }).default("NASDAQ").notNull(), // e.g. NASDAQ, NYSE, ASX
-  companyAName: varchar("companyAName", { length: 128 }).notNull(),
-  companyATicker: varchar("companyATicker", { length: 16 }).notNull(),
-  companyBName: varchar("companyBName", { length: 128 }).notNull(),
-  companyBTicker: varchar("companyBTicker", { length: 16 }).notNull(),
-  sector: varchar("sector", { length: 128 }),
-  pairingRationale: text("pairingRationale"),
-  status: mysqlEnum("status", [
-    "draft",
-    "active",
-    "locked",
-    "result_published",
-    "cancelled",
-  ])
-    .default("draft")
-    .notNull(),
-  winner: mysqlEnum("winner", ["A", "B"]), // null until result_published
-  companyAPerf: decimal("companyAPerf", { precision: 7, scale: 3 }), // % change e.g. +2.450
-  companyBPerf: decimal("companyBPerf", { precision: 7, scale: 3 }), // % change e.g. -1.230
-  resultSummary: text("resultSummary"), // short paragraph summary of the matchup outcome
-  hindsightSpotlight: text("hindsightSpotlight"), // educational debrief with 20/20 hindsight
-  resultCommentary: text("resultCommentary"), // legacy field kept for compatibility
-  lockoutAt: timestamp("lockoutAt"), // server-enforced deadline
-  publishedAt: timestamp("publishedAt"),
-  cancelledAt: timestamp("cancelledAt"),
-  createdBy: int("createdBy").notNull(), // admin user id
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+export const dailyGames = mysqlTable(
+  "daily_games",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    gameDate: varchar("gameDate", { length: 10 }).notNull(), // YYYY-MM-DD
+    exchange: varchar("exchange", { length: 16 }).default("NASDAQ").notNull(), // e.g. NASDAQ, NYSE, ASX
+    companyAName: varchar("companyAName", { length: 128 }).notNull(),
+    companyATicker: varchar("companyATicker", { length: 16 }).notNull(),
+    companyBName: varchar("companyBName", { length: 128 }).notNull(),
+    companyBTicker: varchar("companyBTicker", { length: 16 }).notNull(),
+    sector: varchar("sector", { length: 128 }),
+    pairingRationale: text("pairingRationale"),
+    status: mysqlEnum("status", [
+      "draft",
+      "active",
+      "locked",
+      "result_published",
+      "cancelled",
+    ])
+      .default("draft")
+      .notNull(),
+    winner: mysqlEnum("winner", ["A", "B"]), // null until result_published
+    companyAPerf: decimal("companyAPerf", { precision: 7, scale: 3 }), // % change e.g. +2.450
+    companyBPerf: decimal("companyBPerf", { precision: 7, scale: 3 }), // % change e.g. -1.230
+    resultSummary: text("resultSummary"), // short paragraph summary of the matchup outcome
+    hindsightSpotlight: text("hindsightSpotlight"), // educational debrief with 20/20 hindsight
+    resultCommentary: text("resultCommentary"), // legacy field kept for compatibility
+    lockoutAt: timestamp("lockoutAt"), // server-enforced deadline
+    publishedAt: timestamp("publishedAt"),
+    cancelledAt: timestamp("cancelledAt"),
+    createdBy: int("createdBy").notNull(), // admin user id
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  (table) => ({
+    gameDateUnique: uniqueIndex("daily_games_game_date_unique").on(table.gameDate),
+  })
+);
 
 export type DailyGame = typeof dailyGames.$inferSelect;
 export type InsertDailyGame = typeof dailyGames.$inferInsert;
@@ -180,15 +186,21 @@ export type InsertPlayerPick = typeof playerPicks.$inferInsert;
  * validationScore: 0 or 20 (correct/incorrect validation answer)
  * totalScore: predictionScore + validationScore (0–100)
  */
-export const dailyScores = mysqlTable("daily_scores", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
-  gameId: int("gameId").notNull(),
-  predictionScore: int("predictionScore").notNull().default(0), // 0 or 80
-  validationScore: int("validationScore").notNull().default(0), // 0 or 20
-  totalScore: int("totalScore").notNull().default(0), // 0–100
-  calculatedAt: timestamp("calculatedAt").defaultNow().notNull(),
-});
+export const dailyScores = mysqlTable(
+  "daily_scores",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").notNull(),
+    gameId: int("gameId").notNull(),
+    predictionScore: int("predictionScore").notNull().default(0), // 0 or 80
+    validationScore: int("validationScore").notNull().default(0), // 0 or 20
+    totalScore: int("totalScore").notNull().default(0), // 0–100
+    calculatedAt: timestamp("calculatedAt").defaultNow().notNull(),
+  },
+  (table) => ({
+    userGameUnique: uniqueIndex("daily_scores_user_game_unique").on(table.userId, table.gameId),
+  })
+);
 
 export type DailyScore = typeof dailyScores.$inferSelect;
 export type InsertDailyScore = typeof dailyScores.$inferInsert;

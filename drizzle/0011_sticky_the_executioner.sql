@@ -1,0 +1,2 @@
+ALTER TABLE `daily_games` ADD CONSTRAINT `daily_games_game_date_unique` UNIQUE(`gameDate`);--> statement-breakpoint
+ALTER TABLE `daily_scores` ADD CONSTRAINT `daily_scores_user_game_unique` UNIQUE(`userId`,`gameId`);
