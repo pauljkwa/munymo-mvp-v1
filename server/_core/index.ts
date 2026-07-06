@@ -15,6 +15,7 @@ import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { ENV } from "./env";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -85,6 +86,24 @@ async function startServer() {
       await runDailyCuration();
     } catch (err) {
       console.error("[curation-agent] Cron error:", err);
+    }
+  }, { timezone: "UTC" });
+
+  // Streak-at-risk reminder emails — 13:00 UTC Mon–Fri. This lands inside the
+  // endpoint's own "lockout within 2h" guard for both US DST (lockout 13:30 UTC)
+  // and non-DST (lockout 14:30 UTC); the handler self-skips if there's no active
+  // game or the window isn't open. Replaces the old Manus cron (now shared-secret).
+  cron.schedule("0 13 * * 1-5", async () => {
+    console.log("[streak-at-risk] Cron triggered");
+    try {
+      const res = await fetch(`${ENV.curationBaseUrl}/api/scheduled/streak-at-risk`, {
+        method: "POST",
+        headers: { "x-curation-secret": ENV.curationAgentSecret },
+      });
+      const body = await res.json().catch(() => ({}));
+      console.log(`[streak-at-risk] HTTP ${res.status}`, body);
+    } catch (err) {
+      console.error("[streak-at-risk] Cron error:", err);
     }
   }, { timezone: "UTC" });
 

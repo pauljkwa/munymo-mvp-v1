@@ -117,7 +117,7 @@ The handover from the previous session said "all phases 1–24 are functionally 
 | `AdminSettings` page at `/admin/settings` | **Does not exist** — no file, no route |
 | `app_settings` database table | **Does not exist** — not in schema.ts, no migration |
 | `getSetting()` / `getAllSettings()` helpers in `server/db.ts` | **Do not exist** — scoring.ts still uses hardcoded constants |
-| Streak-at-risk email trigger | **Complete** — `/api/scheduled/streak-at-risk` endpoint in `scheduledCuration.ts`; auth switched from Manus session cookie to shared secret `CURATION_AGENT_SECRET` |
+| Streak-at-risk email trigger | **Complete** — `/api/scheduled/streak-at-risk` endpoint in `scheduledCuration.ts`; auth switched from Manus session cookie to shared secret `CURATION_AGENT_SECRET`; triggered by internal `node-cron` at 13:00 UTC Mon–Fri (endpoint self-guards to the 2h-before-lockout window). Manus cron retired. |
 | `/demo/autoplay` animated walkthrough | **Does not exist** — no file, no route |
 | Resend DNS records (Cloudflare SPF/DKIM/DMARC) | **Pending** — action required from Paul |
 | `researchSummary` beginner research field | **Complete** — DB column added (migration 0010), wired through `server/db.ts`, `server/routers.ts`, shown by default on `/game` with toggle to full analysis (commit bf9d804) |
