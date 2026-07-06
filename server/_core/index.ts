@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import { createServer } from "http";
 import net from "net";
+import cron from "node-cron";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerMagicLinkRedirect } from "./magicLinkRedirect";
@@ -72,6 +73,17 @@ async function startServer() {
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
   });
+
+  // Tester agent — runs at 10:00 PM UTC Monday–Friday (6:00 AM Perth)
+  cron.schedule("0 22 * * 1-5", async () => {
+    console.log("[tester-agent] Cron triggered");
+    try {
+      const { runTesterPicks } = await import("./testerAgent");
+      await runTesterPicks();
+    } catch (err) {
+      console.error("[tester-agent] Cron error:", err);
+    }
+  }, { timezone: "UTC" });
 }
 
 startServer().catch(console.error);
