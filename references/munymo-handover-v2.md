@@ -117,10 +117,16 @@ The handover from the previous session said "all phases 1–24 are functionally 
 | `AdminSettings` page at `/admin/settings` | **Does not exist** — no file, no route |
 | `app_settings` database table | **Does not exist** — not in schema.ts, no migration |
 | `getSetting()` / `getAllSettings()` helpers in `server/db.ts` | **Do not exist** — scoring.ts still uses hardcoded constants |
-| Streak-at-risk email trigger | **Not wired** — template exists in `server/email.ts` but nothing sends it |
+| Streak-at-risk email trigger | **Complete** — `/api/scheduled/streak-at-risk` endpoint in `scheduledCuration.ts`, called by Manus cron |
 | `/demo/autoplay` animated walkthrough | **Does not exist** — no file, no route |
-| Cron Task UID status | **Unverified** — was paused, may need re-enabling (see Section 11) |
 | Resend DNS records (Cloudflare SPF/DKIM/DMARC) | **Pending** — action required from Paul |
+| `researchSummary` beginner research field | **Complete** — DB column added (migration 0010), wired through `server/db.ts`, `server/routers.ts`, shown by default on `/game` with toggle to full analysis (commit bf9d804) |
+| Yesterday's result CTA on /game | **Complete** — full result card with % change, winner trophy, CTA (commit 31bb3ee) |
+| Price movement panel on /game/:id/result | **Complete** — two-column card showing both companies' % day change (commit 31bb3ee) |
+| Daily curation agent freshness enforcement | **Complete** — prompt rewritten with mandatory self-check, news-first rule, retry-on-422 enforcement (commit 27fad3a) |
+| Railway pre-deploy migration pipeline | **Complete** — `npx drizzle-kit migrate` only; migration files committed to repo; idempotent SQL (commits a8fb449, a40450f) |
+| Tester agent (synthetic players) | **Complete** — 6 accounts (IDs 870002–870012), `node-cron` inside server at 22:00 UTC Mon–Fri, endpoint at `/api/scheduled/tester-picks` (commit ed89d50) |
+| Replace Manus curation with Claude agent | **Not started** — Manus still runs daily curation |
 
 ---
 
