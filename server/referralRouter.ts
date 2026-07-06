@@ -9,6 +9,8 @@
  * Protected (authenticated users):
  *   referral.myStats     — get the user's referral dashboard data
  *   referral.myCodes     — list all codes owned by the user
+ *   referral.attributeSignup — attribute this signup to the referral cookie that
+ *                              got them here (called once, client-side, after first sign-in)
  *
  * Admin:
  *   referral.generate    — generate N new unassigned codes for a merch batch
@@ -19,11 +21,11 @@
 
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, gte } from "drizzle-orm";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { referralCodes, referralEvents, users } from "../drizzle/schema";
-import { generateReferralCode } from "./referral";
+import { generateReferralCode, REFERRAL_ATTRIBUTION_DAYS } from "./referral";
 
 // ─── Admin guard (inline — mirrors routers.ts pattern) ────────────────────────
 const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
@@ -83,6 +85,90 @@ export const referralRouter = router({
         .where(eq(referralCodes.id, referral.id));
 
       return { ok: true, alreadyOwned: false };
+    }),
+
+  /**
+   * Attribute this signup to the referral cookie that got them here. Called
+   * once, client-side, after first sign-in when the munymo_ref cookie is
+   * present. Replaces the old POST /api/referral/attribute Express route,
+   * which required a Manus cron session nothing could present.
+   */
+  attributeSignup: protectedProcedure
+    .input(z.object({ referralCookieValue: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      const newUserId = ctx.user.id;
+
+      // Dedup: a given referredUserId may only ever produce one signup attribution
+      const [existing] = await db
+        .select({ id: referralEvents.id })
+        .from(referralEvents)
+        .where(
+          and(
+            eq(referralEvents.eventType, "signup"),
+            eq(referralEvents.referredUserId, newUserId)
+          )
+        )
+        .limit(1);
+
+      if (existing) {
+        return { ok: false, reason: "Already attributed" };
+      }
+
+      // Parse code from cookie value (format: "CODE:timestamp")
+      const codeStr = String(input.referralCookieValue).split(":")[0].toUpperCase();
+
+      const [referral] = await db
+        .select()
+        .from(referralCodes)
+        .where(eq(referralCodes.code, codeStr))
+        .limit(1);
+
+      if (!referral || referral.status !== "active") {
+        return { ok: false, reason: "Code not active" };
+      }
+
+      // Find the most recent scan event for this cookie within the attribution window
+      const windowStart = new Date(
+        Date.now() - REFERRAL_ATTRIBUTION_DAYS * 24 * 60 * 60 * 1000
+      );
+      const [scanEvent] = await db
+        .select()
+        .from(referralEvents)
+        .where(
+          and(
+            eq(referralEvents.referralCodeId, referral.id),
+            eq(referralEvents.eventType, "scan"),
+            eq(referralEvents.referralCookie, input.referralCookieValue),
+            gte(referralEvents.createdAt, windowStart)
+          )
+        )
+        .limit(1);
+
+      if (!scanEvent) {
+        return { ok: false, reason: "No matching scan within attribution window" };
+      }
+
+      // Create signup attribution event
+      await db.insert(referralEvents).values({
+        referralCodeId: referral.id,
+        eventType: "signup",
+        referredUserId: newUserId,
+        ownerIdAtEvent: referral.ownerId ?? undefined,
+        deviceFingerprint: scanEvent.deviceFingerprint ?? undefined,
+        referralCookie: input.referralCookieValue,
+        attributed: true,
+      });
+
+      // Increment signup counter
+      await db
+        .update(referralCodes)
+        .set({ totalSignups: (referral.totalSignups ?? 0) + 1 })
+        .where(eq(referralCodes.id, referral.id));
+
+      return { ok: true, ownerId: referral.ownerId };
     }),
 
   /**

@@ -4,6 +4,7 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch, useLocation } from "wouter";
 import { useEffect } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
+import ReferralAttribution from "./components/ReferralAttribution";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import DailyGame from "./pages/DailyGame";
@@ -76,6 +77,7 @@ function App() {
         <TooltipProvider>
           <Toaster richColors position="top-right" />
           <ScrollToTop />
+          <ReferralAttribution />
           <Router />
         </TooltipProvider>
       </ThemeProvider>

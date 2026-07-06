@@ -20,7 +20,6 @@ import crypto from "crypto";
 import { getDb } from "./db";
 import { referralCodes, referralEvents } from "../drizzle/schema";
 import { eq, and, gte } from "drizzle-orm";
-import { sdk } from "./_core/sdk";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -128,110 +127,6 @@ export function registerReferralRoutes(app: Express): void {
     } catch (err) {
       console.error("[referral] Error handling QR scan:", err);
       return res.redirect(302, "/");
-    }
-  });
-
-  /**
-   * POST /api/referral/attribute
-   * Called server-side (from Clerk webhook or user creation hook) when a new
-   * user signs up. Reads the referral cookie value from the request body,
-   * finds the matching scan event, and creates a signup attribution event.
-   *
-   * Body: { referralCookieValue: string, newUserId: number }
-   */
-  app.post("/api/referral/attribute", async (req: Request, res: Response) => {
-    // Must be called from a cron/server context — not accessible to browser clients
-    try {
-      const caller = await sdk.authenticateRequest(req);
-      if (!caller.isCron) {
-        return res.status(403).json({ ok: false, error: "cron-only endpoint" });
-      }
-    } catch {
-      return res.status(403).json({ ok: false, error: "Unauthorized" });
-    }
-
-    const { referralCookieValue, newUserId } = req.body ?? {};
-
-    if (!referralCookieValue || !newUserId) {
-      return res.status(400).json({ ok: false, error: "Missing parameters" });
-    }
-
-    try {
-      const db = await getDb();
-      if (!db) return res.status(500).json({ ok: false, error: "DB unavailable" });
-
-      // Dedup: a given referredUserId may only ever produce one signup attribution
-      const [existing] = await db
-        .select({ id: referralEvents.id })
-        .from(referralEvents)
-        .where(
-          and(
-            eq(referralEvents.eventType, "signup"),
-            eq(referralEvents.referredUserId, newUserId)
-          )
-        )
-        .limit(1);
-
-      if (existing) {
-        return res.json({ ok: false, reason: "Already attributed" });
-      }
-
-      // Parse code from cookie value (format: "CODE:timestamp")
-      const codeStr = String(referralCookieValue).split(":")[0].toUpperCase();
-
-      const [referral] = await db
-        .select()
-        .from(referralCodes)
-        .where(eq(referralCodes.code, codeStr))
-        .limit(1);
-
-      if (!referral || referral.status !== "active") {
-        return res.json({ ok: false, reason: "Code not active" });
-      }
-
-      // Find the most recent scan event for this cookie within the attribution window
-      const windowStart = new Date(
-        Date.now() - REFERRAL_ATTRIBUTION_DAYS * 24 * 60 * 60 * 1000
-      );
-      const [scanEvent] = await (db as Awaited<ReturnType<typeof getDb>>)!
-        .select()
-        .from(referralEvents)
-        .where(
-          and(
-            eq(referralEvents.referralCodeId, referral.id),
-            eq(referralEvents.eventType, "scan"),
-            eq(referralEvents.referralCookie, referralCookieValue),
-            gte(referralEvents.createdAt, windowStart)
-          )
-        )
-        .limit(1);
-
-      if (!scanEvent) {
-        return res.json({ ok: false, reason: "No matching scan within attribution window" });
-      }
-
-      // Create signup attribution event
-      await db.insert(referralEvents).values({
-        referralCodeId: referral.id,
-        eventType: "signup",
-        referredUserId: newUserId,
-        ownerIdAtEvent: referral.ownerId ?? undefined,
-        deviceFingerprint: scanEvent.deviceFingerprint ?? undefined,
-        referralCookie: referralCookieValue,
-        attributed: true,
-      });
-
-      // Increment signup counter
-      await db
-        .update(referralCodes)
-        .set({ totalSignups: (referral.totalSignups ?? 0) + 1 })
-        .where(eq(referralCodes.id, referral.id));
-
-      return res.json({ ok: true, ownerId: referral.ownerId });
-
-    } catch (err) {
-      console.error("[referral] Error attributing signup:", err);
-      return res.status(500).json({ ok: false, error: "Internal error" });
     }
   });
 }
