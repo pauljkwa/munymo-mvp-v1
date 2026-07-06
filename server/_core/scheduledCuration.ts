@@ -6,10 +6,26 @@
  *                                       runs End of Day logic (close today + create tomorrow)
  */
 import type { Express, Request, Response } from "express";
-import { sdk } from "./sdk";
 import { notifyOwner } from "./notification";
 import { ENV } from "./env";
 import { resolveWinner } from "../scoring";
+
+/**
+ * Shared-secret auth for the scheduled endpoints.
+ *
+ * Replaces the previous Manus-issued session-cookie check (sdk.authenticateRequest
+ * + isCron). Callers present the secret via the `x-curation-secret` header or a
+ * `?secret=` query param — the same pattern used by the tester agent. Returns true
+ * when the request is authorised.
+ */
+function isAuthorisedCron(req: Request): boolean {
+  const provided = req.headers["x-curation-secret"] ?? req.query["secret"];
+  return (
+    typeof ENV.curationAgentSecret === "string" &&
+    ENV.curationAgentSecret.length > 0 &&
+    provided === ENV.curationAgentSecret
+  );
+}
 
 // ─── Freshness rule constants ────────────────────────────────────────────────
 const SECTOR_REPEAT_DAYS = 7;
@@ -60,9 +76,8 @@ async function recentGamesHandler(_req: Request, res: Response) {
 async function dailyCurationHandler(req: Request, res: Response) {
   const startTime = Date.now();
   try {
-    // ── 1. Authenticate — must be a cron call ──
-    const user = await sdk.authenticateRequest(req);
-    if (!user.isCron) {
+    // ── 1. Authenticate — shared-secret cron call ──
+    if (!isAuthorisedCron(req)) {
       return res.status(403).json({ error: "cron-only endpoint" });
     }
 
@@ -311,8 +326,7 @@ interface CurationPayload {
  */
 async function streakAtRiskHandler(req: Request, res: Response) {
   try {
-    const user = await sdk.authenticateRequest(req);
-    if (!user.isCron) {
+    if (!isAuthorisedCron(req)) {
       return res.status(403).json({ error: "cron-only endpoint" });
     }
 

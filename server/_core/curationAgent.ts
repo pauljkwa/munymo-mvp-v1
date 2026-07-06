@@ -1,0 +1,297 @@
+/**
+ * Daily Curation Agent — Claude-powered replacement for the Manus scheduled task.
+ *
+ * Runs once per US trading day (Mon–Fri) at ~20:15 UTC (4:15 AM Perth), just
+ * after NASDAQ closes. Driven by an internal node-cron in `index.ts` (same
+ * pattern as the tester agent); also exposed as a manually-triggerable HTTP
+ * endpoint for testing.
+ *
+ * Flow (mirrors references/daily-curation-agent-prompt.md):
+ *   1. GET /api/scheduled/recent-games          → freshness context
+ *   2. Claude (claude-opus-4-8) + web_search    → research + full CurationPayload JSON
+ *   3. POST /api/scheduled/daily-curation        → close today + publish tomorrow
+ *   4. On HTTP 422 (freshness violation) feed the violations back to Claude and
+ *      retry with a different matchup, up to MAX_SUBMIT_ATTEMPTS times.
+ *
+ * Auth: the POST carries the shared secret `CURATION_AGENT_SECRET` (header
+ * `x-curation-secret`) — the same secret the endpoint validates. No Manus cookie.
+ */
+
+import type { Express, Request, Response } from "express";
+import Anthropic from "@anthropic-ai/sdk";
+import { ENV } from "./env";
+import { notifyOwner } from "./notification";
+
+const MODEL = "claude-opus-4-8";
+const MAX_SUBMIT_ATTEMPTS = 4; // freshness retry budget
+const MAX_PAUSE_TURNS = 12; // server-tool loop safety cap
+const MAX_OUTPUT_TOKENS = 16000;
+
+// ─── System prompt ───────────────────────────────────────────────────────────
+// Adapted from references/daily-curation-agent-prompt.md for the Claude API
+// (web_search tool instead of a shell/curl harness; output is a single JSON
+// object which this script POSTs to the endpoint).
+const SYSTEM_PROMPT = `You are the Munymo Daily Curation Agent. Munymo is a daily stock-picking game: each trading day players are shown two well-known companies and pick which one will have the higher closing % change that day.
+
+Your job runs once per US trading day, just after NASDAQ closes. You must:
+1. Determine today's winner from real closing prices.
+2. Select a timely matchup for the next trading day that obeys strict freshness rules.
+3. Research both companies and write all player-facing content.
+4. Output ONE complete JSON object (the "CurationPayload") — nothing else.
+
+You have a web_search tool. Use it to read today's financial news (Yahoo Finance, Reuters, CNBC, Bloomberg, MarketWatch) and to look up real closing prices and company metrics. Never invent numbers — every price, metric, and news hook must come from a real source you searched.
+
+## Freshness rules (the endpoint enforces these and will REJECT violations)
+- Sector may not repeat within 7 days.
+- A company may not appear in any game within 30 days.
+- A matchup pair may not repeat within 365 days.
+The recent games list and the exact rule windows are provided in the user message. Before finalising, explicitly verify your two tickers against that list.
+
+## Determine today's winner
+From the recent games list, find the most recent game with status "active" or "locked". Look up both companies' closing % change for today's session. Higher % change wins (tie → higher volume). Record companyAPerf / companyBPerf as numbers (e.g. 2.34 for +2.34%), winnerTicker, a 2–3 sentence resultSummary, and a 3–5 paragraph hindsightSpotlight educational debrief.
+
+## Select tomorrow's matchup
+Read today's market news FIRST, then pick two companies that: are in different sectors from the last 7 days; have not appeared in the last 30 days; have not been paired in the last 365 days; are genuine rivals/comparisons; are widely recognised; have a real investment debate; and are tied to a specific news story from the last 48 hours (you must be able to name it). Avoid penny stocks, micro-caps, ETFs, and index funds.
+
+## Content to write
+- pairingRationale: 2–3 sentences on why THIS matchup, TODAY, referencing the specific recent event.
+- researchContent: 4–6 balanced, educational paragraphs (competitive landscape, performance drivers, risks/catalysts, current debate, upcoming events). Do not telegraph a winner.
+- researchSummary: 3–4 short plain-English paragraphs for beginners, NO jargon (no P/E, EPS, TTM, EBITDA). What each company does in one sentence; one reason to pick each; one thing to keep in mind.
+- researchMetrics: for each ticker — Market Cap, P/E Ratio, Revenue Growth, EPS (TTM), 52-Week Range, Analyst Consensus (with avg target).
+- validationQuestion: one multiple_choice question (4 options) testing a verifiable fact answerable from your research; correctAnswer must be the EXACT text of one option.
+
+## Dates
+- gameDate: the next valid US trading day (YYYY-MM-DD). Skip weekends and US market holidays.
+- lockoutAt: gameDate at 13:30:00 UTC during US DST (2nd Sun Mar – 1st Sun Nov) or 14:30:00 UTC otherwise (both = 9:30 AM ET, NASDAQ open). Full ISO 8601, e.g. 2026-07-07T13:30:00.000Z.
+- If today was a US market holiday (markets closed), set "today": null and "marketClosed": true, and only create the next game.
+
+## Output format — CRITICAL
+Your FINAL message must contain ONLY the JSON object below — no markdown fences, no commentary, no explanation before or after. All research/reasoning happens in tool use and thinking; the final message is pure JSON.
+
+{
+  "marketClosed": false,
+  "today": {
+    "companyAPerf": <number>,
+    "companyBPerf": <number>,
+    "winnerTicker": "<TICKER>",
+    "winningMargin": <abs(companyAPerf - companyBPerf)>,
+    "resultSummary": "<2-3 sentences>",
+    "hindsightSpotlight": "<3-5 paragraphs>",
+    "resultSourceNote": "Closing prices sourced from Yahoo Finance on <today's date>"
+  },
+  "tomorrow": {
+    "exchange": "NASDAQ",
+    "gameDate": "<YYYY-MM-DD>",
+    "sector": "<GICS sector name>",
+    "companyAName": "<Full legal company name>",
+    "companyATicker": "<TICKER>",
+    "companyBName": "<Full legal company name>",
+    "companyBTicker": "<TICKER>",
+    "pairingRationale": "<2-3 sentences>",
+    "lockoutAt": "<YYYY-MM-DDTHH:MM:SS.000Z>",
+    "researchContent": "<4-6 paragraphs>",
+    "researchSummary": "<3-4 plain-English paragraphs, no jargon>",
+    "researchMetrics": {
+      "<A ticker> Market Cap": "<value>",
+      "<A ticker> P/E Ratio": "<value>",
+      "<A ticker> Revenue Growth": "<value>",
+      "<A ticker> EPS (TTM)": "<value>",
+      "<A ticker> 52-Week Range": "<low> – <high>",
+      "<A ticker> Analyst Consensus": "<Buy/Hold/Sell, avg target $X>",
+      "<B ticker> Market Cap": "<value>",
+      "<B ticker> P/E Ratio": "<value>",
+      "<B ticker> Revenue Growth": "<value>",
+      "<B ticker> EPS (TTM)": "<value>",
+      "<B ticker> 52-Week Range": "<low> – <high>",
+      "<B ticker> Analyst Consensus": "<Buy/Hold/Sell, avg target $X>"
+    },
+    "validationQuestion": {
+      "questionType": "multiple_choice",
+      "questionText": "<question text>",
+      "options": ["<A>", "<B>", "<C>", "<D>"],
+      "correctAnswer": "<exact text of the correct option>"
+    }
+  }
+}`;
+
+// ─── Recent games (freshness context) ────────────────────────────────────────
+async function fetchRecentGames(): Promise<string> {
+  const url = `${ENV.curationBaseUrl}/api/scheduled/recent-games`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`recent-games returned HTTP ${res.status}`);
+  }
+  return await res.text();
+}
+
+// ─── Claude research loop ────────────────────────────────────────────────────
+/**
+ * Runs one Claude turn to completion — driving the server-side web_search loop
+ * (handling `pause_turn`) and appending every assistant turn to `messages`.
+ * Returns the final assistant message so the caller can read its text.
+ */
+async function research(
+  client: Anthropic,
+  messages: Anthropic.MessageParam[]
+): Promise<Anthropic.Message> {
+  const tools = [{ type: "web_search_20260209", name: "web_search", max_uses: 15 }] as unknown as Anthropic.ToolUnion[];
+
+  for (let i = 0; i < MAX_PAUSE_TURNS; i++) {
+    const response = await client.messages.create({
+      model: MODEL,
+      max_tokens: MAX_OUTPUT_TOKENS,
+      thinking: { type: "adaptive" },
+      system: SYSTEM_PROMPT,
+      tools,
+      messages,
+    });
+    messages.push({ role: "assistant", content: response.content });
+    if (response.stop_reason === "pause_turn") continue;
+    return response;
+  }
+  throw new Error(`Exceeded ${MAX_PAUSE_TURNS} pause_turn iterations without completing`);
+}
+
+function extractText(message: Anthropic.Message): string {
+  return message.content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("")
+    .trim();
+}
+
+/** Parse the CurationPayload JSON out of Claude's final text, tolerating stray fences. */
+function parsePayload(text: string): unknown | null {
+  const attempts: string[] = [text];
+  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) attempts.push(fence[1].trim());
+  const first = text.indexOf("{");
+  const last = text.lastIndexOf("}");
+  if (first !== -1 && last > first) attempts.push(text.slice(first, last + 1));
+  for (const candidate of attempts) {
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      /* try next */
+    }
+  }
+  return null;
+}
+
+// ─── POST to the daily-curation endpoint ─────────────────────────────────────
+async function submitCuration(payload: unknown): Promise<{ status: number; body: any }> {
+  const url = `${ENV.curationBaseUrl}/api/scheduled/daily-curation`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-curation-secret": ENV.curationAgentSecret,
+    },
+    body: JSON.stringify(payload),
+  });
+  const body = await res.json().catch(() => ({}));
+  return { status: res.status, body };
+}
+
+// ─── Main entry point ────────────────────────────────────────────────────────
+export async function runDailyCuration(): Promise<void> {
+  if (!ENV.anthropicApiKey) {
+    console.error("[curation-agent] ANTHROPIC_API_KEY not set — skipping");
+    await notifyOwner({
+      title: "❌ Daily curation FAILED",
+      content: "ANTHROPIC_API_KEY is not configured. Run End of Day manually before 9:00 PM Perth time.",
+    });
+    return;
+  }
+  if (!ENV.curationAgentSecret) {
+    console.error("[curation-agent] CURATION_AGENT_SECRET not set — skipping");
+    await notifyOwner({
+      title: "❌ Daily curation FAILED",
+      content: "CURATION_AGENT_SECRET is not configured, so the agent cannot authenticate to the endpoint. Run End of Day manually.",
+    });
+    return;
+  }
+
+  const startTime = Date.now();
+  const client = new Anthropic({ apiKey: ENV.anthropicApiKey, timeout: 15 * 60 * 1000 });
+
+  try {
+    const recentGames = await fetchRecentGames();
+    const todayUtc = new Date().toISOString().slice(0, 10);
+
+    const messages: Anthropic.MessageParam[] = [
+      {
+        role: "user",
+        content:
+          `Today's date (UTC) is ${todayUtc}. Run the full daily curation now.\n\n` +
+          `Recent games and freshness rules (from /api/scheduled/recent-games):\n` +
+          `${recentGames}\n\n` +
+          `Research today's result and tomorrow's matchup using web_search, then output the single CurationPayload JSON object as your final message.`,
+      },
+    ];
+
+    for (let attempt = 1; attempt <= MAX_SUBMIT_ATTEMPTS; attempt++) {
+      const finalMessage = await research(client, messages);
+      const text = extractText(finalMessage);
+      const payload = parsePayload(text);
+
+      if (!payload) {
+        throw new Error(`Could not parse CurationPayload JSON from Claude's response (attempt ${attempt}).`);
+      }
+
+      const { status, body } = await submitCuration(payload);
+
+      if (status === 200) {
+        const elapsed = Math.round((Date.now() - startTime) / 1000);
+        console.log(`[curation-agent] Success in ${elapsed}s (attempt ${attempt}). nextGameId=${body?.nextGameId}`);
+        // The endpoint already sends a success notification; nothing more to do.
+        return;
+      }
+
+      if (status === 422) {
+        const violations = body?.violations ?? body?.detail ?? body?.error ?? "unknown";
+        console.warn(`[curation-agent] Attempt ${attempt} rejected (422):`, violations);
+        messages.push({
+          role: "user",
+          content:
+            `The submission was REJECTED with HTTP 422. Reason: ${JSON.stringify(violations)}.\n` +
+            `Choose a DIFFERENT matchup that satisfies all freshness rules (re-check the recent games list), ` +
+            `keep the same today/result block, and output the full corrected CurationPayload JSON again — only JSON.`,
+        });
+        continue; // retry
+      }
+
+      // Any other status is a hard failure.
+      throw new Error(`daily-curation endpoint returned HTTP ${status}: ${JSON.stringify(body)}`);
+    }
+
+    throw new Error(`Exhausted ${MAX_SUBMIT_ATTEMPTS} attempts without a 200 response (freshness).`);
+  } catch (err: any) {
+    const elapsed = Math.round((Date.now() - startTime) / 1000);
+    const msg = err?.message ?? String(err);
+    console.error("[curation-agent] Error:", msg);
+    try {
+      await notifyOwner({
+        title: "❌ Daily curation FAILED",
+        content: `Claude curation agent failed after ${elapsed}s: ${msg}\n\nPlease run End of Day manually before 9:00 PM Perth time.`,
+      });
+    } catch {
+      /* notification best-effort */
+    }
+  }
+}
+
+// ─── HTTP trigger (manual) ───────────────────────────────────────────────────
+async function runCurationHandler(req: Request, res: Response) {
+  const provided = req.headers["x-curation-secret"] ?? req.query["secret"];
+  if (!ENV.curationAgentSecret || provided !== ENV.curationAgentSecret) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  // Fire-and-forget: the agent can run for several minutes; don't hold the request open.
+  runDailyCuration().catch((err) => console.error("[curation-agent] Background run error:", err));
+  return res.json({ ok: true, started: true });
+}
+
+export function registerCurationAgent(app: Express) {
+  app.post("/api/scheduled/run-curation", runCurationHandler);
+}

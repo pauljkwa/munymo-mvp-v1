@@ -10,4 +10,7 @@ export const ENV = {
   resendApiKey: process.env.RESEND_API_KEY ?? "",
   clerkSecretKey: process.env.CLERK_SECRET_KEY ?? "",
   testerAgentSecret: process.env.TESTER_AGENT_SECRET ?? "",
+  curationAgentSecret: process.env.CURATION_AGENT_SECRET ?? "",
+  anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
+  curationBaseUrl: process.env.CURATION_BASE_URL || "https://munymo.com",
 };
