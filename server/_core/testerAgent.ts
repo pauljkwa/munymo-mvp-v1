@@ -11,8 +11,8 @@
  */
 
 import type { Express, Request, Response } from "express";
-import { sdk } from "./sdk";
 import { notifyOwner } from "./notification";
+import { ENV } from "./env";
 
 // Tester user IDs (DB ids, not Clerk ids)
 const TESTER_IDS = [870002, 870004, 870006, 870008, 870010, 870012];
@@ -32,9 +32,9 @@ function randomAnswerTimeMs(): number {
 
 export async function testerPicksHandler(req: Request, res: Response) {
   try {
-    const user = await sdk.authenticateRequest(req);
-    if (!user.isCron) {
-      return res.status(403).json({ error: "cron-only endpoint" });
+    const secret = req.headers["x-tester-secret"] ?? req.query["secret"];
+    if (!secret || secret !== ENV.testerAgentSecret) {
+      return res.status(403).json({ error: "Forbidden" });
     }
 
     const { getActiveOrUpcomingGame, getPlayerPick, getValidationQuestion, getUserById } = await import("../db");
