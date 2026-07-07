@@ -100,16 +100,16 @@ export default function AdminDashboard() {
             <table className="w-full">
               <thead>
                 <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
-                  <th className="text-left px-3 sm:px-5 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-subtle)" }}>
+                  <th className="text-left px-2 sm:px-5 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-subtle)" }}>
                     Date
                   </th>
-                  <th className="text-left px-3 sm:px-5 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-subtle)" }}>
+                  <th className="text-left px-2 sm:px-5 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-subtle)" }}>
                     Matchup
                   </th>
-                  <th className="text-left px-3 sm:px-5 py-3 text-xs font-semibold uppercase tracking-wider hidden sm:table-cell" style={{ color: "var(--color-subtle)" }}>
+                  <th className="text-left px-2 sm:px-5 py-3 text-xs font-semibold uppercase tracking-wider hidden sm:table-cell" style={{ color: "var(--color-subtle)" }}>
                     Status
                   </th>
-                  <th className="text-right px-3 sm:px-5 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-subtle)" }}>
+                  <th className="text-right px-2 sm:px-5 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-subtle)" }}>
                     Actions
                   </th>
                 </tr>
@@ -122,17 +122,19 @@ export default function AdminDashboard() {
                       key={game.id}
                       style={{ borderBottom: i < games.length - 1 ? "1px solid var(--color-border)" : undefined }}
                     >
-                      <td className="px-3 sm:px-5 py-4 text-sm tabular-nums whitespace-nowrap" style={{ color: "var(--color-muted)" }}>
-                        {game.gameDate}
+                      <td className="px-2 sm:px-5 py-4 text-sm tabular-nums whitespace-nowrap" style={{ color: "var(--color-muted)" }}>
+                        {/* MM-DD on phones; full date from sm up */}
+                        <span className="sm:hidden">{game.gameDate.slice(5)}</span>
+                        <span className="hidden sm:inline">{game.gameDate}</span>
                       </td>
-                      <td className="px-3 sm:px-5 py-4">
-                        <div className="flex items-center gap-2">
+                      <td className="px-2 sm:px-5 py-4">
+                        <div className="flex items-center gap-1 sm:gap-2">
                           <span className="ticker-chip">{game.companyATicker}</span>
                           <span className="text-xs" style={{ color: "var(--color-subtle)" }}>vs</span>
                           <span className="ticker-chip">{game.companyBTicker}</span>
                         </div>
                       </td>
-                      <td className="px-3 sm:px-5 py-4 hidden sm:table-cell">
+                      <td className="px-2 sm:px-5 py-4 hidden sm:table-cell">
                         <span
                           className="text-xs font-semibold"
                           style={{ color: statusMeta.color }}
@@ -140,8 +142,8 @@ export default function AdminDashboard() {
                           {statusMeta.label}
                         </span>
                       </td>
-                      <td className="px-3 sm:px-5 py-4 text-right">
-                        <div className="flex items-center justify-end gap-2 whitespace-nowrap">
+                      <td className="px-2 sm:px-5 py-4 text-right">
+                        <div className="flex items-center justify-end gap-1 sm:gap-2 whitespace-nowrap">
                           {game.status === "draft" && (
                             <Link
                               href={`/admin/games/${game.id}/edit`}
@@ -155,7 +157,7 @@ export default function AdminDashboard() {
                               href={`/admin/games/${game.id}/result`}
                               className="text-xs btn-brand py-1 px-2"
                             >
-                              Publish Result
+                              Publish<span className="hidden sm:inline"> Result</span>
                             </Link>
                           )}
                           {game.status === "result_published" && (
@@ -163,7 +165,7 @@ export default function AdminDashboard() {
                               href={`/research/${game.id}`}
                               className="text-xs btn-ghost py-1 px-2"
                             >
-                              View Archive
+                              <span className="hidden sm:inline">View </span>Archive
                             </Link>
                           )}
                           <Link
