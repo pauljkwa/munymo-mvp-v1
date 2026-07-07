@@ -411,7 +411,7 @@ async function closeAndScoreGame(
   const { playerPicks: playerPicksTable } = await import("../drizzle/schema.js");
   const { sql: drizzleSql, and: drizzleAnd, eq: drizzleEq, isNull, isNotNull } = await import("drizzle-orm");
   await db.update(playerPicksTable)
-    .set({ finalSelection: drizzleSql`gut_selection`, finalSubmittedAt: new Date() })
+    .set({ finalSelection: drizzleSql`${playerPicksTable.gutSelection}`, finalSubmittedAt: new Date() })
     .where(
       drizzleAnd(
         drizzleEq(playerPicksTable.gameId, gameId),
