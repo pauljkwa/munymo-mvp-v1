@@ -58,10 +58,29 @@ export function serveStatic(app: Express) {
     );
   }
 
-  app.use(express.static(distPath));
+  // index.html must always be revalidated — it references content-hashed
+  // asset filenames (e.g. index-C1S_GvlP.js) that change on every deploy.
+  // Without this, a browser can cache index.html and keep requesting a JS
+  // bundle filename that no longer exists after a later deploy replaces it,
+  // producing a blank page until the user manually clears their cache.
+  // Hashed assets themselves are safe to cache forever since a new build
+  // always gets a new filename.
+  app.use(
+    express.static(distPath, {
+      index: false,
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith(".html")) {
+          res.setHeader("Cache-Control", "no-cache");
+        } else {
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        }
+      },
+    })
+  );
 
-  // fall through to index.html if the file doesn't exist
+  // fall through to index.html if the file doesn't exist (client-side routing)
   app.use("*", (_req, res) => {
+    res.set("Cache-Control", "no-cache");
     res.sendFile(path.resolve(distPath, "index.html"));
   });
 }
