@@ -390,6 +390,10 @@ async function closeAndScoreGame(
     winner: "A" | "B";
     companyAPerf?: number;
     companyBPerf?: number;
+    companyAStartPrice?: number;
+    companyAEndPrice?: number;
+    companyBStartPrice?: number;
+    companyBEndPrice?: number;
     resultSummary?: string;
     hindsightSpotlight?: string;
     resultCommentary?: string;
@@ -464,6 +468,10 @@ async function closeAndScoreGame(
     winner: opts.winner,
     companyAPerf: opts.companyAPerf !== undefined ? String(opts.companyAPerf) : undefined,
     companyBPerf: opts.companyBPerf !== undefined ? String(opts.companyBPerf) : undefined,
+    companyAStartPrice: opts.companyAStartPrice !== undefined ? String(opts.companyAStartPrice) : undefined,
+    companyAEndPrice: opts.companyAEndPrice !== undefined ? String(opts.companyAEndPrice) : undefined,
+    companyBStartPrice: opts.companyBStartPrice !== undefined ? String(opts.companyBStartPrice) : undefined,
+    companyBEndPrice: opts.companyBEndPrice !== undefined ? String(opts.companyBEndPrice) : undefined,
     resultSummary: opts.resultSummary,
     hindsightSpotlight: opts.hindsightSpotlight,
     resultCommentary: opts.resultCommentary,
@@ -603,6 +611,10 @@ const adminRouter = router({
         winner: z.enum(["A", "B"]),
         companyAPerf: z.number().optional(),
         companyBPerf: z.number().optional(),
+        companyAStartPrice: z.number().optional(),
+        companyAEndPrice: z.number().optional(),
+        companyBStartPrice: z.number().optional(),
+        companyBEndPrice: z.number().optional(),
         resultSummary: z.string().optional(),
         hindsightSpotlight: z.string().optional(),
         resultCommentary: z.string().optional(),
@@ -616,6 +628,10 @@ const adminRouter = router({
         winner: input.winner,
         companyAPerf: input.companyAPerf,
         companyBPerf: input.companyBPerf,
+        companyAStartPrice: input.companyAStartPrice,
+        companyAEndPrice: input.companyAEndPrice,
+        companyBStartPrice: input.companyBStartPrice,
+        companyBEndPrice: input.companyBEndPrice,
         resultSummary: input.resultSummary,
         hindsightSpotlight: input.hindsightSpotlight,
         resultCommentary: input.resultCommentary,
@@ -730,6 +746,10 @@ const adminRouter = router({
         winner: z.enum(["A", "B"]).optional(),
         companyAPerf: z.number().optional(),
         companyBPerf: z.number().optional(),
+        companyAStartPrice: z.number().optional(),
+        companyAEndPrice: z.number().optional(),
+        companyBStartPrice: z.number().optional(),
+        companyBEndPrice: z.number().optional(),
         resultSummary: z.string().optional(),
         hindsightSpotlight: z.string().optional(),
         // ── Tomorrow's game ──
@@ -775,6 +795,10 @@ const adminRouter = router({
           winner,
           companyAPerf: input.companyAPerf,
           companyBPerf: input.companyBPerf,
+          companyAStartPrice: input.companyAStartPrice,
+          companyAEndPrice: input.companyAEndPrice,
+          companyBStartPrice: input.companyBStartPrice,
+          companyBEndPrice: input.companyBEndPrice,
           resultSummary: input.resultSummary,
           hindsightSpotlight: input.hindsightSpotlight,
         });

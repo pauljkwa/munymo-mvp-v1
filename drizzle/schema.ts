@@ -80,6 +80,10 @@ export const dailyGames = mysqlTable(
     winner: mysqlEnum("winner", ["A", "B"]), // null until result_published
     companyAPerf: decimal("companyAPerf", { precision: 7, scale: 3 }), // % change e.g. +2.450
     companyBPerf: decimal("companyBPerf", { precision: 7, scale: 3 }), // % change e.g. -1.230
+    companyAStartPrice: decimal("companyAStartPrice", { precision: 12, scale: 4 }), // $ price at session open
+    companyAEndPrice: decimal("companyAEndPrice", { precision: 12, scale: 4 }), // $ price at session close
+    companyBStartPrice: decimal("companyBStartPrice", { precision: 12, scale: 4 }),
+    companyBEndPrice: decimal("companyBEndPrice", { precision: 12, scale: 4 }),
     resultSummary: text("resultSummary"), // short paragraph summary of the matchup outcome
     hindsightSpotlight: text("hindsightSpotlight"), // educational debrief with 20/20 hindsight
     resultCommentary: text("resultCommentary"), // legacy field kept for compatibility

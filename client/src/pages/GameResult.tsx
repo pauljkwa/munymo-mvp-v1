@@ -122,7 +122,12 @@ export default function GameResult() {
         {(game.companyAPerf != null || game.companyBPerf != null) && (() => {
           const perfA = game.companyAPerf != null ? parseFloat(String(game.companyAPerf)) : null;
           const perfB = game.companyBPerf != null ? parseFloat(String(game.companyBPerf)) : null;
+          const startA = game.companyAStartPrice != null ? parseFloat(String(game.companyAStartPrice)) : null;
+          const endA = game.companyAEndPrice != null ? parseFloat(String(game.companyAEndPrice)) : null;
+          const startB = game.companyBStartPrice != null ? parseFloat(String(game.companyBStartPrice)) : null;
+          const endB = game.companyBEndPrice != null ? parseFloat(String(game.companyBEndPrice)) : null;
           const fmt = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`;
+          const fmtPrice = (v: number) => `$${v.toFixed(2)}`;
           const margin = perfA != null && perfB != null ? Math.abs(perfA - perfB) : null;
           return (
             <div className="card-glass p-5 mb-6 animate-fade-up delay-75">
@@ -134,6 +139,8 @@ export default function GameResult() {
                   const ticker = side === "A" ? game.companyATicker : game.companyBTicker;
                   const name = side === "A" ? game.companyAName : game.companyBName;
                   const perf = side === "A" ? perfA : perfB;
+                  const start = side === "A" ? startA : startB;
+                  const end = side === "A" ? endA : endB;
                   const isWinner = game.winner === side;
                   const perfColor = perf == null ? "var(--color-subtle)" : perf >= 0 ? "var(--color-success)" : "var(--color-danger)";
                   return (
@@ -156,6 +163,11 @@ export default function GameResult() {
                         {perf != null ? fmt(perf) : "—"}
                       </p>
                       <p className="text-[10px] mt-1" style={{ color: "var(--color-subtle)" }}>day's change</p>
+                      {start != null && end != null && (
+                        <p className="text-xs font-mono mt-2" style={{ color: "var(--color-muted)" }}>
+                          {fmtPrice(start)} → {fmtPrice(end)}
+                        </p>
+                      )}
                     </div>
                   );
                 })}

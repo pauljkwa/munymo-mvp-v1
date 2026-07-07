@@ -27,6 +27,10 @@ interface FormState {
   winner: "A" | "B" | "";
   companyAPerf: string;
   companyBPerf: string;
+  companyAStartPrice: string;
+  companyAEndPrice: string;
+  companyBStartPrice: string;
+  companyBEndPrice: string;
   resultSummary: string;
   hindsightSpotlight: string;
   // Tomorrow's game
@@ -60,6 +64,10 @@ const defaultForm: FormState = {
   winner: "",
   companyAPerf: "",
   companyBPerf: "",
+  companyAStartPrice: "",
+  companyAEndPrice: "",
+  companyBStartPrice: "",
+  companyBEndPrice: "",
   resultSummary: "",
   hindsightSpotlight: "",
   nextGameDate: "",
@@ -143,6 +151,10 @@ function parseJsonImport(raw: string): Partial<FormState> | null {
       winner: (String(td("winner") ?? "") as "A" | "B" | ""),
       companyAPerf: td("companyAPerf") !== undefined ? String(td("companyAPerf")) : "",
       companyBPerf: td("companyBPerf") !== undefined ? String(td("companyBPerf")) : "",
+      companyAStartPrice: td("companyAStartPrice") !== undefined ? String(td("companyAStartPrice")) : "",
+      companyAEndPrice: td("companyAEndPrice") !== undefined ? String(td("companyAEndPrice")) : "",
+      companyBStartPrice: td("companyBStartPrice") !== undefined ? String(td("companyBStartPrice")) : "",
+      companyBEndPrice: td("companyBEndPrice") !== undefined ? String(td("companyBEndPrice")) : "",
       resultSummary: String(td("resultSummary") ?? ""),
       hindsightSpotlight: String(td("hindsightSpotlight") ?? ""),
       // Tomorrow section
@@ -294,6 +306,10 @@ export default function AdminEndOfDay() {
         winner: form.winner as "A" | "B",
         companyAPerf: parseFloat(form.companyAPerf) || 0,
         companyBPerf: parseFloat(form.companyBPerf) || 0,
+        companyAStartPrice: form.companyAStartPrice ? parseFloat(form.companyAStartPrice) : undefined,
+        companyAEndPrice: form.companyAEndPrice ? parseFloat(form.companyAEndPrice) : undefined,
+        companyBStartPrice: form.companyBStartPrice ? parseFloat(form.companyBStartPrice) : undefined,
+        companyBEndPrice: form.companyBEndPrice ? parseFloat(form.companyBEndPrice) : undefined,
         resultSummary: form.resultSummary,
         hindsightSpotlight: form.hindsightSpotlight,
       } : {}),
@@ -449,6 +465,52 @@ export default function AdminEndOfDay() {
                   placeholder="-1.23"
                   value={form.companyBPerf}
                   onChange={(e) => set("companyBPerf", e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Actual $ prices */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Company A Start Price</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="182.14"
+                  value={form.companyAStartPrice}
+                  onChange={(e) => set("companyAStartPrice", e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Company A End Price</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="186.60"
+                  value={form.companyAEndPrice}
+                  onChange={(e) => set("companyAEndPrice", e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Company B Start Price</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="412.90"
+                  value={form.companyBStartPrice}
+                  onChange={(e) => set("companyBStartPrice", e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Company B End Price</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="407.83"
+                  value={form.companyBEndPrice}
+                  onChange={(e) => set("companyBEndPrice", e.target.value)}
                 />
               </div>
             </div>

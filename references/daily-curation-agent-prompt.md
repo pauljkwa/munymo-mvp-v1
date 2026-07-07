@@ -45,6 +45,8 @@ Record:
 - `winnerTicker` — the winning company's ticker symbol
 - `companyAPerf` — Company A's % price change today (e.g. 2.34 for +2.34%)
 - `companyBPerf` — Company B's % price change today (e.g. -1.12 for -1.12%)
+- `companyAStartPrice` / `companyAEndPrice` — Company A's actual $ price at today's session open and close
+- `companyBStartPrice` / `companyBEndPrice` — Company B's actual $ price at today's session open and close
 - `resultSummary` — 2–3 sentence explanation of why the winner won today (use real data: earnings, news, sector moves)
 - `hindsightSpotlight` — 3–5 paragraph educational debrief. Include: what drove the result, what the research said vs what happened, analyst consensus at close, key lesson for investors, and what to watch going forward
 
@@ -169,6 +171,10 @@ The JSON structure to POST:
     "gameId": null,
     "companyAPerf": <number>,
     "companyBPerf": <number>,
+    "companyAStartPrice": <number>,
+    "companyAEndPrice": <number>,
+    "companyBStartPrice": <number>,
+    "companyBEndPrice": <number>,
     "winnerTicker": "<TICKER>",
     "winningMargin": <companyAPerf minus companyBPerf, absolute value>,
     "crowdVotePctA": null,

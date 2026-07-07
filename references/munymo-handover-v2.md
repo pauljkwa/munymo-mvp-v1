@@ -123,7 +123,7 @@ The handover from the previous session said "all phases 1–24 are functionally 
 | Resend DNS records (Cloudflare SPF/DKIM/DMARC) | **Pending** — action required from Paul |
 | `researchSummary` beginner research field | **Complete** — DB column added (migration 0010), wired through `server/db.ts`, `server/routers.ts`, shown by default on `/game` with toggle to full analysis (commit bf9d804) |
 | Yesterday's result CTA on /game | **Complete** — full result card with % change, winner trophy, CTA (commit 31bb3ee) |
-| Price movement panel on /game/:id/result | **Complete** — two-column card showing both companies' % day change (commit 31bb3ee) |
+| Price movement panel on /game/:id/result | **Complete** — two-column card showing both companies' % day change (commit 31bb3ee); actual $ start→finish prices added 2026-07-07 (migration 0012, `companyA/BStartPrice`/`EndPrice` on `daily_games`) — shown when present, curation agent now captures them, historical games without this data just show % change |
 | Daily curation agent freshness enforcement | **Complete** — prompt rewritten with mandatory self-check, news-first rule, retry-on-422 enforcement (commit 27fad3a) |
 | Railway pre-deploy migration pipeline | **Complete** — `npx drizzle-kit migrate` only; migration files committed to repo; idempotent SQL (commits a8fb449, a40450f) |
 | Tester agent (synthetic players) | **Complete** — 6 accounts (IDs 870002–870012), `node-cron` inside server at 6:00 PM `America/New_York` Mon–Fri (DST-safe, after curation), endpoint at `/api/scheduled/tester-picks` (commit ed89d50) |
@@ -167,7 +167,7 @@ The remote is named `github`. The Manus internal remote is `origin`. Never push 
 
 ## 6. Full Database Schema
 
-Schema lives in `drizzle/schema.ts`. Migrations are in `drizzle/`. Twelve migrations have been applied (0000–0011). Run `pnpm db:push` to apply schema changes.
+Schema lives in `drizzle/schema.ts`. Migrations are in `drizzle/`. Thirteen migrations have been applied (0000–0012). Run `pnpm db:push` to apply schema changes.
 
 ### `users`
 Players and admins.
@@ -1030,7 +1030,7 @@ Before making any change to `drizzle/schema.ts`:
 3. Only use `pnpm db:push` to **add** new columns or tables — never to drop or rename existing ones without a documented migration plan
 4. Never change `DATABASE_URL` or `MUNYMO_DATABASE_URL`
 
-The live database contains real player data. Twelve migrations (0000–0011) have been applied. Any destructive schema change is irreversible without a backup restore.
+The live database contains real player data. Thirteen migrations (0000–0012) have been applied. Any destructive schema change is irreversible without a backup restore.
 
 ---
 

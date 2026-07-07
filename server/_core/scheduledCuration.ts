@@ -215,6 +215,10 @@ async function dailyCurationHandler(req: Request, res: Response) {
       winner,
       companyAPerf: today?.companyAPerf,
       companyBPerf: today?.companyBPerf,
+      companyAStartPrice: today?.companyAStartPrice,
+      companyAEndPrice: today?.companyAEndPrice,
+      companyBStartPrice: today?.companyBStartPrice,
+      companyBEndPrice: today?.companyBEndPrice,
       resultSummary: today?.resultSummary,
       hindsightSpotlight: today?.hindsightSpotlight,
       nextGameDate: tomorrow.gameDate,
@@ -289,6 +293,10 @@ interface CurationPayload {
     gameId?: number | null;
     companyAPerf?: number;
     companyBPerf?: number;
+    companyAStartPrice?: number;
+    companyAEndPrice?: number;
+    companyBStartPrice?: number;
+    companyBEndPrice?: number;
     winnerTicker?: string;
     winningMargin?: number;
     crowdVotePctA?: null;
