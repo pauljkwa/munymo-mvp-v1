@@ -63,20 +63,30 @@ export function serveStatic(app: Express) {
   // Without this, a browser can cache index.html and keep requesting a JS
   // bundle filename that no longer exists after a later deploy replaces it,
   // producing a blank page until the user manually clears their cache.
-  // Hashed assets themselves are safe to cache forever since a new build
-  // always gets a new filename.
+  // Only /assets/* is content-hashed and safe to cache forever; stable-named
+  // files (sw.js, favicon.png, apple-touch-icon.png) keep the same filename
+  // across deploys, so they must revalidate too or an update would strand
+  // clients on the old copy for up to a year.
   app.use(
     express.static(distPath, {
       index: false,
       setHeaders: (res, filePath) => {
-        if (filePath.endsWith(".html")) {
-          res.setHeader("Cache-Control", "no-cache");
-        } else {
+        if (filePath.includes(`${path.sep}assets${path.sep}`)) {
           res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        } else {
+          res.setHeader("Cache-Control", "no-cache");
         }
       },
     })
   );
+
+  // A hashed asset that isn't on disk no longer exists in this build — return
+  // a real 404 so a stale client logs a clear failed request, instead of the
+  // SPA fallback answering with index.html (HTML where a JS module was
+  // expected — the source of cryptic blank-page MIME errors).
+  app.use("/assets", (_req, res) => {
+    res.status(404).end();
+  });
 
   // fall through to index.html if the file doesn't exist (client-side routing)
   app.use("*", (_req, res) => {
