@@ -224,7 +224,7 @@ export async function runDailyCuration(): Promise<void> {
   }
 
   const startTime = Date.now();
-  const client = new Anthropic({ apiKey: ENV.anthropicApiKey, timeout: 15 * 60 * 1000 });
+  const client = new Anthropic({ apiKey: ENV.anthropicApiKey, timeout: 25 * 60 * 1000 });
 
   try {
     const recentGames = await fetchRecentGames();
