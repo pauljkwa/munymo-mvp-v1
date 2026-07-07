@@ -558,70 +558,6 @@ export default function DailyGame() {
           })}
         </div>
 
-        {/* Yesterday's result card */}
-        {previousGame && (() => {
-          const perfA = previousGame.companyAPerf != null ? parseFloat(String(previousGame.companyAPerf)) : null;
-          const perfB = previousGame.companyBPerf != null ? parseFloat(String(previousGame.companyBPerf)) : null;
-          const fmt = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`;
-          const winnerTicker = previousGame.winner === "A" ? previousGame.companyATicker : previousGame.companyBTicker;
-          return (
-            <a
-              href={`/game/${previousGame.id}/result`}
-              className="block mb-6 animate-fade-up"
-              style={{ textDecoration: "none" }}
-            >
-              <div
-                className="card-glass p-4 transition-all hover:shadow-md"
-                style={{ borderColor: "var(--color-border)" }}
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-subtle)" }}>
-                    Yesterday's Result
-                  </p>
-                  <span className="text-xs font-semibold" style={{ color: "var(--color-brand)" }}>
-                    View full result →
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  {(["A", "B"] as const).map((side) => {
-                    const ticker = side === "A" ? previousGame.companyATicker : previousGame.companyBTicker;
-                    const perf = side === "A" ? perfA : perfB;
-                    const isWinner = previousGame.winner === side;
-                    const perfColor = perf == null ? "var(--color-subtle)" : perf >= 0 ? "var(--color-success)" : "var(--color-danger)";
-                    return (
-                      <div
-                        key={side}
-                        className="rounded-xl p-3 flex items-center justify-between gap-2"
-                        style={{
-                          background: isWinner ? "var(--color-brand)10" : "var(--color-surface-raised)",
-                          border: `1px solid ${isWinner ? "var(--color-brand)40" : "var(--color-border)"}`,
-                        }}
-                      >
-                        <div className="flex items-center gap-2">
-                          {isWinner && <Trophy size={12} style={{ color: "var(--color-brand)", flexShrink: 0 }} />}
-                          <span className="text-sm font-bold" style={{ color: isWinner ? "var(--color-brand)" : "var(--color-foreground)" }}>
-                            {ticker}
-                          </span>
-                        </div>
-                        {perf != null && (
-                          <span className="text-sm font-bold font-mono" style={{ color: perfColor }}>
-                            {fmt(perf)}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-                {winnerTicker && (
-                  <p className="text-xs mt-2 text-center" style={{ color: "var(--color-muted)" }}>
-                    <span style={{ color: "var(--color-brand)", fontWeight: 600 }}>{winnerTicker}</span> outperformed
-                  </p>
-                )}
-              </div>
-            </a>
-          );
-        })()}
-
         {/* ── Step: Gut ── */}
         {step === "gut" && !isLocked && (
           <div className="card-glass p-6 animate-scale-in">
@@ -1126,6 +1062,70 @@ export default function DailyGame() {
             )}
           </div>
         )}
+
+        {/* Yesterday's result card — shown after today's game elements, not between them */}
+        {previousGame && (() => {
+          const perfA = previousGame.companyAPerf != null ? parseFloat(String(previousGame.companyAPerf)) : null;
+          const perfB = previousGame.companyBPerf != null ? parseFloat(String(previousGame.companyBPerf)) : null;
+          const fmt = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`;
+          const winnerTicker = previousGame.winner === "A" ? previousGame.companyATicker : previousGame.companyBTicker;
+          return (
+            <a
+              href={`/game/${previousGame.id}/result`}
+              className="block mt-6 animate-fade-up"
+              style={{ textDecoration: "none" }}
+            >
+              <div
+                className="card-glass p-4 transition-all hover:shadow-md"
+                style={{ borderColor: "var(--color-border)" }}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-subtle)" }}>
+                    Yesterday's Result
+                  </p>
+                  <span className="text-xs font-semibold" style={{ color: "var(--color-brand)" }}>
+                    View full result →
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {(["A", "B"] as const).map((side) => {
+                    const ticker = side === "A" ? previousGame.companyATicker : previousGame.companyBTicker;
+                    const perf = side === "A" ? perfA : perfB;
+                    const isWinner = previousGame.winner === side;
+                    const perfColor = perf == null ? "var(--color-subtle)" : perf >= 0 ? "var(--color-success)" : "var(--color-danger)";
+                    return (
+                      <div
+                        key={side}
+                        className="rounded-xl p-3 flex items-center justify-between gap-2"
+                        style={{
+                          background: isWinner ? "var(--color-brand)10" : "var(--color-surface-raised)",
+                          border: `1px solid ${isWinner ? "var(--color-brand)40" : "var(--color-border)"}`,
+                        }}
+                      >
+                        <div className="flex items-center gap-2">
+                          {isWinner && <Trophy size={12} style={{ color: "var(--color-brand)", flexShrink: 0 }} />}
+                          <span className="text-sm font-bold" style={{ color: isWinner ? "var(--color-brand)" : "var(--color-foreground)" }}>
+                            {ticker}
+                          </span>
+                        </div>
+                        {perf != null && (
+                          <span className="text-sm font-bold font-mono" style={{ color: perfColor }}>
+                            {fmt(perf)}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                {winnerTicker && (
+                  <p className="text-xs mt-2 text-center" style={{ color: "var(--color-muted)" }}>
+                    <span style={{ color: "var(--color-brand)", fontWeight: 600 }}>{winnerTicker}</span> outperformed
+                  </p>
+                )}
+              </div>
+            </a>
+          );
+        })()}
       </div>
 
       {/* Floating Lockout Countdown Footer */}
