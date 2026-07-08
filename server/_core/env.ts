@@ -14,4 +14,7 @@ export const ENV = {
   anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
   curationBaseUrl: process.env.CURATION_BASE_URL || "https://munymo.com",
   ownerAlertEmail: process.env.OWNER_ALERT_EMAIL ?? "",
+  // Paul created the Railway variable as TWELVE_DATA_SECRET_KEY; accept the
+  // conventional name too in case it's ever renamed.
+  twelveDataApiKey: process.env.TWELVE_DATA_SECRET_KEY || process.env.TWELVE_DATA_API_KEY || "",
 };

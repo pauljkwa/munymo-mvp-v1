@@ -332,12 +332,13 @@ const streaksRouter = router({
 });
 
 // ─── Stock Chart Proxy ───────────────────────────────────────────────────────
-// Fetches OHLCV candlestick data from Yahoo Finance server-side to avoid CORS.
-// Tried on both Yahoo query hosts with a real browser identity — Yahoo
-// intermittently refuses bare/bot-looking connections from datacenter egress
-// IPs like Railway's. (Stooq was evaluated as a fallback source and rejected:
-// its CSV endpoint now sits behind a JavaScript proof-of-work challenge, so
-// server-side fetches get HTML, never data.)
+// Fetches OHLCV candlestick data server-side to avoid CORS. Yahoo Finance is
+// tried first on both its query hosts with a real browser identity, but Yahoo
+// hard-blocks datacenter egress IPs like Railway's, so Twelve Data (keyed via
+// TWELVE_DATA_SECRET_KEY) is the fallback that actually serves production.
+// (Stooq was evaluated as a keyless fallback and rejected: its CSV endpoint
+// sits behind a JavaScript proof-of-work challenge, so server-side fetches get
+// HTML, never data.)
 const BROWSER_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
@@ -365,7 +366,13 @@ async function fetchYahooOHLCV(
     }
   }
   if (!res) {
-    throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+    try {
+      return await fetchTwelveDataOHLCV(ticker, range, interval);
+    } catch (tdErr) {
+      const yahooMsg = lastErr instanceof Error ? lastErr.message : String(lastErr);
+      const tdMsg = tdErr instanceof Error ? tdErr.message : String(tdErr);
+      throw new Error(`Yahoo: ${yahooMsg}; Twelve Data: ${tdMsg}`);
+    }
   }
   const json = (await res.json()) as {
     chart: {
@@ -400,6 +407,57 @@ async function fetchYahooOHLCV(
     }))
     .filter((c) => c.open !== null && c.close !== null);
   return { candles, meta: result.meta };
+}
+
+// Twelve Data fallback — keyed API, friendly to datacenter IPs. Free tier is
+// 800 credits/day (1 per call); the client caches responses for 5 minutes.
+async function fetchTwelveDataOHLCV(
+  ticker: string,
+  range: string, // "1d" | "5d" | "1mo" | "3mo" | "6mo" | "1y"
+  interval: string // "5m" | "1h" | "1d" | "1wk"
+) {
+  if (!ENV.twelveDataApiKey) {
+    throw new Error("TWELVE_DATA_SECRET_KEY not configured");
+  }
+  const intervalMap: Record<string, string> = { "5m": "5min", "1h": "1h", "1d": "1day", "1wk": "1week" };
+  // Bars to request per range at its resolution (one session ≈ 78 five-minute
+  // bars; 5d ≈ 35 hourly; the rest are daily/weekly counts + 1 for headroom)
+  const sizeMap: Record<string, number> = { "1d": 78, "5d": 35, "1mo": 23, "3mo": 66, "6mo": 27, "1y": 53 };
+  const tdInterval = intervalMap[interval] ?? "1day";
+  const outputsize = sizeMap[range] ?? 66;
+  const url =
+    `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(ticker)}` +
+    `&interval=${tdInterval}&outputsize=${outputsize}&timezone=UTC&order=ASC` +
+    `&apikey=${encodeURIComponent(ENV.twelveDataApiKey)}`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+  if (!res.ok) throw new Error(`Twelve Data returned ${res.status}`);
+  const json = (await res.json()) as {
+    status?: string;
+    message?: string;
+    meta?: { currency?: string };
+    values?: Array<{ datetime: string; open: string; high: string; low: string; close: string; volume?: string }>;
+  };
+  if (json.status === "error" || !Array.isArray(json.values) || json.values.length === 0) {
+    throw new Error(json.message ?? `no data for ${ticker}`);
+  }
+  const candles = json.values
+    .map((v) => ({
+      // Intraday datetimes are "YYYY-MM-DD HH:mm:ss" (UTC, per &timezone=UTC);
+      // daily/weekly are bare "YYYY-MM-DD"
+      time: Math.floor(
+        Date.parse(v.datetime.includes(" ") ? `${v.datetime.replace(" ", "T")}Z` : `${v.datetime}T00:00:00Z`) / 1000
+      ),
+      open: parseFloat(v.open),
+      high: parseFloat(v.high),
+      low: parseFloat(v.low),
+      close: parseFloat(v.close),
+      volume: v.volume != null ? parseFloat(v.volume) : null,
+    }))
+    .filter((c) => Number.isFinite(c.time) && Number.isFinite(c.open) && Number.isFinite(c.close))
+    .sort((a, b) => a.time - b.time); // lightweight-charts requires ascending time
+  if (candles.length === 0) throw new Error(`no usable rows for ${ticker}`);
+  const lastClose = candles[candles.length - 1].close;
+  return { candles, meta: { currency: json.meta?.currency ?? "USD", regularMarketPrice: lastClose } };
 }
 
 // ─── Shared close-game logic (T5) ─────────────────────────────────────────────
