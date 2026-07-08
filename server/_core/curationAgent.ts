@@ -154,7 +154,13 @@ async function research(
   const tools = [{ type: "web_search_20260209", name: "web_search", max_uses: 15 }] as unknown as Anthropic.ToolUnion[];
 
   for (let i = 0; i < MAX_PAUSE_TURNS; i++) {
-    const response = await client.messages.create({
+    // Stream instead of awaiting one long-lived response. Non-streaming
+    // requests get severed at ~15 minutes by a layer outside our control
+    // regardless of the client timeout (observed two nights running,
+    // 2026-07-07/08: "Request timed out" at ~904s even with a 25-minute
+    // client timeout configured). Streaming keeps bytes flowing for the
+    // whole research turn, so nothing sees an idle connection to kill.
+    const stream = client.messages.stream({
       model: MODEL,
       max_tokens: MAX_OUTPUT_TOKENS,
       thinking: { type: "adaptive" },
@@ -162,6 +168,7 @@ async function research(
       tools,
       messages,
     });
+    const response = await stream.finalMessage();
     messages.push({ role: "assistant", content: response.content });
     if (response.stop_reason === "pause_turn") continue;
     return response;
