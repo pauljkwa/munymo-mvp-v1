@@ -71,6 +71,8 @@ If there is no prior game (first game ever) or no questionType history, pick any
 
 ## Dates
 - gameDate: the next valid US trading day (YYYY-MM-DD). Skip weekends and US market holidays.
+- If this run happens BEFORE the US market opens on a trading day (e.g. a manual recovery run in the US morning), the next valid trading day is TODAY — do NOT skip to tomorrow. The game you create locks at today's 9:30 AM ET open.
+- If the earliest active/locked game's gameDate is today-but-pre-close or in the future, its session has NOT concluded and there is no result to report: set "today": null and "marketClosed": true. Never report a result for a game whose trading day hasn't finished.
 - lockoutAt: gameDate at 13:30:00 UTC during US DST (2nd Sun Mar – 1st Sun Nov) or 14:30:00 UTC otherwise (both = 9:30 AM ET, NASDAQ open). Full ISO 8601, e.g. 2026-07-07T13:30:00.000Z.
 - If today was a US market holiday (markets closed), set "today": null and "marketClosed": true, and only create the next game.
 

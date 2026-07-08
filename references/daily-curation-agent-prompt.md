@@ -137,6 +137,8 @@ Whichever type you choose, the question must:
 ## Step 6 — Set Tomorrow's Game Date and Lockout Time
 
 - `gameDate`: the **next valid US trading day** in `YYYY-MM-DD` format. You must check the US market holiday calendar. If tomorrow is a weekend or a scheduled holiday, advance the date until you reach an open trading day.
+- If this run happens **before the US market opens on a trading day** (e.g. a manual recovery run in the US morning), the next valid trading day is **TODAY** — do not skip to tomorrow. The game locks at today's 9:30 AM ET open.
+- If the earliest active/locked game's `gameDate` session has **not concluded** (today pre-close, or a future date), there is no result to report: set `"today": null` and `"marketClosed": true`. Never report a result for a game whose trading day hasn't finished.
 - `lockoutAt`: on the `gameDate` at **13:30:00 UTC** during DST (Mar–Nov, UTC−4), or **14:30:00 UTC** outside DST (Nov–Mar, UTC−5) — both equal 9:30 AM US Eastern time (NASDAQ market open)
 
 US Daylight Saving Time is in effect from the second Sunday in March to the first Sunday in November. During DST, US Eastern time is UTC−4, so 9:30 AM ET = `13:30:00 UTC`. Outside DST (winter), US Eastern is UTC−5, so 9:30 AM ET = `14:30:00 UTC`.

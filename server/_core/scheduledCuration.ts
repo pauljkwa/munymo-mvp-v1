@@ -101,7 +101,7 @@ async function dailyCurationHandler(req: Request, res: Response) {
 
     const { getDb } = await import("../db");
     const { dailyGames } = await import("../../drizzle/schema.js");
-    const { desc, gte, or, eq, and, asc } = await import("drizzle-orm");
+    const { desc, gte, lte, ne, or, eq, and, asc } = await import("drizzle-orm");
     const db = await getDb();
     if (!db) return res.status(500).json({ error: "Database unavailable" });
 
@@ -161,6 +161,7 @@ async function dailyCurationHandler(req: Request, res: Response) {
 
     // ── 3. Determine active game to close ──
     // Skip closing if the market was closed today (holiday) or no winner data provided.
+    const todayUtc = new Date().toISOString().slice(0, 10);
     let closeGameId: number | undefined;
     if (!marketClosed && today && today.winnerTicker) {
       // Find the active/locked game to close — the EARLIEST-dated one, i.e. the
@@ -168,13 +169,41 @@ async function dailyCurationHandler(req: Request, res: Response) {
       // the latest (a future, not-yet-played) game instead if more than one
       // active/locked game ever exists at once — which is exactly how games
       // piled up unresolved in the past (see references/munymo-handover-v2.md).
+      // The lte(gameDate, today) guard excludes future-dated games whose session
+      // hasn't happened yet — closing one of those would record a result from
+      // the wrong trading day (2026-07-07 incident: a pre-open recovery run
+      // created tomorrow's game, and that night's cron had only that future
+      // game to "close").
       const activeGame = await db
         .select({ id: dailyGames.id, companyATicker: dailyGames.companyATicker, companyBTicker: dailyGames.companyBTicker })
         .from(dailyGames)
-        .where(or(eq(dailyGames.status, "active"), eq(dailyGames.status, "locked")))
+        .where(
+          and(
+            or(eq(dailyGames.status, "active"), eq(dailyGames.status, "locked")),
+            lte(dailyGames.gameDate, todayUtc)
+          )
+        )
         .orderBy(asc(dailyGames.gameDate))
         .limit(1);
       if (activeGame[0]) closeGameId = activeGame[0].id;
+    }
+
+    // ── 3b. No-op guard ──
+    // Nothing to close AND the next game already exists → this run has no work
+    // (e.g. the nightly cron fired while the only active game's trading day is
+    // still in the future). Succeed quietly instead of failing with a CONFLICT
+    // from endOfDay's duplicate-game guard and emailing a false alarm.
+    if (!closeGameId) {
+      const [existingNext] = await db
+        .select({ id: dailyGames.id, status: dailyGames.status })
+        .from(dailyGames)
+        .where(and(eq(dailyGames.gameDate, tomorrow.gameDate), ne(dailyGames.status, "cancelled")))
+        .limit(1);
+      if (existingNext) {
+        const msg = `Nothing to close and a game already exists for ${tomorrow.gameDate} (id ${existingNext.id}, ${existingNext.status}) — no-op.`;
+        console.log("[daily-curation]", msg);
+        return res.json({ ok: true, skipped: true, reason: msg });
+      }
     }
 
     // ── 4. Determine winner ──

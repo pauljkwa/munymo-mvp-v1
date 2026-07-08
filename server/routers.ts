@@ -332,17 +332,41 @@ const streaksRouter = router({
 });
 
 // ─── Stock Chart Proxy ───────────────────────────────────────────────────────
-// Fetches OHLCV candlestick data from Yahoo Finance server-side to avoid CORS
+// Fetches OHLCV candlestick data from Yahoo Finance server-side to avoid CORS.
+// Tried on both Yahoo query hosts with a real browser identity — Yahoo
+// intermittently refuses bare/bot-looking connections from datacenter egress
+// IPs like Railway's. (Stooq was evaluated as a fallback source and rejected:
+// its CSV endpoint now sits behind a JavaScript proof-of-work challenge, so
+// server-side fetches get HTML, never data.)
+const BROWSER_UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
+
 async function fetchYahooOHLCV(
   ticker: string,
   range: string, // "1d" | "5d" | "1mo" | "3mo" | "6mo" | "1y"
-  interval: string // "5m" | "1h" | "1d"
+  interval: string // "5m" | "1h" | "1d" | "1wk"
 ) {
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=${range}&interval=${interval}&includePrePost=false`;
-  const res = await fetch(url, {
-    headers: { "User-Agent": "Mozilla/5.0" },
-  });
-  if (!res.ok) throw new Error(`Yahoo Finance returned ${res.status}`);
+  const hosts = ["query1.finance.yahoo.com", "query2.finance.yahoo.com"];
+  let res: Response | null = null;
+  let lastErr: unknown = null;
+  for (const host of hosts) {
+    const url = `https://${host}/v8/finance/chart/${encodeURIComponent(ticker)}?range=${range}&interval=${interval}&includePrePost=false`;
+    try {
+      res = await fetch(url, {
+        headers: { "User-Agent": BROWSER_UA, Accept: "application/json" },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (res.ok) break;
+      lastErr = new Error(`Yahoo Finance (${host}) returned ${res.status}`);
+      res = null;
+    } catch (err) {
+      lastErr = err;
+      res = null;
+    }
+  }
+  if (!res) {
+    throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+  }
   const json = (await res.json()) as {
     chart: {
       result: Array<{
