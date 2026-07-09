@@ -1,4 +1,5 @@
 import { trpc } from "@/lib/trpc";
+import { withReferralParams } from "@/lib/utils";
 import { useParams } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
 import { Link } from "wouter";
@@ -115,9 +116,12 @@ export default function ArchiveGame() {
                 </p>
                 {game.sourceUrl && (
                   <a
-                    href={game.sourceUrl}
+                    href={withReferralParams(game.sourceUrl)}
                     target="_blank"
-                    rel="noopener noreferrer"
+                    // Only "noopener" — deliberately NOT "noreferrer": we WANT
+                    // the publisher to see munymo.com as the referrer so our
+                    // outbound traffic shows up in their analytics.
+                    rel="noopener"
                     className="inline-flex items-center gap-1 text-xs mt-2 hover:underline"
                     style={{ color: "var(--color-subtle)" }}
                   >
