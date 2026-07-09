@@ -436,6 +436,31 @@ export const referralEvents = mysqlTable("referral_events", {
 export type ReferralEvent = typeof referralEvents.$inferSelect;
 export type InsertReferralEvent = typeof referralEvents.$inferInsert;
 
+// ─── Outbound Article Clicks ────────────────────────────────────────────────────
+
+/**
+ * One row per click on a daily-matchup source-article link. Powers the
+ * "how much traffic are we sending publishers" reporting used to prove the
+ * outbound-referral / guerrilla-marketing strategy (see the game source links
+ * in DailyGame.tsx / ArchiveGame.tsx). Every column except id/createdAt is
+ * nullable so a click is never lost to a missing field.
+ */
+export const outboundClicks = mysqlTable("outbound_clicks", {
+  id: int("id").autoincrement().primaryKey(),
+  // Which game's source article was clicked (null if unknown)
+  gameId: int("gameId"),
+  // The logged-in user who clicked, or null for anonymous/logged-out visitors
+  userId: int("userId"),
+  // Denormalised publisher name (e.g. "Reuters") for easy aggregation
+  publisher: varchar("publisher", { length: 128 }),
+  // The article URL that was opened
+  sourceUrl: text("sourceUrl"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type OutboundClick = typeof outboundClicks.$inferSelect;
+export type InsertOutboundClick = typeof outboundClicks.$inferInsert;
+
 // ─── Admin Audit Log ──────────────────────────────────────────────────────────
 
 export const adminAuditLog = mysqlTable("admin_audit_log", {

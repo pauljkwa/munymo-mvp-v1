@@ -10,6 +10,7 @@ import {
   AlertCircle,
   ArrowRight,
   RotateCcw,
+  ExternalLink,
 } from "lucide-react";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
@@ -23,6 +24,7 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
 export default function AdminDashboard() {
   const { user } = useAuth();
   const { data: games, isLoading } = trpc.admin.listAllGames.useQuery({ limit: 20, offset: 0 });
+  const { data: clickStats } = trpc.admin.outboundClickStats.useQuery();
 
   const resetMyPick = trpc.admin.resetPlayerPick.useMutation({
     onSuccess: () => toast.success("Your pick has been reset — you can replay the game."),
@@ -54,6 +56,38 @@ export default function AdminDashboard() {
             </Link>
           </div>
         </div>
+
+        {/* Article referral traffic */}
+        {clickStats && clickStats.total > 0 && (
+          <div className="card-glass p-4 mb-6">
+            <div className="flex items-center gap-2 mb-3">
+              <ExternalLink size={15} style={{ color: "var(--color-brand)" }} />
+              <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-subtle)" }}>
+                Article referral traffic
+              </span>
+            </div>
+            <div className="flex items-baseline gap-2 mb-3">
+              <span className="font-display text-2xl tabular-nums" style={{ color: "var(--color-foreground)" }}>
+                {clickStats.total.toLocaleString()}
+              </span>
+              <span className="text-sm" style={{ color: "var(--color-muted)" }}>
+                clicks sent to publishers
+              </span>
+            </div>
+            {clickStats.byPublisher.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                {clickStats.byPublisher.slice(0, 6).map((p) => (
+                  <div key={p.publisher} className="flex items-center justify-between text-sm">
+                    <span style={{ color: "var(--color-muted)" }}>{p.publisher}</span>
+                    <span className="tabular-nums font-medium" style={{ color: "var(--color-foreground)" }}>
+                      {p.clicks.toLocaleString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Testing Tools */}
         {activeGame && user && (

@@ -9,10 +9,12 @@ import {
   gameResearch,
   leaderboardStats,
   metricExplanations,
+  outboundClicks,
   playerPicks,
   streakRecords,
   users,
   validationQuestions,
+  type InsertOutboundClick,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -588,6 +590,54 @@ export async function countPublishedGameDaysBetween(
       )
     );
   return Number(result[0]?.count ?? 0);
+}
+
+// ─── Outbound Article Clicks ────────────────────────────────────────────────────
+
+/**
+ * Records one outbound source-article click. Fire-and-forget: if the DB is
+ * unavailable we silently skip rather than break the user's click-through.
+ */
+export async function recordOutboundClick(
+  data: Omit<InsertOutboundClick, "id" | "createdAt">
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(outboundClicks).values(data);
+}
+
+/**
+ * Aggregate outbound-click stats for the admin dashboard: overall total plus a
+ * per-publisher breakdown (highest first) — the numbers you'd take to a
+ * publisher to show how much traffic Munymo has sent them.
+ */
+export async function getOutboundClickStats(): Promise<{
+  total: number;
+  byPublisher: Array<{ publisher: string; clicks: number }>;
+}> {
+  const db = await getDb();
+  if (!db) return { total: 0, byPublisher: [] };
+
+  const totalRes = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(outboundClicks);
+  const total = Number(totalRes[0]?.count ?? 0);
+
+  const rows = await db
+    .select({
+      publisher: outboundClicks.publisher,
+      clicks: sql<number>`count(*)`,
+    })
+    .from(outboundClicks)
+    .groupBy(outboundClicks.publisher)
+    .orderBy(desc(sql`count(*)`));
+
+  const byPublisher = rows.map((r) => ({
+    publisher: r.publisher ?? "Unknown",
+    clicks: Number(r.clicks),
+  }));
+
+  return { total, byPublisher };
 }
 
 // ─── Community Stats ──────────────────────────────────────────────────────────

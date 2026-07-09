@@ -58,6 +58,8 @@ import {
   upsertMetricExplanation,
   isKnownMetricLabel,
   countPublishedGameDaysBetween,
+  recordOutboundClick,
+  getOutboundClickStats,
 } from "./db";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -171,6 +173,27 @@ const gamesRouter = router({
       if (!game || game.status !== "result_published") return null;
       const stats = await getCommunityStats(input.gameId);
       return stats ?? null;
+    }),
+
+  // Fire-and-forget analytics: records a click on a daily-matchup source-article
+  // link so we can report how much traffic Munymo sends publishers. Public so
+  // logged-out visitors count too; attributes to ctx.user when signed in.
+  recordOutboundClick: publicProcedure
+    .input(
+      z.object({
+        gameId: z.number().optional(),
+        publisher: z.string().max(128).optional(),
+        sourceUrl: z.string().max(2048).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await recordOutboundClick({
+        gameId: input.gameId ?? null,
+        userId: ctx.user?.id ?? null,
+        publisher: input.publisher ?? null,
+        sourceUrl: input.sourceUrl ?? null,
+      });
+      return { ok: true };
     }),
 });
 
@@ -566,6 +589,12 @@ async function closeAndScoreGame(
 // ─── Admin Router ─────────────────────────────────────────────────────────────
 
 const adminRouter = router({
+  // Outbound-referral reporting: total clicks sent to publishers + per-publisher
+  // breakdown. Ammunition for "we sent you N thousand readers" partnership pitches.
+  outboundClickStats: adminProcedure.query(async () => {
+    return getOutboundClickStats();
+  }),
+
   createGame: adminProcedure
     .input(
       z.object({

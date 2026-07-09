@@ -17,6 +17,8 @@ export default function ArchiveGame() {
   );
   const { data: communityStats } = trpc.games.getCommunityStats.useQuery({ gameId });
   const { data: validationQ } = trpc.games.getValidationQuestion.useQuery({ gameId });
+  // Fire-and-forget: log clicks on the source-article link for referral reporting.
+  const recordOutboundClick = trpc.games.recordOutboundClick.useMutation();
 
   if (isLoading) {
     return (
@@ -118,6 +120,13 @@ export default function ArchiveGame() {
                   <a
                     href={withReferralParams(game.sourceUrl)}
                     target="_blank"
+                    onClick={() =>
+                      recordOutboundClick.mutate({
+                        gameId: game.id,
+                        publisher: game.sourcePublisher ?? undefined,
+                        sourceUrl: game.sourceUrl ?? undefined,
+                      })
+                    }
                     // Only "noopener" — deliberately NOT "noreferrer": we WANT
                     // the publisher to see munymo.com as the referrer so our
                     // outbound traffic shows up in their analytics.

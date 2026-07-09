@@ -304,6 +304,9 @@ export default function DailyGame() {
     { enabled: !!game?.id }
   );
 
+  // Fire-and-forget: log clicks on the source-article link for referral reporting.
+  const recordOutboundClick = trpc.games.recordOutboundClick.useMutation();
+
   const [step, setStep] = useState<GameStep>("gut");
   const [showFullResearch, setShowFullResearch] = useState(false);
   const [gutSelection, setGutSelection] = useState<"A" | "B" | null>(null);
@@ -620,6 +623,13 @@ export default function DailyGame() {
                     <a
                       href={withReferralParams(game.sourceUrl)}
                       target="_blank"
+                      onClick={() =>
+                        recordOutboundClick.mutate({
+                          gameId: game.id,
+                          publisher: game.sourcePublisher ?? undefined,
+                          sourceUrl: game.sourceUrl ?? undefined,
+                        })
+                      }
                       // Only "noopener" — deliberately NOT "noreferrer": we WANT
                       // the publisher to see munymo.com as the referrer so our
                       // outbound traffic shows up in their analytics.
