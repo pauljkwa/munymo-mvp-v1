@@ -42,6 +42,9 @@ interface FormState {
   nextCompanyBTicker: string;
   nextSector: string;
   nextPairingRationale: string;
+  nextSourceUrl: string;
+  nextSourceTitle: string;
+  nextSourcePublisher: string;
   nextLockoutAt: string;
   // Tomorrow's research
   nextResearchContent: string;
@@ -78,6 +81,9 @@ const defaultForm: FormState = {
   nextCompanyBTicker: "",
   nextSector: "",
   nextPairingRationale: "",
+  nextSourceUrl: "",
+  nextSourceTitle: "",
+  nextSourcePublisher: "",
   nextLockoutAt: "",
   nextResearchContent: "",
   metrics: [{ id: makeId(), label: "", value: "" }],
@@ -166,6 +172,9 @@ function parseJsonImport(raw: string): Partial<FormState> | null {
       nextCompanyBTicker: String(t("companyBTicker", "nextCompanyBTicker") ?? ""),
       nextSector: String(t("sector", "nextSector") ?? ""),
       nextPairingRationale: String(t("pairingRationale", "nextPairingRationale") ?? ""),
+      nextSourceUrl: String(t("sourceUrl", "nextSourceUrl") ?? ""),
+      nextSourceTitle: String(t("sourceTitle", "nextSourceTitle") ?? ""),
+      nextSourcePublisher: String(t("sourcePublisher", "nextSourcePublisher") ?? ""),
       nextLockoutAt: lockoutAt,
       nextResearchContent: String(t("researchContent", "nextResearchContent") ?? ""),
       metrics: metrics.length > 0 ? metrics : [{ id: makeId(), label: "", value: "" }],
@@ -321,6 +330,9 @@ export default function AdminEndOfDay() {
       nextCompanyBTicker: form.nextCompanyBTicker,
       nextSector: form.nextSector || undefined,
       nextPairingRationale: form.nextPairingRationale || undefined,
+      nextSourceUrl: form.nextSourceUrl || undefined,
+      nextSourceTitle: form.nextSourceTitle || undefined,
+      nextSourcePublisher: form.nextSourcePublisher || undefined,
       // Convert local datetime-local string (YYYY-MM-DDTHH:MM) to full ISO string for Zod datetime validation
       nextLockoutAt: form.nextLockoutAt ? (() => {
         const d = new Date(form.nextLockoutAt);
@@ -639,6 +651,33 @@ export default function AdminEndOfDay() {
                 value={form.nextPairingRationale}
                 onChange={(e) => set("nextPairingRationale", e.target.value)}
               />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="space-y-1.5 sm:col-span-3">
+                <Label>Source Article URL</Label>
+                <Input
+                  placeholder="https://..."
+                  value={form.nextSourceUrl}
+                  onChange={(e) => set("nextSourceUrl", e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label>Source Article Title</Label>
+                <Input
+                  placeholder="Exact headline"
+                  value={form.nextSourceTitle}
+                  onChange={(e) => set("nextSourceTitle", e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Source Publisher</Label>
+                <Input
+                  placeholder="Reuters, Bloomberg…"
+                  value={form.nextSourcePublisher}
+                  onChange={(e) => set("nextSourcePublisher", e.target.value)}
+                />
+              </div>
             </div>
           </CardContent>
         )}

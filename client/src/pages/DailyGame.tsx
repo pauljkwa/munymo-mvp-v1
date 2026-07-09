@@ -23,6 +23,7 @@ import {
   Trophy,
   BarChart2,
   X as XIcon,
+  ExternalLink,
 } from "lucide-react";
 
 type GameStep = "gut" | "research" | "final" | "submitted";
@@ -614,6 +615,19 @@ export default function DailyGame() {
                   <p className="text-sm" style={{ color: "var(--color-muted)" }}>
                     {game.pairingRationale}
                   </p>
+                  {game.sourceUrl && (
+                    <a
+                      href={game.sourceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs mt-2 hover:underline"
+                      style={{ color: "var(--color-subtle)" }}
+                    >
+                      <ExternalLink size={12} />
+                      Source: {game.sourcePublisher ?? "Read the article"}
+                      {game.sourceTitle ? ` — "${game.sourceTitle}"` : ""}
+                    </a>
+                  )}
                 </div>
               )}
               {research?.content ? (

@@ -843,6 +843,10 @@ const adminRouter = router({
         nextCompanyBTicker: z.string().min(1),
         nextSector: z.string().optional(),
         nextPairingRationale: z.string().optional(),
+        // The article that supplied the "buzz" signal for this matchup.
+        nextSourceUrl: z.string().optional(),
+        nextSourceTitle: z.string().optional(),
+        nextSourcePublisher: z.string().optional(),
         nextLockoutAt: z.string().datetime().optional(),
         // ── Tomorrow's research ──
         nextResearchContent: z.string().optional(),
@@ -907,6 +911,9 @@ const adminRouter = router({
         companyBTicker: input.nextCompanyBTicker,
         sector: input.nextSector,
         pairingRationale: input.nextPairingRationale,
+        sourceUrl: input.nextSourceUrl,
+        sourceTitle: input.nextSourceTitle,
+        sourcePublisher: input.nextSourcePublisher,
         lockoutAt: input.nextLockoutAt ? new Date(input.nextLockoutAt) : undefined,
         createdBy: ctx.user.id,
         status: "active",

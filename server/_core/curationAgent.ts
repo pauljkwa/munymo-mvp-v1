@@ -7,11 +7,16 @@
  * endpoint for testing.
  *
  * Flow (mirrors references/daily-curation-agent-prompt.md):
- *   1. GET /api/scheduled/recent-games          → freshness context
- *   2. Claude (claude-opus-4-8) + web_search    → research + full CurationPayload JSON
- *   3. POST /api/scheduled/daily-curation        → close today + publish tomorrow
- *   4. On HTTP 422 (freshness violation) feed the violations back to Claude and
- *      retry with a different matchup, up to MAX_SUBMIT_ATTEMPTS times.
+ *   1. GET /api/scheduled/recent-games              → banned sectors/tickers/pairs + freshness context
+ *   2. Claude scans news, discards ineligible-sector leads immediately, and calls the
+ *      check_freshness tool to confirm a candidate sector + pair BEFORE researching or
+ *      writing anything for it — an ineligible pick costs one cheap tool call instead
+ *      of a whole rebuilt game.
+ *   3. Once confirmed fresh: full research (claude-opus-4-8 + web_search) + CurationPayload JSON.
+ *   4. POST /api/scheduled/daily-curation            → close today + publish tomorrow
+ *   5. On HTTP 422 (freshness violation) feed the violations back to Claude and
+ *      retry with a different matchup, up to MAX_SUBMIT_ATTEMPTS times. This should be
+ *      rare now that step 2 pre-qualifies the candidate before any content is written.
  *
  * Auth: the POST carries the shared secret `CURATION_AGENT_SECRET` (header
  * `x-curation-secret`) — the same secret the endpoint validates. No Manus cookie.
@@ -23,8 +28,8 @@ import { ENV } from "./env";
 import { notifyOwner } from "./notification";
 
 const MODEL = "claude-opus-4-8";
-const MAX_SUBMIT_ATTEMPTS = 4; // freshness retry budget
-const MAX_PAUSE_TURNS = 12; // server-tool loop safety cap
+const MAX_SUBMIT_ATTEMPTS = 4; // freshness retry budget (safety net; should rarely trigger — see check_freshness)
+const MAX_PAUSE_TURNS = 16; // server-tool + check_freshness loop safety cap
 const MAX_OUTPUT_TOKENS = 16000;
 
 // ─── System prompt ───────────────────────────────────────────────────────────
@@ -41,20 +46,31 @@ Your job runs once per US trading day, just after NASDAQ closes. You must:
 
 You have a web_search tool. Use it to read today's financial news (Yahoo Finance, Reuters, CNBC, Bloomberg, MarketWatch) and to look up real closing prices and company metrics. Never invent numbers — every price, metric, and news hook must come from a real source you searched.
 
-## Freshness rules (the endpoint enforces these and will REJECT violations)
+## Freshness rules — pre-qualify BEFORE researching or writing anything
 - Sector may not repeat within 7 days.
 - A company may not appear in any game within 30 days.
 - A matchup pair may not repeat within 365 days.
-The recent games list and the exact rule windows are provided in the user message. Before finalising, explicitly verify your two tickers against that list.
+
+The user message includes bannedSectors, bannedTickers, and bannedPairs — pre-computed exclusion lists covering all three rules. Treat them as hard constraints and follow this sequence:
+
+1. Scan today's financial news for what's genuinely topical — whatever has the most buzz.
+2. The MOMENT a story's sector is in bannedSectors, or its lead companies are in bannedTickers, STOP reading that thread — do not research those companies further, do not look up their prices or metrics. Move on to a different story.
+3. Once you have a candidate sector and two candidate tickers that are clear of bannedSectors and bannedTickers, and the pair is not in bannedPairs, call the check_freshness tool with that exact sector and pair to confirm before doing anything else.
+4. Only after check_freshness returns fresh: true should you proceed to full research (prices, metrics, debrief, written content) for that matchup. If it returns fresh: false, pick a different candidate and call check_freshness again — never write content for a candidate that hasn't been confirmed fresh.
+
+check_freshness is a fast, deterministic check against the live database — it is authoritative. Do not skip it, and do not substitute your own reading of bannedSectors/bannedTickers/bannedPairs for it. Because those lists already steer you away from dead ends before you start reading, you should rarely need more than one or two candidates before confirming a fresh one.
 
 ## Determine today's winner
 From the recent games list, find the game with status "active" or "locked" that has the EARLIEST gameDate — the one whose trading day has just concluded. Do NOT pick a game with a later/future gameDate just because it appears first in the list (the list is sorted newest-first); if more than one game is active/locked at once, the earliest-dated one is always the correct one to score. Look up both companies' opening and closing price and % change for today's session. Higher % change wins (tie → higher volume). Record companyAPerf / companyBPerf as numbers (e.g. 2.34 for +2.34%), companyAStartPrice / companyAEndPrice / companyBStartPrice / companyBEndPrice as the actual $ prices (e.g. 187.32) at today's session open and close, winnerTicker, a 2–3 sentence resultSummary, and a 3–5 paragraph hindsightSpotlight educational debrief.
 
 ## Select tomorrow's matchup
-Read today's market news FIRST, then pick two companies that: are in different sectors from the last 7 days; have not appeared in the last 30 days; have not been paired in the last 365 days; are genuine rivals/comparisons; are widely recognised; have a real investment debate; and are tied to a specific news story from the last 48 hours (you must be able to name it). Avoid penny stocks, micro-caps, ETFs, and index funds.
+Follow the freshness pre-qualification sequence above first. Once a candidate sector + pair is confirmed fresh via check_freshness, continue only if the two companies are: genuine rivals/comparisons; widely recognised; the subject of a real investment debate; and tied to a specific news story from the last 48 hours (you must be able to name it). Avoid penny stocks, micro-caps, ETFs, and index funds. If a confirmed-fresh candidate fails these qualitative checks, pick a different one and re-confirm freshness before continuing.
+
+While you're on the article that gave you the "buzz" signal for this matchup, keep its exact URL, headline, and publisher (e.g. Reuters, Bloomberg, CNBC, MarketWatch, Yahoo Finance) — you'll attribute it in the output. Use the single article that most directly inspired the pairing, not a generic company-profile page.
 
 ## Content to write
 - pairingRationale: 2–3 sentences on why THIS matchup, TODAY, referencing the specific recent event.
+- sourceUrl / sourceTitle / sourcePublisher: the exact URL, headline, and publisher of the news article that inspired this matchup (captured above) — this is credited on the game page and links back to the article, so it must be the real, specific URL you read, not a homepage or search results page.
 - researchContent: 4–6 balanced, educational paragraphs (competitive landscape, performance drivers, risks/catalysts, current debate, upcoming events). Do not telegraph a winner.
 - researchSummary: 3–4 short plain-English paragraphs for beginners, NO jargon (no P/E, EPS, TTM, EBITDA). What each company does in one sentence; one reason to pick each; one thing to keep in mind.
 - researchMetrics: for each ticker — Market Cap, P/E Ratio, Revenue Growth, EPS (TTM), 52-Week Range, Analyst Consensus (with avg target).
@@ -103,6 +119,9 @@ Your FINAL message must contain ONLY the JSON object below — no markdown fence
     "companyBName": "<Full legal company name>",
     "companyBTicker": "<TICKER>",
     "pairingRationale": "<2-3 sentences>",
+    "sourceUrl": "<exact URL of the article that inspired this matchup>",
+    "sourceTitle": "<exact headline of that article>",
+    "sourcePublisher": "<publisher name, e.g. Reuters, Bloomberg, CNBC>",
     "lockoutAt": "<YYYY-MM-DDTHH:MM:SS.000Z>",
     "researchContent": "<4-6 paragraphs>",
     "researchSummary": "<3-4 plain-English paragraphs, no jargon>",
@@ -141,17 +160,61 @@ async function fetchRecentGames(): Promise<string> {
   return await res.text();
 }
 
+// ─── check_freshness tool (candidate pre-qualification) ─────────────────────
+// Cheap, deterministic check the agent calls BEFORE researching or writing
+// content for a candidate — so an ineligible pick costs one fast round trip
+// instead of a whole rebuilt game. See scheduledCuration.ts's checkFreshness().
+const CHECK_FRESHNESS_TOOL = {
+  name: "check_freshness",
+  description:
+    "Check whether a candidate sector and two tickers satisfy all freshness rules (7-day sector, 30-day company, 365-day pair) against the live database. Call this the moment you have a candidate — BEFORE researching prices/metrics or writing any content for it.",
+  input_schema: {
+    type: "object",
+    properties: {
+      sector: { type: "string", description: "GICS sector name of the candidate matchup" },
+      companyATicker: { type: "string" },
+      companyBTicker: { type: "string" },
+    },
+    required: ["sector", "companyATicker", "companyBTicker"],
+  },
+} as unknown as Anthropic.ToolUnion;
+
+async function callCheckFreshness(
+  sector: string,
+  companyATicker: string,
+  companyBTicker: string
+): Promise<{ fresh: boolean; violations: string[] }> {
+  const url = `${ENV.curationBaseUrl}/api/scheduled/check-freshness`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-curation-secret": ENV.curationAgentSecret,
+    },
+    body: JSON.stringify({ sector, companyATicker, companyBTicker }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    return { fresh: false, violations: [`check-freshness endpoint returned HTTP ${res.status}: ${JSON.stringify(body)}`] };
+  }
+  return { fresh: !!body.fresh, violations: body.violations ?? [] };
+}
+
 // ─── Claude research loop ────────────────────────────────────────────────────
 /**
- * Runs one Claude turn to completion — driving the server-side web_search loop
- * (handling `pause_turn`) and appending every assistant turn to `messages`.
+ * Runs Claude turns to completion — driving the server-side web_search loop
+ * (handling `pause_turn`) and the check_freshness client tool (handling
+ * `tool_use`), appending every assistant turn (and tool result) to `messages`.
  * Returns the final assistant message so the caller can read its text.
  */
 async function research(
   client: Anthropic,
   messages: Anthropic.MessageParam[]
 ): Promise<Anthropic.Message> {
-  const tools = [{ type: "web_search_20260209", name: "web_search", max_uses: 15 }] as unknown as Anthropic.ToolUnion[];
+  const tools = [
+    { type: "web_search_20260209", name: "web_search", max_uses: 15 } as unknown as Anthropic.ToolUnion,
+    CHECK_FRESHNESS_TOOL,
+  ];
 
   for (let i = 0; i < MAX_PAUSE_TURNS; i++) {
     // Stream instead of awaiting one long-lived response. Non-streaming
@@ -170,10 +233,27 @@ async function research(
     });
     const response = await stream.finalMessage();
     messages.push({ role: "assistant", content: response.content });
+
     if (response.stop_reason === "pause_turn") continue;
+
+    if (response.stop_reason === "tool_use") {
+      const toolResults: Anthropic.ToolResultBlockParam[] = [];
+      for (const block of response.content) {
+        if (block.type === "tool_use" && block.name === "check_freshness") {
+          const input = block.input as { sector: string; companyATicker: string; companyBTicker: string };
+          const result = await callCheckFreshness(input.sector, input.companyATicker, input.companyBTicker);
+          toolResults.push({ type: "tool_result", tool_use_id: block.id, content: JSON.stringify(result) });
+        }
+      }
+      if (toolResults.length > 0) {
+        messages.push({ role: "user", content: toolResults });
+        continue;
+      }
+    }
+
     return response;
   }
-  throw new Error(`Exceeded ${MAX_PAUSE_TURNS} pause_turn iterations without completing`);
+  throw new Error(`Exceeded ${MAX_PAUSE_TURNS} agent turns without completing`);
 }
 
 function extractText(message: Anthropic.Message): string {
@@ -248,9 +328,12 @@ export async function runDailyCuration(): Promise<void> {
         role: "user",
         content:
           `Today's date (UTC) is ${todayUtc}. Run the full daily curation now.\n\n` +
-          `Recent games and freshness rules (from /api/scheduled/recent-games):\n` +
-          `${recentGames}\n\n` +
-          `Research today's result and tomorrow's matchup using web_search, then output the single CurationPayload JSON object as your final message.`,
+          `Recent games, freshness rules, and pre-computed exclusion lists (bannedSectors, bannedTickers, bannedPairs) ` +
+          `from /api/scheduled/recent-games:\n${recentGames}\n\n` +
+          `Follow the freshness pre-qualification sequence from your system prompt: scan news, abandon any thread whose ` +
+          `sector/companies are banned immediately, then call check_freshness to confirm your candidate BEFORE researching ` +
+          `prices or writing content. Once confirmed, research today's result and tomorrow's matchup using web_search, ` +
+          `then output the single CurationPayload JSON object as your final message.`,
       },
     ];
 

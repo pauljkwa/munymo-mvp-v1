@@ -68,6 +68,11 @@ export const dailyGames = mysqlTable(
     companyBTicker: varchar("companyBTicker", { length: 16 }).notNull(),
     sector: varchar("sector", { length: 128 }),
     pairingRationale: text("pairingRationale"),
+    // The specific news article that supplied the "buzz" signal for this
+    // matchup — attributed on the game page with a link back to the source.
+    sourceUrl: text("sourceUrl"),
+    sourceTitle: varchar("sourceTitle", { length: 256 }),
+    sourcePublisher: varchar("sourcePublisher", { length: 128 }),
     status: mysqlEnum("status", [
       "draft",
       "active",

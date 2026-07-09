@@ -32,6 +32,121 @@ const SECTOR_REPEAT_DAYS = 7;
 const COMPANY_REPEAT_DAYS = 30;
 const MATCHUP_REPEAT_DAYS = 365;
 
+type RecentGameRow = {
+  gameDate: string;
+  sector: string | null;
+  companyATicker: string;
+  companyBTicker: string;
+};
+
+/**
+ * Fetches games within the widest freshness window (365 days) — the same
+ * dataset both the pre-check and the final submit-time validation check
+ * against, just filtered to different cutoffs per rule.
+ */
+async function fetchGamesWithinMatchupWindow(db: any): Promise<RecentGameRow[]> {
+  const { dailyGames } = await import("../../drizzle/schema.js");
+  const { desc, gte } = await import("drizzle-orm");
+
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - MATCHUP_REPEAT_DAYS);
+  const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+  return db
+    .select({
+      gameDate: dailyGames.gameDate,
+      sector: dailyGames.sector,
+      companyATicker: dailyGames.companyATicker,
+      companyBTicker: dailyGames.companyBTicker,
+    })
+    .from(dailyGames)
+    .where(gte(dailyGames.gameDate, cutoffStr))
+    .orderBy(desc(dailyGames.gameDate));
+}
+
+/** Checks one candidate sector + ticker pair against all three freshness rules. */
+function checkFreshness(
+  recentGames: RecentGameRow[],
+  sector: string | undefined,
+  companyATicker: string,
+  companyBTicker: string
+): string[] {
+  const violations: string[] = [];
+  const tickerA = companyATicker.toUpperCase();
+  const tickerB = companyBTicker.toUpperCase();
+
+  const now = new Date();
+  const sectorCutoff = new Date(now); sectorCutoff.setDate(now.getDate() - SECTOR_REPEAT_DAYS);
+  const companyCutoff = new Date(now); companyCutoff.setDate(now.getDate() - COMPANY_REPEAT_DAYS);
+  const matchupCutoff = new Date(now); matchupCutoff.setDate(now.getDate() - MATCHUP_REPEAT_DAYS);
+  const sectorCutoffStr = sectorCutoff.toISOString().slice(0, 10);
+  const companyCutoffStr = companyCutoff.toISOString().slice(0, 10);
+  const matchupCutoffStr = matchupCutoff.toISOString().slice(0, 10);
+
+  for (const g of recentGames) {
+    const gA = g.companyATicker.toUpperCase();
+    const gB = g.companyBTicker.toUpperCase();
+    const gDate = g.gameDate;
+
+    if (g.sector && sector && g.sector.toLowerCase() === sector.toLowerCase() && gDate >= sectorCutoffStr) {
+      violations.push(`Sector '${sector}' was used on ${gDate} (within ${SECTOR_REPEAT_DAYS} days)`);
+    }
+    if ((gA === tickerA || gB === tickerA) && gDate >= companyCutoffStr) {
+      violations.push(`Company ${tickerA} was used on ${gDate} (within ${COMPANY_REPEAT_DAYS} days)`);
+    }
+    if ((gA === tickerB || gB === tickerB) && gDate >= companyCutoffStr) {
+      violations.push(`Company ${tickerB} was used on ${gDate} (within ${COMPANY_REPEAT_DAYS} days)`);
+    }
+    const sameMatchup = (gA === tickerA && gB === tickerB) || (gA === tickerB && gB === tickerA);
+    if (sameMatchup && gDate >= matchupCutoffStr) {
+      violations.push(`Matchup ${tickerA} vs ${tickerB} was used on ${gDate} (within ${MATCHUP_REPEAT_DAYS} days)`);
+    }
+  }
+
+  return violations;
+}
+
+/**
+ * Pre-computes the exact exclusion lists for the curation agent, so it can
+ * steer its news search away from ineligible sectors/companies up front
+ * instead of inferring eligibility itself from raw game dates.
+ */
+function computeBannedLists(recentGames: RecentGameRow[]): {
+  bannedSectors: string[];
+  bannedTickers: string[];
+  bannedPairs: string[][];
+} {
+  const now = new Date();
+  const sectorCutoff = new Date(now); sectorCutoff.setDate(now.getDate() - SECTOR_REPEAT_DAYS);
+  const companyCutoff = new Date(now); companyCutoff.setDate(now.getDate() - COMPANY_REPEAT_DAYS);
+  const sectorCutoffStr = sectorCutoff.toISOString().slice(0, 10);
+  const companyCutoffStr = companyCutoff.toISOString().slice(0, 10);
+
+  const bannedSectors = new Set<string>();
+  const bannedTickers = new Set<string>();
+  const bannedPairs: string[][] = [];
+
+  for (const g of recentGames) {
+    // recentGames is already scoped to the 365-day matchup window, so every
+    // row here is a banned pair by definition.
+    bannedPairs.push([g.companyATicker.toUpperCase(), g.companyBTicker.toUpperCase()]);
+
+    if (g.sector && g.gameDate >= sectorCutoffStr) {
+      bannedSectors.add(g.sector);
+    }
+    if (g.gameDate >= companyCutoffStr) {
+      bannedTickers.add(g.companyATicker.toUpperCase());
+      bannedTickers.add(g.companyBTicker.toUpperCase());
+    }
+  }
+
+  return {
+    bannedSectors: Array.from(bannedSectors),
+    bannedTickers: Array.from(bannedTickers),
+    bannedPairs,
+  };
+}
+
 // ─── GET /api/scheduled/recent-games ─────────────────────────────────────────
 async function recentGamesHandler(_req: Request, res: Response) {
   try {
@@ -65,13 +180,57 @@ async function recentGamesHandler(_req: Request, res: Response) {
       .orderBy(desc(dailyGames.gameDate))
       .limit(100);
 
-    return res.json({ games, rules: {
-      sectorRepeatDays: SECTOR_REPEAT_DAYS,
-      companyRepeatDays: COMPANY_REPEAT_DAYS,
-      matchupRepeatDays: MATCHUP_REPEAT_DAYS,
-    }});
+    const { bannedSectors, bannedTickers, bannedPairs } = computeBannedLists(games);
+
+    return res.json({
+      games,
+      rules: {
+        sectorRepeatDays: SECTOR_REPEAT_DAYS,
+        companyRepeatDays: COMPANY_REPEAT_DAYS,
+        matchupRepeatDays: MATCHUP_REPEAT_DAYS,
+      },
+      // Pre-computed exclusions — check candidates against these directly
+      // instead of re-deriving eligibility from `games`' raw dates.
+      bannedSectors,
+      bannedTickers,
+      bannedPairs,
+    });
   } catch (err) {
     console.error("[recent-games] Error:", err);
+    return res.status(500).json({ error: String(err) });
+  }
+}
+
+// ─── POST /api/scheduled/check-freshness ─────────────────────────────────────
+// Cheap, deterministic pre-qualification check for a candidate sector + ticker
+// pair — called by the curation agent BEFORE it writes any research or content,
+// so an ineligible pick costs one fast tool call instead of a whole rebuilt game.
+async function checkFreshnessHandler(req: Request, res: Response) {
+  try {
+    if (!isAuthorisedCron(req)) {
+      return res.status(403).json({ error: "cron-only endpoint" });
+    }
+
+    const { sector, companyATicker, companyBTicker } = req.body as {
+      sector?: string;
+      companyATicker?: string;
+      companyBTicker?: string;
+    };
+
+    if (!sector || !companyATicker || !companyBTicker) {
+      return res.status(400).json({ error: "sector, companyATicker, and companyBTicker are required" });
+    }
+
+    const { getDb } = await import("../db");
+    const db = await getDb();
+    if (!db) return res.status(500).json({ error: "Database unavailable" });
+
+    const recentGames = await fetchGamesWithinMatchupWindow(db);
+    const violations = checkFreshness(recentGames, sector, companyATicker, companyBTicker);
+
+    return res.json({ fresh: violations.length === 0, violations });
+  } catch (err) {
+    console.error("[check-freshness] Error:", err);
     return res.status(500).json({ error: String(err) });
   }
 }
@@ -101,56 +260,16 @@ async function dailyCurationHandler(req: Request, res: Response) {
 
     const { getDb } = await import("../db");
     const { dailyGames } = await import("../../drizzle/schema.js");
-    const { desc, gte, lte, ne, or, eq, and, asc } = await import("drizzle-orm");
+    const { lte, ne, or, eq, and, asc } = await import("drizzle-orm");
     const db = await getDb();
     if (!db) return res.status(500).json({ error: "Database unavailable" });
 
     // ── 2. Freshness validation ──
-    const now = new Date();
-    const sectorCutoff = new Date(now); sectorCutoff.setDate(now.getDate() - SECTOR_REPEAT_DAYS);
-    const companyCutoff = new Date(now); companyCutoff.setDate(now.getDate() - COMPANY_REPEAT_DAYS);
-    const matchupCutoff = new Date(now); matchupCutoff.setDate(now.getDate() - MATCHUP_REPEAT_DAYS);
-
-    const recentGames = await db
-      .select({
-        gameDate: dailyGames.gameDate,
-        sector: dailyGames.sector,
-        companyATicker: dailyGames.companyATicker,
-        companyBTicker: dailyGames.companyBTicker,
-      })
-      .from(dailyGames)
-      .where(gte(dailyGames.gameDate, matchupCutoff.toISOString().slice(0, 10)))
-      .orderBy(desc(dailyGames.gameDate));
-
-    const violations: string[] = [];
-    const tickerA = tomorrow.companyATicker.toUpperCase();
-    const tickerB = tomorrow.companyBTicker.toUpperCase();
-    const sectorCutoffStr = sectorCutoff.toISOString().slice(0, 10);
-    const companyCutoffStr = companyCutoff.toISOString().slice(0, 10);
-    const matchupCutoffStr = matchupCutoff.toISOString().slice(0, 10);
-
-    for (const g of recentGames) {
-      const gA = g.companyATicker.toUpperCase();
-      const gB = g.companyBTicker.toUpperCase();
-      const gDate = g.gameDate;
-
-      // Sector repeat within 7 days
-      if (g.sector && tomorrow.sector && g.sector.toLowerCase() === tomorrow.sector.toLowerCase() && gDate >= sectorCutoffStr) {
-        violations.push(`Sector '${tomorrow.sector}' was used on ${gDate} (within ${SECTOR_REPEAT_DAYS} days)`);
-      }
-      // Company repeat within 30 days
-      if ((gA === tickerA || gB === tickerA) && gDate >= companyCutoffStr) {
-        violations.push(`Company ${tickerA} was used on ${gDate} (within ${COMPANY_REPEAT_DAYS} days)`);
-      }
-      if ((gA === tickerB || gB === tickerB) && gDate >= companyCutoffStr) {
-        violations.push(`Company ${tickerB} was used on ${gDate} (within ${COMPANY_REPEAT_DAYS} days)`);
-      }
-      // Matchup repeat within 365 days
-      const sameMatchup = (gA === tickerA && gB === tickerB) || (gA === tickerB && gB === tickerA);
-      if (sameMatchup && gDate >= matchupCutoffStr) {
-        violations.push(`Matchup ${tickerA} vs ${tickerB} was used on ${gDate} (within ${MATCHUP_REPEAT_DAYS} days)`);
-      }
-    }
+    // This is a final safety-net re-check — the agent should already have
+    // confirmed this exact sector + pair via POST /api/scheduled/check-freshness
+    // before writing any research, so a rejection here should be rare.
+    const recentGamesForFreshness = await fetchGamesWithinMatchupWindow(db);
+    const violations = checkFreshness(recentGamesForFreshness, tomorrow.sector, tomorrow.companyATicker, tomorrow.companyBTicker);
 
     if (violations.length > 0) {
       const msg = `Freshness rule violations:\n${violations.join("\n")}`;
@@ -258,6 +377,9 @@ async function dailyCurationHandler(req: Request, res: Response) {
       nextCompanyBTicker: tomorrow.companyBTicker,
       nextSector: tomorrow.sector,
       nextPairingRationale: tomorrow.pairingRationale,
+      nextSourceUrl: tomorrow.sourceUrl,
+      nextSourceTitle: tomorrow.sourceTitle,
+      nextSourcePublisher: tomorrow.sourcePublisher,
       nextLockoutAt: lockoutAt ? new Date(lockoutAt).toISOString() : undefined,
       nextResearchContent: tomorrow.researchContent,
       nextResearchSummary: tomorrow.researchSummary,
@@ -343,6 +465,10 @@ interface CurationPayload {
     companyBName: string;
     companyBTicker: string;
     pairingRationale?: string;
+    /** The news article that supplied the "buzz" signal for this matchup. */
+    sourceUrl?: string;
+    sourceTitle?: string;
+    sourcePublisher?: string;
     lockoutTime?: string;
     lockoutAt?: string;
     researchContent?: string;
@@ -449,6 +575,7 @@ async function streakAtRiskHandler(req: Request, res: Response) {
 // ─── Registration ─────────────────────────────────────────────────────────────
 export function registerScheduledCuration(app: Express) {
   app.get("/api/scheduled/recent-games", recentGamesHandler);
+  app.post("/api/scheduled/check-freshness", checkFreshnessHandler);
   app.post("/api/scheduled/daily-curation", dailyCurationHandler);
   app.post("/api/scheduled/streak-at-risk", streakAtRiskHandler);
 }

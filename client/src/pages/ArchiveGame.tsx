@@ -2,7 +2,7 @@ import { trpc } from "@/lib/trpc";
 import { useParams } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
 import { Link } from "wouter";
-import { ArrowLeft, Trophy, BookOpen, Users, Loader2, HelpCircle, Lightbulb } from "lucide-react";
+import { ArrowLeft, Trophy, BookOpen, Users, Loader2, HelpCircle, Lightbulb, ExternalLink } from "lucide-react";
 import { MetricExplanationSheet } from "@/components/MetricExplanationSheet";
 
 export default function ArchiveGame() {
@@ -113,6 +113,19 @@ export default function ArchiveGame() {
                 <p className="text-sm" style={{ color: "var(--color-muted)" }}>
                   {game.pairingRationale}
                 </p>
+                {game.sourceUrl && (
+                  <a
+                    href={game.sourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs mt-2 hover:underline"
+                    style={{ color: "var(--color-subtle)" }}
+                  >
+                    <ExternalLink size={12} />
+                    Source: {game.sourcePublisher ?? "Read the article"}
+                    {game.sourceTitle ? ` — "${game.sourceTitle}"` : ""}
+                  </a>
+                )}
               </div>
             )}
             <div className="prose-munymo text-sm whitespace-pre-wrap">
