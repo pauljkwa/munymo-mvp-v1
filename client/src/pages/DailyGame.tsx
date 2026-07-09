@@ -1,6 +1,7 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { SignInButton } from "@clerk/clerk-react";
 import { trpc } from "@/lib/trpc";
+import { withReferralParams } from "@/lib/utils";
 import { useState, useEffect, useRef } from "react";
 import { Link } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
@@ -617,9 +618,12 @@ export default function DailyGame() {
                   </p>
                   {game.sourceUrl && (
                     <a
-                      href={game.sourceUrl}
+                      href={withReferralParams(game.sourceUrl)}
                       target="_blank"
-                      rel="noopener noreferrer"
+                      // Only "noopener" — deliberately NOT "noreferrer": we WANT
+                      // the publisher to see munymo.com as the referrer so our
+                      // outbound traffic shows up in their analytics.
+                      rel="noopener"
                       className="inline-flex items-center gap-1 text-xs mt-2 hover:underline"
                       style={{ color: "var(--color-subtle)" }}
                     >
@@ -638,6 +642,7 @@ export default function DailyGame() {
                     </p>
                     {research.researchSummary && (
                       <button
+                        type="button"
                         onClick={() => setShowFullResearch(v => !v)}
                         className="text-xs font-semibold"
                         style={{ color: "var(--color-brand)" }}
@@ -657,7 +662,16 @@ export default function DailyGame() {
                       >
                         <Lightbulb size={14} className="mt-0.5 shrink-0" style={{ color: "var(--color-brand)" }} />
                         <p className="text-xs" style={{ color: "var(--color-muted)" }}>
-                          This is the beginner summary. Tap <strong style={{ color: "var(--color-brand)" }}>Show full analysis</strong> above for the complete research breakdown.
+                          This is the beginner summary. Tap{" "}
+                          <button
+                            type="button"
+                            onClick={() => setShowFullResearch(true)}
+                            className="font-semibold underline"
+                            style={{ color: "var(--color-brand)" }}
+                          >
+                            Show full analysis
+                          </button>{" "}
+                          for the complete research breakdown.
                         </p>
                       </div>
                     </div>
