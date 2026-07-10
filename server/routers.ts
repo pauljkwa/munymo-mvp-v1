@@ -1413,6 +1413,10 @@ const pushRouter = router({
           userAgent: input.userAgent,
         });
       }
+      // Registering a device is an explicit opt-in — clear any stale
+      // pushOptIn=false so end-of-day broadcasts actually reach this user.
+      const { users } = await import("../drizzle/schema");
+      await db.update(users).set({ pushOptIn: true }).where(eq(users.id, ctx.user.id));
       return { ok: true };
     }),
 

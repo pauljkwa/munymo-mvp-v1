@@ -30,6 +30,7 @@ import {
   Clock,
 } from "lucide-react";
 import { Link } from "wouter";
+import { NotificationSettings } from "@/components/NotificationSettings";
 
 // ─── Stat Card ────────────────────────────────────────────────────────────────
 
@@ -183,7 +184,6 @@ export default function MyDashboard() {
   const displayName = profile?.displayName || user?.name || "Player";
   const awayActive = profile?.awayStatus ?? false;
   const emailOptIn = profile?.emailOptIn ?? true;
-  const pushOptIn = profile?.pushOptIn ?? true;
   const tier = profile?.tier ?? "free";
   const memberSince = profile?.createdAt
     ? new Date(profile.createdAt).toLocaleDateString("en-GB", { month: "long", year: "numeric" })
@@ -420,34 +420,13 @@ export default function MyDashboard() {
               </div>
             </div>
 
-            {/* Push notifications */}
+            {/* Push notifications — real subscription control (registers this
+                device with the push service; not just a preference flag) */}
             <div
               className="p-5"
               style={{ background: "var(--color-surface)" }}
             >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
-                  <p className="text-sm font-semibold mb-0.5" style={{ color: "var(--color-foreground)" }}>
-                    Push notifications
-                  </p>
-                  <p className="text-xs leading-relaxed" style={{ color: "var(--color-muted)" }}>
-                    Receive push alerts on your device
-                  </p>
-                </div>
-                <button
-                  onClick={() => setNotifPrefs.mutate({ pushOptIn: !pushOptIn })}
-                  disabled={setNotifPrefs.isPending}
-                  className="flex-shrink-0 transition-opacity"
-                  style={{ opacity: setNotifPrefs.isPending ? 0.5 : 1 }}
-                  aria-label="Toggle push notifications"
-                >
-                  {pushOptIn ? (
-                    <ToggleRight size={36} style={{ color: "var(--color-brand)" }} />
-                  ) : (
-                    <ToggleLeft size={36} style={{ color: "var(--color-muted)" }} />
-                  )}
-                </button>
-              </div>
+              <NotificationSettings />
             </div>
           </div>
         </Section>
