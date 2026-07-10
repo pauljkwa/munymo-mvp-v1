@@ -1067,4 +1067,19 @@ Add a calendar reminder for both dates. Missing this change means the curation a
 
 ---
 
+## Session Update — July 10 2026
+
+### S10 — Web Push restored after Manus migration
+
+Push notifications had been dead since the move from Manus to Railway. Root cause was **not** a missing vendor — push is self-hosted Web Push (VAPID) via the `web-push` library (`server/push.ts`), no third party. Two problems:
+
+1. **Stale VAPID keys.** `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` were copy-pasted from the Manus secrets file into Railway and were stale/mismatched. A fresh VAPID pair was generated (`npx web-push generate-vapid-keys`) and both variables updated in the Railway dashboard on 2026-07-10. There is no `VITE_VAPID_PUBLIC_KEY` in Railway and none is needed — the client fetches the public key from the server via the `push.vapidPublicKey` tRPC query (`server/routers.ts`), which reads `process.env.VAPID_PUBLIC_KEY`.
+2. **Dead icon URL.** `client/public/sw.js` fallback icon pointed at `https://munymo.com/manus-storage/munymo-logo-cropped_75fe3c86.png`. The `/manus-storage/*` path is a proxy to Manus's Forge storage API (`server/_core/storageProxy.ts`), which 500s now that the Forge env vars are gone. Changed to the self-hosted `https://munymo.com/munymo-logo-cropped_e625fcf7.png` (exists in `client/public/`). `server/push.ts`'s icon/badge URLs already used the valid self-hosted asset — no change needed there.
+
+**Consequence:** rotating the VAPID pair invalidates every existing `push_subscriptions` row (they are cryptographically bound to the old key pair). All users must re-enable notifications once; the stale rows are auto-pruned on the next send (push gateways return 410, handled by `sendToSubscription`).
+
+**Still Manus-coupled (dead code, cleanup candidates):** `server/_core/storageProxy.ts` and `server/storage.ts` (`/manus-storage/*` upload/download) depend on the retired Forge API and no longer function. Not removed yet.
+
+---
+
 *End of session updates.*

@@ -5,7 +5,7 @@
  * full-scope access to the entire app.
  */
 
-const MUNYMO_LOGO = "https://munymo.com/manus-storage/munymo-logo-cropped_75fe3c86.png";
+const MUNYMO_LOGO = "https://munymo.com/munymo-logo-cropped_e625fcf7.png";
 const APP_ORIGIN = self.location.origin;
 
 // ─── Push Event ───────────────────────────────────────────────────────────────
