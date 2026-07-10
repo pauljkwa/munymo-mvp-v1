@@ -1111,4 +1111,14 @@ Client-side guards: min 8 chars, new/confirm match, current-password required wh
 
 ---
 
+### S13 — Production DB migrated to Paul's own cluster (2026-07-10)
+
+The live database was moved off the Manus-era TiDB cluster (`gateway02...`, which Paul had no console access to) onto his own **`munymo-prod`** cluster (`gateway01.us-east-1.prod.aws.tidbcloud.com`, us-east-1). Same database name (`eKLqbcXcmD3p6GhwsMA3tE`) and same `ssl={"rejectUnauthorized":true}` connection query preserved — the cutover changed **only** Railway's `MUNYMO_DATABASE_URL` (host/user/password). All 17 tables / 183 rows copied and verified row-by-row identical; the `__drizzle_migrations` journal came across too, so the predeploy `drizzle-kit migrate` remained a no-op. Confirmed live by a write landing on the new cluster while the old stayed frozen.
+
+**Tooling note for any future prod dump:** Oracle `mysqldump` does **not** work against TiDB Serverless — it tries to read `column_masking_policy` (permission denied, no flag to disable). Use a driver-level dump instead (a `pymysql` script doing `SHOW CREATE TABLE` + `SELECT *` with proper escaping worked cleanly). `mysql-client` and `pymysql` were installed on Paul's Mac for this.
+
+**Rollback window open:** old cluster untouched; revert by pointing `MUNYMO_DATABASE_URL` back to the old string (saved in `~/munymo-migration.env`). Full backup at `~/munymo-backups/munymo_old_backup_20260710_174327.sql`. Old cluster + local secret files to be deleted later once confidence is high.
+
+---
+
 *End of session updates.*
