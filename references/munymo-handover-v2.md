@@ -1099,4 +1099,16 @@ Away Status moved to Profile (decision: it's a personal control, confirmed by Pa
 
 ---
 
+### S12 — Native in-app password management (Clerk made invisible)
+
+The Account Settings → Password row on `/profile` used to link out to `https://accounts.clerk.com` — a generic Clerk domain that 404s (not the instance's actual Account Portal), and off-brand regardless (exposes the user to "Clerk"). Replaced with a native, brand-styled Change/Set Password form in `PlayerProfile.tsx` that calls Clerk's SDK **under the hood** via `useUser()` → `clerkUser.updatePassword({ newPassword, currentPassword?, signOutOfOtherSessions:false })`. The user never sees the word "Clerk".
+
+Two states, driven by `clerkUser.passwordEnabled`:
+- **Has a password:** shows masked `••••••••` + a "Change" button → reveals current / new / confirm fields → "Update Password".
+- **Social sign-up, no password** (e.g. Google; detected via `passwordEnabled === false`, provider name derived from `externalAccounts[0].provider`): shows a greyed explanation that they signed up with `{Provider}` and have no password yet, plus a "Set a Password" button → reveals new / confirm fields (no current-password field) with copy explaining this enables email+password sign-in while their social login keeps working. Calls `updatePassword({ newPassword })` (no currentPassword).
+
+Client-side guards: min 8 chars, new/confirm match, current-password required when changing. Clerk API errors surfaced to the user via toast (`err.errors[0].longMessage`). No server/schema change — password lives entirely in Clerk. (The old Clerk portal link is gone; nothing else references `accounts.clerk.com`.)
+
+---
+
 *End of session updates.*

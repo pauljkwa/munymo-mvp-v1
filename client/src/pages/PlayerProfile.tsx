@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
-import { useClerk, SignInButton } from "@clerk/clerk-react";
+import { useClerk, useUser, SignInButton } from "@clerk/clerk-react";
 import PublicLayout from "@/components/PublicLayout";
 import { toast } from "sonner";
 import {
@@ -12,6 +12,7 @@ import {
   Edit2,
   Check,
   X,
+  KeyRound,
   AlertTriangle,
   Lock,
   LogOut,
@@ -54,6 +55,68 @@ export default function PlayerProfile() {
   // Delete account confirmation state
   const [deleteStep, setDeleteStep] = useState<"idle" | "confirm" | "typing">("idle");
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
+
+  // Password change/set state (Clerk under the hood — invisible to the user)
+  const { user: clerkUser } = useUser();
+  const [editingPassword, setEditingPassword] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [savingPassword, setSavingPassword] = useState(false);
+
+  const hasPassword = clerkUser?.passwordEnabled ?? false;
+  const socialProvider = (() => {
+    const raw = (clerkUser?.externalAccounts?.[0] as { provider?: string } | undefined)?.provider ?? "";
+    const name = raw.replace(/^oauth_/, "");
+    return name ? name.charAt(0).toUpperCase() + name.slice(1) : null;
+  })();
+
+  function resetPasswordForm() {
+    setEditingPassword(false);
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+  }
+
+  async function handleSavePassword() {
+    if (newPassword.length < 8) {
+      toast.error("Your new password must be at least 8 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error("New password and confirmation do not match.");
+      return;
+    }
+    if (hasPassword && !currentPassword) {
+      toast.error("Please enter your current password.");
+      return;
+    }
+    if (!clerkUser) return;
+    setSavingPassword(true);
+    try {
+      await clerkUser.updatePassword({
+        newPassword,
+        ...(hasPassword ? { currentPassword } : {}),
+        signOutOfOtherSessions: false,
+      });
+      toast.success(
+        hasPassword
+          ? "Password updated."
+          : "Password set — you can now sign in with your email and password."
+      );
+      resetPasswordForm();
+    } catch (err: unknown) {
+      const clerkErr = err as { errors?: { longMessage?: string; message?: string }[]; message?: string };
+      const msg =
+        clerkErr?.errors?.[0]?.longMessage ||
+        clerkErr?.errors?.[0]?.message ||
+        clerkErr?.message ||
+        "Could not update your password. Please try again.";
+      toast.error(msg);
+    } finally {
+      setSavingPassword(false);
+    }
+  }
 
   // ── Data queries ──────────────────────────────────────────────────────────
   const { data: profile } = trpc.dashboard.getProfile.useQuery(undefined, {
@@ -316,25 +379,118 @@ export default function PlayerProfile() {
               )}
             </div>
 
-            {/* Password — managed by Clerk */}
+            {/* Password */}
             <div
               className="p-5"
               style={{ background: "var(--color-surface)", borderBottom: "1px solid var(--color-border)" }}
             >
-              <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--color-subtle)" }}>
+              <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--color-subtle)" }}>
                 Password
               </p>
-              <p className="text-xs" style={{ color: "var(--color-muted)" }}>
-                Your password is managed by your Clerk account.{" "}
-                <a
-                  href="https://accounts.clerk.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ color: "var(--color-brand)" }}
-                >
-                  Manage it at accounts.clerk.com
-                </a>
-              </p>
+
+              {editingPassword ? (
+                <div className="flex flex-col gap-2">
+                  {!hasPassword && (
+                    <p className="text-xs leading-relaxed mb-1" style={{ color: "var(--color-muted)" }}>
+                      Setting a password lets you sign in with your email and a password of your own,
+                      rather than relying on {socialProvider ?? "your social login"}. Your{" "}
+                      {socialProvider ?? "social"} sign-in will keep working too.
+                    </p>
+                  )}
+                  {hasPassword && (
+                    <input
+                      type="password"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      placeholder="Current password"
+                      autoComplete="current-password"
+                      className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+                      style={{
+                        background: "var(--color-surface-raised)",
+                        border: "1px solid var(--color-border-strong)",
+                        color: "var(--color-foreground)",
+                      }}
+                    />
+                  )}
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="New password (min 8 characters)"
+                    autoComplete="new-password"
+                    className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+                    style={{
+                      background: "var(--color-surface-raised)",
+                      border: "1px solid var(--color-border-strong)",
+                      color: "var(--color-foreground)",
+                    }}
+                  />
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Confirm new password"
+                    autoComplete="new-password"
+                    className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+                    style={{
+                      background: "var(--color-surface-raised)",
+                      border: "1px solid var(--color-border-strong)",
+                      color: "var(--color-foreground)",
+                    }}
+                  />
+                  <div className="flex gap-2 mt-1">
+                    <button
+                      onClick={handleSavePassword}
+                      disabled={savingPassword}
+                      className="flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-lg"
+                      style={{ background: "var(--color-brand)", color: "var(--color-brand-foreground)" }}
+                    >
+                      {savingPassword ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                      {hasPassword ? "Update Password" : "Set Password"}
+                    </button>
+                    <button
+                      onClick={resetPasswordForm}
+                      className="text-xs px-4 py-2 rounded-lg"
+                      style={{ background: "var(--color-surface-raised)", color: "var(--color-muted)" }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : hasPassword ? (
+                <div className="flex items-center justify-between">
+                  <p className="text-sm tracking-widest" style={{ color: "var(--color-foreground)" }}>
+                    ••••••••
+                  </p>
+                  <button
+                    onClick={() => setEditingPassword(true)}
+                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg"
+                    style={{ background: "var(--color-surface-raised)", color: "var(--color-muted)" }}
+                  >
+                    <Edit2 size={12} />
+                    Change
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-xs leading-relaxed mb-3" style={{ color: "var(--color-muted)" }}>
+                    You signed up with {socialProvider ?? "a social login"}, so you don&apos;t have a
+                    password yet. Set one to enable signing in with your email and password.
+                  </p>
+                  <button
+                    onClick={() => setEditingPassword(true)}
+                    className="flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-lg"
+                    style={{
+                      background: "var(--color-surface-raised)",
+                      border: "1px solid var(--color-border-strong)",
+                      color: "var(--color-foreground)",
+                    }}
+                  >
+                    <KeyRound size={12} />
+                    Set a Password
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Email */}
