@@ -920,47 +920,56 @@ const adminRouter = router({
         scoredPicks.push(...closed);
       }
 
-      // ── 2. Create tomorrow's game — use returned insertId directly ──
-      // Guard against the duplicate-game/pileup vector: reject if a
-      // non-cancelled game already exists for this date.
+      // ── 2. Create tomorrow's game — unless a game for that date already exists ──
+      // A non-cancelled game for this date can already exist when an earlier run
+      // curated ahead (e.g. a manual recovery run left the schedule a day ahead of
+      // itself). Do NOT create a duplicate and do NOT error: the concluded game has
+      // already been closed above, which is the important work. No-op the creation
+      // and reuse the existing game as "tomorrow's game" for teasers/notifications,
+      // so a valid close is never lost to a CONFLICT. Still prevents pileups —
+      // nothing new is inserted.
       const existingNextGame = await getTodayGame(input.nextGameDate);
-      if (existingNextGame && existingNextGame.status !== "cancelled") {
-        throw new TRPCError({
-          code: "CONFLICT",
-          message: `A game already exists for ${input.nextGameDate} (id ${existingNextGame.id}, status ${existingNextGame.status})`,
-        });
-      }
+      const nextGameAlreadyExists = !!existingNextGame && existingNextGame.status !== "cancelled";
+      const nextGameCreated = !nextGameAlreadyExists;
 
-      const nextGameId = await createGame({
-        gameDate: input.nextGameDate,
-        exchange: input.nextExchange,
-        companyAName: input.nextCompanyAName,
-        companyATicker: input.nextCompanyATicker,
-        companyBName: input.nextCompanyBName,
-        companyBTicker: input.nextCompanyBTicker,
-        sector: input.nextSector,
-        pairingRationale: input.nextPairingRationale,
-        sourceUrl: input.nextSourceUrl,
-        sourceTitle: input.nextSourceTitle,
-        sourcePublisher: input.nextSourcePublisher,
-        lockoutAt: input.nextLockoutAt ? new Date(input.nextLockoutAt) : undefined,
-        createdBy: ctx.user.id,
-        status: "active",
-      });
-
-      if (input.nextResearchContent) {
-        const metricsArray = input.nextResearchMetrics
-          ? Object.entries(input.nextResearchMetrics).map(([label, value]) => ({ label, value: String(value) }))
-          : [];
-        await upsertResearchWithMetrics(nextGameId, input.nextResearchContent, metricsArray, input.nextResearchSummary);
-      }
-      if (input.nextQuestionType && input.nextQuestionText && input.nextCorrectAnswer) {
-        await upsertValidationQuestion(nextGameId, {
-          questionType: input.nextQuestionType,
-          questionText: input.nextQuestionText,
-          options: input.nextQuestionOptions,
-          correctAnswer: input.nextCorrectAnswer,
+      let nextGameId: number;
+      if (nextGameAlreadyExists) {
+        console.warn(
+          `[endOfDay] A game already exists for ${input.nextGameDate} (id ${existingNextGame!.id}, ${existingNextGame!.status}) — skipping creation; the close was still applied.`
+        );
+        nextGameId = existingNextGame!.id;
+      } else {
+        nextGameId = await createGame({
+          gameDate: input.nextGameDate,
+          exchange: input.nextExchange,
+          companyAName: input.nextCompanyAName,
+          companyATicker: input.nextCompanyATicker,
+          companyBName: input.nextCompanyBName,
+          companyBTicker: input.nextCompanyBTicker,
+          sector: input.nextSector,
+          pairingRationale: input.nextPairingRationale,
+          sourceUrl: input.nextSourceUrl,
+          sourceTitle: input.nextSourceTitle,
+          sourcePublisher: input.nextSourcePublisher,
+          lockoutAt: input.nextLockoutAt ? new Date(input.nextLockoutAt) : undefined,
+          createdBy: ctx.user.id,
+          status: "active",
         });
+
+        if (input.nextResearchContent) {
+          const metricsArray = input.nextResearchMetrics
+            ? Object.entries(input.nextResearchMetrics).map(([label, value]) => ({ label, value: String(value) }))
+            : [];
+          await upsertResearchWithMetrics(nextGameId, input.nextResearchContent, metricsArray, input.nextResearchSummary);
+        }
+        if (input.nextQuestionType && input.nextQuestionText && input.nextCorrectAnswer) {
+          await upsertValidationQuestion(nextGameId, {
+            questionType: input.nextQuestionType,
+            questionText: input.nextQuestionText,
+            options: input.nextQuestionOptions,
+            correctAnswer: input.nextCorrectAnswer,
+          });
+        }
       }
 
       await writeAuditLog(ctx.user.id, "end_of_day", "game", input.closeGameId ?? 0, JSON.stringify({ winner: input.winner, nextGameDate: input.nextGameDate }));
@@ -973,8 +982,11 @@ const adminRouter = router({
         const allUsers = await getAllUsers();
         try {
           const scoredMap = new Map(scoredPicks.map((s) => [s.userId, s]));
-          // Build next-game teaser data if available
-          const nextTicker = nextGameId ? { a: input.nextCompanyATicker, b: input.nextCompanyBTicker, aName: input.nextCompanyAName, bName: input.nextCompanyBName } : null;
+          // Build next-game teaser data — must reflect the ACTUAL next game, i.e.
+          // the pre-existing one if we skipped creation (not the discarded proposal).
+          const nextTicker = nextGameCreated
+            ? { a: input.nextCompanyATicker, b: input.nextCompanyBTicker, aName: input.nextCompanyAName, bName: input.nextCompanyBName }
+            : { a: existingNextGame!.companyATicker, b: existingNextGame!.companyBTicker, aName: existingNextGame!.companyAName, bName: existingNextGame!.companyBName };
           let emailsSent = 0;
           let emailsFailed = 0;
 
@@ -1075,7 +1087,10 @@ const adminRouter = router({
       }
 
       // ── 5. Send push notification for new game availability (respecting pushOptIn) ──
-      if (nextGameId) {
+      // Only when we actually created a new game — if we reused a pre-existing one
+      // it was already announced when it was first created; re-announcing it (and
+      // with the discarded proposal's tickers) would be wrong.
+      if (nextGameCreated) {
         try {
           const { sendPushToUsers } = await import("./push");
           const optedInIds = (await getAllUsers()).filter((u) => u.pushOptIn !== false).map((u) => u.id);
@@ -1092,7 +1107,7 @@ const adminRouter = router({
         }
       }
 
-      return { success: true, nextGameId };
+      return { success: true, nextGameId, nextGameCreated };
     }),
 
   listPlayers: adminProcedure.query(async () => {

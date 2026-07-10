@@ -402,16 +402,25 @@ async function dailyCurationHandler(req: Request, res: Response) {
     const result = await caller.admin.endOfDay(endOfDayInput);
 
     const elapsed = Date.now() - startTime;
+    // `marketClosed` covers TWO cases: a genuine market holiday, OR simply no
+    // completed game was due to be scored (e.g. the only pending game's session
+    // hasn't happened yet). Don't assert "public holiday" — it isn't always true.
     const closedNote = marketClosed
-      ? "Market was closed today (public holiday) — no game scored."
+      ? "No game was scored today — no completed game was due (market holiday, or the pending game's session hasn't concluded yet)."
       : closeGameId
         ? `Closed game #${closeGameId} (winner: ${winner}).`
         : "No game closed (first game).";
-    const summary = `Daily curation completed in ${elapsed}ms. Next game: ${tomorrow.companyATicker} vs ${tomorrow.companyBTicker} on ${tomorrow.gameDate}. ${closedNote}`;
+    // Reflect whether we actually created the next game or reused an existing one.
+    const nextNote = result.nextGameCreated
+      ? `Next game: ${tomorrow.companyATicker} vs ${tomorrow.companyBTicker} on ${tomorrow.gameDate}.`
+      : `Next game for ${tomorrow.gameDate} already existed — kept it, did not recreate.`;
+    const summary = `Daily curation completed in ${elapsed}ms. ${nextNote} ${closedNote}`;
     console.log("[daily-curation]", summary);
 
     await notifyOwner({
-      title: `✅ Daily curation complete — ${tomorrow.companyATicker} vs ${tomorrow.companyBTicker}`,
+      title: result.nextGameCreated
+        ? `✅ Daily curation complete — ${tomorrow.companyATicker} vs ${tomorrow.companyBTicker}`
+        : `✅ Daily curation complete — game closed, next already existed`,
       content: summary,
     });
 
