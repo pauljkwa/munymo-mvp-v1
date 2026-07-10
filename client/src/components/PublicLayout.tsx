@@ -45,6 +45,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
     ...mainLinks,
     ...(previousGame ? [{ href: `/game/${previousGame.id}/result`, label: "Yesterday's Result" }] : []),
     ...(isAuthenticated ? [{ href: "/dashboard", label: "My Dashboard" }] : []),
+    ...(isAuthenticated ? [{ href: "/profile", label: "My Profile" }] : []),
     ...(user?.role === "admin" ? [{ href: "/admin", label: "Admin" }] : []),
   ];
 
