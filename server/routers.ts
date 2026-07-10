@@ -1145,6 +1145,20 @@ const adminRouter = router({
       const stats = await getCommunityStats(input.gameId);
       return { game, research, question, picks, stats };
     }),
+
+  // Send a test push notification to the calling admin's own devices.
+  // Used to verify VAPID keys and subscriptions end-to-end without waiting
+  // for a real end-of-day run.
+  sendTestPush: adminProcedure.mutation(async ({ ctx }) => {
+    const { sendPushToUsers } = await import("./push");
+    const result = await sendPushToUsers([ctx.user.id], {
+      title: "Munymo test notification",
+      body: "If you can see this, push notifications are working. 🎉",
+      url: "/",
+      tag: "munymo-test-push",
+    });
+    return result;
+  }),
 });
 
 // ─── Streak Helper ────────────────────────────────────────────────────────────

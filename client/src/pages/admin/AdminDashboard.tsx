@@ -11,6 +11,7 @@ import {
   ArrowRight,
   RotateCcw,
   ExternalLink,
+  Bell,
 } from "lucide-react";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
@@ -28,6 +29,19 @@ export default function AdminDashboard() {
 
   const resetMyPick = trpc.admin.resetPlayerPick.useMutation({
     onSuccess: () => toast.success("Your pick has been reset — you can replay the game."),
+    onError: (e: { message: string }) => toast.error(e.message),
+  });
+
+  const sendTestPush = trpc.admin.sendTestPush.useMutation({
+    onSuccess: (r: { sent: number; expired: number; errors: number }) => {
+      if (r.sent > 0) {
+        toast.success(`Test push sent to ${r.sent} device${r.sent === 1 ? "" : "s"}. Check your notifications.`);
+      } else if (r.expired > 0) {
+        toast.error("Your subscription is stale. Turn notifications off and on again on this device, then retry.");
+      } else {
+        toast.error("No devices subscribed. Enable notifications on your profile first, then retry.");
+      }
+    },
     onError: (e: { message: string }) => toast.error(e.message),
   });
 
@@ -88,6 +102,21 @@ export default function AdminDashboard() {
             )}
           </div>
         )}
+
+        {/* Notifications test */}
+        <div className="card-glass p-4 mb-6 flex items-center gap-3 flex-wrap" style={{ borderColor: "var(--color-subtle)" }}>
+          <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-subtle)" }}>Notifications</span>
+          <button
+            onClick={() => sendTestPush.mutate()}
+            disabled={sendTestPush.isPending}
+            className="btn-ghost text-xs py-1 px-3 flex items-center gap-1"
+            style={{ color: "var(--color-brand)" }}
+          >
+            <Bell size={13} />
+            Send Test Push To Me
+          </button>
+          <span className="text-xs" style={{ color: "var(--color-subtle)" }}>Sends a push to your subscribed devices. Enable notifications on your <Link href="/profile" style={{ color: "var(--color-brand)" }}>profile</Link> first.</span>
+        </div>
 
         {/* Testing Tools */}
         {activeGame && user && (

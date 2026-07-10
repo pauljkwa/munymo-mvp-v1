@@ -1078,6 +1078,8 @@ Push notifications had been dead since the move from Manus to Railway. Root caus
 
 **Consequence:** rotating the VAPID pair invalidates every existing `push_subscriptions` row (they are cryptographically bound to the old key pair). All users must re-enable notifications once; the stale rows are auto-pruned on the next send (push gateways return 410, handled by `sendToSubscription`).
 
+**Verification tool added:** new `admin.sendTestPush` tRPC mutation (`server/routers.ts`) sends a push to the calling admin's own devices; wired to a "Send Test Push To Me" button in a Notifications card on the Admin Dashboard (`client/src/pages/admin/AdminDashboard.tsx`). Previously push only fired inside `admin.endOfDay`, so there was no way to test it without a full run. The button reports sent/expired/none via toast.
+
 **Still Manus-coupled (dead code, cleanup candidates):** `server/_core/storageProxy.ts` and `server/storage.ts` (`/manus-storage/*` upload/download) depend on the retired Forge API and no longer function. Not removed yet.
 
 ---
