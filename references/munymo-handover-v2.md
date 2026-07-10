@@ -1086,4 +1086,17 @@ Push notifications had been dead since the move from Manus to Railway. Root caus
 
 ---
 
+## Session Update — July 10 2026 (cont.)
+
+### S11 — Dashboard vs Profile responsibility split
+
+`/dashboard` (`MyDashboard.tsx`) and `/profile` (`PlayerProfile.tsx`) had become muddled: the dashboard carried gameplay **and** nearly all account admin (Away Status, Notifications, Account Settings, Membership Tier, Danger Zone), while the profile duplicated gameplay (a stats row + a recent-games table already shown on the dashboard) and only held Notifications. Split cleanly, one purpose each:
+
+- **`/dashboard` = gameplay only:** My Stats, Game History, MunyIQ score. (MunyIQ stays here — it's a gameplay-derived score. Header links to `/profile` via "Manage account".)
+- **`/profile` = personal / account admin:** Away Status, Notifications (email + push), Account Settings (display name, password, email, sign out), Membership Tier / Upgrade, Danger Zone (deactivate). Header links to `/dashboard` via "View stats".
+
+Away Status moved to Profile (decision: it's a personal control, confirmed by Paul 2026-07-10). The duplicated stats row + recent-games table were removed from Profile. All mutations moved with their sections (`setAwayStatus`, `setNotificationPrefs`, `updateDisplayName`, `deactivateAccount` now live in `PlayerProfile.tsx`; `MyDashboard.tsx` is now query-only). This lines up with `/profile`'s intended future as the member's self-serve billing/membership hub. "My Profile" is now linked in the nav menu (`PublicLayout.tsx`).
+
+---
+
 *End of session updates.*
