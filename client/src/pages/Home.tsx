@@ -611,7 +611,7 @@ export default function Home() {
                   icon: BookOpen,
                   step: "02",
                   title: "Read the Research",
-                  body: "Charts, financial metrics, and an AI-curated research brief.",
+                  body: "Charts, financial metrics, and an expert-curated research brief.",
                 },
                 {
                   icon: TrendingUp,
