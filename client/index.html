@@ -6,6 +6,19 @@
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+
+    <!-- Google tag (gtag.js) — GA4 (G-RLCKFXCSF3).
+         Munymo is a single-page app: this ONE install covers every route,
+         current and future. Do NOT add gtag to individual page components —
+         it would double-count. New pages are tracked automatically. -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-RLCKFXCSF3"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-RLCKFXCSF3');
+    </script>
+
     <title>Munymo</title>
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />

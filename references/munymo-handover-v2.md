@@ -1121,4 +1121,10 @@ The live database was moved off the Manus-era TiDB cluster (`gateway02...`, whic
 
 ---
 
+### S14 — Google Analytics (GA4) added
+
+GA4 tag `G-RLCKFXCSF3` (gtag.js) installed **once** in `client/index.html` `<head>`. Munymo is a Vite SPA, so this single install covers every route — current and future. **Do NOT add gtag to individual page components** (it would double-count). New pages/routes are tracked automatically; GA4's default enhanced measurement fires `page_view` on History API navigations, which Wouter uses. Runs alongside the existing Umami tag (both kept). Measurement ID is a public client-side value, hardcoded (not a secret). Consideration for later: EEA consent mode + a mention of Google Analytics in the privacy policy if EEA users are in scope.
+
+---
+
 *End of session updates.*
