@@ -120,7 +120,7 @@ The handover from the previous session said "all phases 1–24 are functionally 
 | Streak-at-risk email trigger | **Complete** — `/api/scheduled/streak-at-risk` endpoint in `scheduledCuration.ts`; auth switched from Manus session cookie to shared secret `CURATION_AGENT_SECRET`; triggered by internal `node-cron` at 8:30 AM `America/New_York` Mon–Fri (DST-safe IANA timezone, always 60 min before the 9:30 ET lockout). Manus cron retired. |
 | Time-decay validation scoring (12–20pts based on answer speed) | **Complete (2026-07-06)** — `calculateScore()` in `closeAndScoreGame` (`server/routers.ts`) now passes `pick.validationAnswerTimeMs` as the 5th argument, so `computeValidationScore()` in `server/scoring.ts` actually applies the decay in production instead of always awarding the full 20. Added boundary tests (15s/60s thresholds, null-timing, mid-range). |
 | `/demo/autoplay` animated walkthrough | **Does not exist** — no file, no route |
-| Resend DNS records (Cloudflare SPF/DKIM/DMARC) | **Pending** — action required from Paul |
+| Resend DNS records (Cloudflare SPF/DKIM/DMARC) | **Done (2026-07-10)** — `munymo.com` shows **Verified** in Resend (us-east-1). DKIM + SPF + return-path MX (`send.`) all verified; outbound email fully authenticated. The earlier "Partially Failed" was only the **inbound-receiving** MX (`@ → inbound-smtp…amazonaws.com`), which Munymo doesn't use — fixed by turning **OFF** Resend's "Enable Receiving" toggle (send-only setup; root domain has no MX and receives no mail). Optional DMARC (`_dmarc` TXT `v=DMARC1; p=none;`) not yet added — nice-to-have for deliverability, not required. |
 | `researchSummary` beginner research field | **Complete** — DB column added (migration 0010), wired through `server/db.ts`, `server/routers.ts`, shown by default on `/game` with toggle to full analysis (commit bf9d804) |
 | Yesterday's result CTA on /game | **Complete** — full result card with % change, winner trophy, CTA (commit 31bb3ee) |
 | Price movement panel on /game/:id/result | **Complete** — two-column card showing both companies' % day change (commit 31bb3ee); actual $ start→finish prices added 2026-07-07 (migration 0012, `companyA/BStartPrice`/`EndPrice` on `daily_games`) — shown when present, curation agent now captures them, historical games without this data just show % change |
@@ -729,7 +729,7 @@ Email sent via **Resend** (`RESEND_API_KEY` env var). Sender: `Munymo <notificat
 
 All result/game emails include Clerk magic links for one-tap sign-in.
 
-**Outstanding:** Resend DNS records (SPF/DKIM/DMARC) have not been added to Cloudflare. Paul needs to do this from the Resend dashboard.
+**Resolved (2026-07-10):** `munymo.com` is **Verified** in Resend — DKIM + SPF + return-path MX all in place, outbound email fully authenticated. The domain sat at "Partially Failed" only because Resend's **Enable Receiving** feature (inbound MX) was on with no MX record; Munymo is send-only, so receiving was turned **off** to clear it. Optional DMARC (`_dmarc` TXT `v=DMARC1; p=none;`) is the one remaining nice-to-have, not required.
 
 ---
 
