@@ -29,6 +29,7 @@ vi.mock("./_core/env", () => ({
 }));
 
 import {
+  buildFeedbackEmail,
   buildGameAvailableEmail,
   buildResultPublishedEmail,
   buildStreakAtRiskEmail,
@@ -207,6 +208,38 @@ describe("buildWelcomeEmail", () => {
     expect(html).toContain("Hi,");
     expect(html).toContain("https://munymo.com/game");
   });
+
+  it("tells the tester how to give feedback (reply or form)", () => {
+    const { html } = buildWelcomeEmail({ playerName: null, joinDate: "16 July 2026" });
+    expect(html.toLowerCase()).toContain("reply to this email");
+    expect(html).toContain("https://munymo.com/feedback");
+  });
+});
+
+describe("buildFeedbackEmail", () => {
+  it("includes the player identity and message", () => {
+    const { subject, html } = buildFeedbackEmail({
+      playerName: "Claire Bear",
+      email: "claire@example.com",
+      userId: 42,
+      message: "The chart is hard to read on my phone.",
+    });
+    expect(subject).toContain("Claire Bear");
+    expect(html).toContain("claire@example.com");
+    expect(html).toContain("#42");
+    expect(html).toContain("The chart is hard to read on my phone.");
+  });
+
+  it("escapes HTML in the message so markup can't be injected", () => {
+    const { html } = buildFeedbackEmail({
+      playerName: null,
+      email: null,
+      userId: 1,
+      message: "<script>alert(1)</script>",
+    });
+    expect(html).not.toContain("<script>");
+    expect(html).toContain("&lt;script&gt;");
+  });
 });
 
 // ─── sendEmail — mocked SDK paths ───────────────────────────────────────────
@@ -268,6 +301,16 @@ describe("sendEmail", () => {
     expect(mockSend).toHaveBeenCalledWith(
       expect.objectContaining({
         from: expect.stringContaining("munymo.com"),
+      })
+    );
+  });
+
+  it("sets reply-to to the feedback address on every send", async () => {
+    mockSend.mockResolvedValueOnce({ data: { id: "email_789" }, error: null });
+    await sendEmail({ to: "test@example.com", subject: "Hi", html: "<p>Hi</p>" });
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        replyTo: "feedback@munymo.com",
       })
     );
   });

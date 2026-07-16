@@ -28,6 +28,7 @@ import Disclaimer from "./pages/legal/Disclaimer";
 import ResponsibleGaming from "./pages/legal/ResponsibleGaming";
 import EmailLanding from "./pages/EmailLanding";
 import Demo from "./pages/Demo";
+import Feedback from "./pages/Feedback";
 
 function ScrollToTop() {
   const [location] = useLocation();
@@ -50,6 +51,7 @@ function Router() {
       <Route path="/profile" component={PlayerProfile} />
       <Route path="/dashboard" component={MyDashboard} />
       <Route path="/demo" component={Demo} />
+      <Route path="/feedback" component={Feedback} />
       <Route path="/terms" component={TermsOfUse} />
       <Route path="/privacy" component={PrivacyPolicy} />
       <Route path="/disclaimer" component={Disclaimer} />

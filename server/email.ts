@@ -68,6 +68,13 @@ export type WelcomeData = {
   joinDate: string;
 };
 
+export type FeedbackData = {
+  playerName: string | null;
+  email: string | null;
+  userId: number;
+  message: string;
+};
+
 export type StreakAtRiskData = {
   playerName: string | null;
   currentStreak: number;
@@ -414,6 +421,9 @@ export function buildWelcomeEmail(data: WelcomeData): { subject: string; html: s
     <p style="margin:0 0 24px 0;font-size:14px;color:${TEXT_MUTED};line-height:1.6;">
       One game a day, about five minutes. Play daily to build your streak —
       and tell us what feels rough; shaping the product is the founding tester's job.
+      Just reply to this email, or use the
+      <a href="${BASE_URL}/feedback" style="color:${BRAND_GREEN};text-decoration:none;font-weight:600;">feedback form</a> —
+      both land directly with the team.
     </p>
     <div style="text-align:center;">
       ${greenButton(`${BASE_URL}/game`, "Play Your First Game →")}
@@ -423,9 +433,47 @@ export function buildWelcomeEmail(data: WelcomeData): { subject: string; html: s
   return { subject, html };
 }
 
+// ─── Template: Beta Feedback (to the team) ────────────────────────────────────
+
+export function buildFeedbackEmail(data: FeedbackData): { subject: string; html: string } {
+  const who = data.playerName ?? "Anonymous player";
+  const subject = `Beta feedback from ${who}`;
+
+  const html = emailWrapper(`
+    <h1 style="margin:0 0 6px 0;font-size:24px;font-weight:700;color:${DEEP_GREEN};">
+      Beta feedback
+    </h1>
+    <p style="margin:0 0 20px 0;font-size:13px;color:${TEXT_MUTED};">
+      ${label("From")} <strong style="color:${TEXT_MAIN};margin-left:8px;">${who}</strong>
+      ${data.email ? `&nbsp;·&nbsp;${data.email}` : ""}
+      &nbsp;·&nbsp;player&nbsp;#${data.userId}
+    </p>
+    ${divider}
+    <p style="margin:0;font-size:15px;color:${TEXT_MAIN};line-height:1.7;white-space:pre-wrap;">${escapeHtml(data.message)}</p>
+  `);
+
+  return { subject, html };
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 // ─── Send Helpers ─────────────────────────────────────────────────────────────
 
 const FROM_ADDRESS = "Munymo <notifications@munymo.com>";
+
+/**
+ * Replies to any Munymo email land here. The sending domain is send-only in
+ * Resend (root munymo.com had no inbound MX), so without an explicit reply-to
+ * a player hitting "Reply" would mail a dead address. feedback@munymo.com is
+ * forwarded to Paul via Cloudflare Email Routing.
+ */
+export const FEEDBACK_ADDRESS = "feedback@munymo.com";
 
 /**
  * Send a single transactional email. Returns { success: true } or { success: false, error }.
@@ -445,6 +493,7 @@ export async function sendEmail(opts: {
     const { error } = await resend.emails.send({
       from: FROM_ADDRESS,
       to: opts.to,
+      replyTo: FEEDBACK_ADDRESS,
       subject: opts.subject,
       html: opts.html,
     });

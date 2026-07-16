@@ -4,9 +4,12 @@ import { calculateScore, checkLockout, computeNewStreak, isQualified } from "./s
 import { hashEndpoint } from "./push";
 import {
   broadcastEmail,
+  buildFeedbackEmail,
   buildGameAvailableEmail,
   buildMissedGameEmail,
   buildResultPublishedEmail,
+  FEEDBACK_ADDRESS,
+  sendEmail,
 } from "./email";
 import { z } from "zod";
 import { COOKIE_NAME } from "@shared/const";
@@ -1524,6 +1527,45 @@ const pushRouter = router({
   }),
 });
 
+// ─── Feedback Router ──────────────────────────────────────────────────────────
+
+// Per-user cooldown so a stuck retry loop (or mischief) can't flood the
+// feedback inbox. In-memory is fine: single Railway instance, and losing the
+// cooldown on restart is harmless.
+const FEEDBACK_COOLDOWN_MS = 60_000;
+const lastFeedbackAt = new Map<number, number>();
+
+const feedbackRouter = router({
+  submit: protectedProcedure
+    .input(z.object({ message: z.string().trim().min(3).max(5000) }))
+    .mutation(async ({ ctx, input }) => {
+      const prev = lastFeedbackAt.get(ctx.user.id);
+      if (prev && Date.now() - prev < FEEDBACK_COOLDOWN_MS) {
+        throw new TRPCError({
+          code: "TOO_MANY_REQUESTS",
+          message: "Please wait a minute before sending more feedback.",
+        });
+      }
+
+      const { subject, html } = buildFeedbackEmail({
+        playerName: ctx.user.displayName ?? ctx.user.name,
+        email: ctx.user.email,
+        userId: ctx.user.id,
+        message: input.message,
+      });
+      const result = await sendEmail({ to: FEEDBACK_ADDRESS, subject, html });
+      if (!result.success) {
+        // Be honest with the player rather than swallowing a lost message.
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Your feedback couldn't be sent right now — please try again shortly.",
+        });
+      }
+      lastFeedbackAt.set(ctx.user.id, Date.now());
+      return { ok: true } as const;
+    }),
+});
+
 // ─── App Router ───────────────────────────────────────────────────────────────
 export const appRouter = router({
   system: systemRouter,
@@ -1544,5 +1586,6 @@ export const appRouter = router({
     metrics: metricsRouter,
   push: pushRouter,
   referral: referralRouter,
+  feedback: feedbackRouter,
 });
 export type AppRouter = typeof appRouter;
