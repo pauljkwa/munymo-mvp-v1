@@ -309,6 +309,20 @@ export default function DailyGame() {
 
   const [step, setStep] = useState<GameStep>("gut");
   const [showFullResearch, setShowFullResearch] = useState(false);
+  const researchNotesRef = useRef<HTMLDivElement>(null);
+
+  const toggleFullResearch = (next: boolean) => {
+    setShowFullResearch(next);
+    requestAnimationFrame(() =>
+      researchNotesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+    );
+  };
+
+  const goToFinalStep = () => {
+    setStep("final");
+    requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
+  };
+
   const [gutSelection, setGutSelection] = useState<"A" | "B" | null>(null);
   const [finalSelection, setFinalSelection] = useState<"A" | "B" | null>(null);
 
@@ -645,7 +659,7 @@ export default function DailyGame() {
                 </div>
               )}
               {research?.content ? (
-                <div>
+                <div ref={researchNotesRef} className="scroll-mt-20">
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-brand)" }}>
                       {research.researchSummary && !showFullResearch ? "Summary" : "Research Notes"}
@@ -653,7 +667,7 @@ export default function DailyGame() {
                     {research.researchSummary && (
                       <button
                         type="button"
-                        onClick={() => setShowFullResearch(v => !v)}
+                        onClick={() => toggleFullResearch(!showFullResearch)}
                         className="text-xs font-semibold"
                         style={{ color: "var(--color-brand)" }}
                       >
@@ -675,7 +689,7 @@ export default function DailyGame() {
                           This is the beginner summary. Tap{" "}
                           <button
                             type="button"
-                            onClick={() => setShowFullResearch(true)}
+                            onClick={() => toggleFullResearch(true)}
                             className="font-semibold underline"
                             style={{ color: "var(--color-brand)" }}
                           >
@@ -868,7 +882,7 @@ export default function DailyGame() {
 
             <button
               className="btn-brand w-full justify-center"
-              onClick={() => setStep("final")}
+              onClick={goToFinalStep}
             >
               I've Read the Research — Make Final Pick
               <ArrowRight size={16} />
