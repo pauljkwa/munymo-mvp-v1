@@ -19,6 +19,18 @@ const ROOT_FONT_SIZE: Record<TextSize, string> = {
   large: "125%",
 };
 
+/**
+ * Matching scale factor for px-sized inline icons (lucide sets width/height in
+ * px, so they don't grow with the rem-based text). Applied as a visual
+ * transform via the `--icon-scale` variable (see svg.lucide in index.css) so
+ * icons keep pace with the text without shifting any layout.
+ */
+const ICON_SCALE: Record<TextSize, string> = {
+  small: "1",
+  medium: "1.125",
+  large: "1.25",
+};
+
 export const TEXT_SIZE_ORDER: TextSize[] = ["small", "medium", "large"];
 
 const STORAGE_KEY = "munymo-text-size";
@@ -46,6 +58,7 @@ export function TextSizeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     document.documentElement.style.fontSize = ROOT_FONT_SIZE[textSize];
+    document.documentElement.style.setProperty("--icon-scale", ICON_SCALE[textSize]);
     try {
       localStorage.setItem(STORAGE_KEY, textSize);
     } catch {

@@ -204,6 +204,15 @@
   /* Shadcn border-border utility */
   .border-border { border-color: var(--color-border); }
   .font-sans { font-family: var(--font-sans); }
+
+  /* Lucide icons are px-sized (size={n} sets width/height attributes), so they
+     don't grow with the rem-based Text Size setting. --icon-scale is set on
+     <html> by TextSizeContext (and the pre-paint script in index.html) to
+     match the chosen size. A transform keeps layout boxes untouched — icons
+     only grow visually, so nothing reflows. */
+  svg.lucide {
+    transform: scale(var(--icon-scale, 1));
+  }
 }
 
 /* ─── Component Layer ──────────────────────────────────────────────────────── */

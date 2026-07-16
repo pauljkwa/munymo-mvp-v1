@@ -248,27 +248,27 @@ const STEP_TIPS: Record<string, { title: string; body: string; emoji: string }> 
   gut: {
     emoji: "🧠",
     title: "Step 1 of 5 — Gut Pick",
-    body: "Before you see any data, tap the company you instinctively think will outperform today. Pure gut feel — no research allowed yet. This is compared to your final pick later to measure how much the research changed your mind.",
+    body: "Before you see any data, tap the company you instinctively think will outperform today — pure gut feel. Later you'll see whether the research changed your mind.",
   },
   research: {
     emoji: "📊",
     title: "Step 2 of 5 — Research",
-    body: "Read the pairing rationale, analyst notes, and key financial metrics for both companies. Study the live candlestick charts. You'll be tested on this material in a timed question — so read carefully!",
+    body: "Read the rationale, analyst notes, metrics, and charts for both companies. You'll be tested on this in a timed question — so read carefully!",
   },
   final: {
     emoji: "🎯",
     title: "Step 3 of 5 — Final Pick",
-    body: "Now that you've done your research, lock in your official prediction. This is the pick that counts for scoring. You can change your mind from your gut pick — that's the whole point.",
+    body: "Lock in your official prediction — this is the pick that counts for scoring. Changing your mind from your gut pick is allowed; that's the whole point.",
   },
   validation: {
     emoji: "⏱",
     title: "Step 4 of 5 — Validation Question",
-    body: "A timed multiple-choice question based on the research you just read. Answer quickly — speed is part of your score. This tests whether you actually absorbed the research or just skimmed it.",
+    body: "A timed question on the research you just read — answer quickly, speed is part of your score. It tests whether you absorbed the research or just skimmed it.",
   },
   result: {
     emoji: "🏆",
     title: "Step 5 of 5 — Result",
-    body: "See who won, how your picks compared, and read the Hindsight Spotlight — a post-game analysis explaining what drove the result. In the live game, your score is added to the leaderboard.",
+    body: "See who won, how your picks compared, and the Hindsight Spotlight explaining what drove the result. In the live game, your score joins the leaderboard.",
   },
 };
 
@@ -364,7 +364,8 @@ function DemoBanner() {
       style={{ background: "oklch(0.45 0.2 250)" }}
     >
       <FlaskConical size={15} />
-      Demo Mode — Apple vs Microsoft · Nothing is saved · This is a tutorial walkthrough
+      <span className="sm:hidden">Demo Mode — nothing is saved</span>
+      <span className="hidden sm:inline">Demo Mode — Apple vs Microsoft · Nothing is saved · This is a tutorial walkthrough</span>
     </div>
   );
 }

@@ -294,7 +294,7 @@ export default function Home() {
       ══════════════════════════════════════════════════════════════════════ */}
       {showBanner && (
         <div
-          className="relative flex items-center justify-center gap-3 px-4 py-2.5 text-sm font-medium"
+          className="relative flex items-center justify-center gap-3 pl-4 pr-10 py-2.5 text-sm font-medium"
           style={{
             background: "var(--color-brand)",
             borderBottom: "1px solid oklch(0.28 0.12 160)",
@@ -309,7 +309,7 @@ export default function Home() {
             Beta
           </span>
           <span className="hidden sm:inline" style={{ color: "oklch(0.92 0.04 155)" }}>We're recruiting founding beta testers — play free, shape the product, earn founding member status.</span>
-          <span className="sm:hidden" style={{ color: "oklch(0.92 0.04 155)" }}>Recruiting beta testers — join free.</span>
+          <span className="sm:hidden" style={{ color: "oklch(0.92 0.04 155)" }}>Beta testers wanted.</span>
           {!isAuthenticated && (
             <SignInButton mode="modal">
               <button
@@ -361,7 +361,8 @@ export default function Home() {
                 }}
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
-                Daily Stock Market Training Game
+                <span className="sm:hidden">Daily Training Game</span>
+                <span className="hidden sm:inline">Daily Stock Market Training Game</span>
               </div>
 
               {/* Hook */}
@@ -535,45 +536,88 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Mobile hero card — shown below copy on small screens */}
+        {/* Mobile hero card — shown below copy on small screens.
+            Live matchup when a game is running (same as desktop), demo card otherwise. */}
         <div className="lg:hidden container pb-12">
-          <div
-            className="rounded-3xl p-5 flex flex-col gap-4 mx-auto max-w-sm"
-            style={{
-              background: "oklch(0.15 0.06 160)",
-              border: "1.5px solid oklch(0.28 0.10 160)",
-              boxShadow: "0 20px 60px oklch(0.10 0.08 160 / 0.5)",
-            }}
-          >
-            <div className="flex gap-3">
-              <CompanyCard
-                label="Company A"
-                sector="Tech"
-                candles={CANDLES_A}
-                selected={selectedCompany === "A"}
-                onSelect={() =>
-                  setSelectedCompany((p) => (p === "A" ? null : "A"))
-                }
-              />
-              <CompanyCard
-                label="Company B"
-                sector="Tech"
-                candles={CANDLES_B}
-                selected={selectedCompany === "B"}
-                onSelect={() =>
-                  setSelectedCompany((p) => (p === "B" ? null : "B"))
-                }
-              />
-            </div>
-            {selectedCompany && (
-              <div
-                className="text-center text-xs py-2 rounded-xl font-semibold animate-fade-up"
-                style={{ background: "oklch(0.58 0.16 155 / 0.15)", color: "#4ade80" }}
+          {todayGame ? (
+            <div className="mx-auto max-w-sm">
+              <p
+                className="text-xs font-bold uppercase tracking-widest mb-4 text-center"
+                style={{ color: "var(--color-subtle)" }}
               >
-                Good instinct. Now read the research →
+                Today's Matchup
+              </p>
+              <div className="card-glass p-6 shadow-card">
+                <div className="flex items-center justify-between gap-4 mb-5">
+                  <div className="flex-1 text-center">
+                    <div className="ticker-chip mb-2">{todayGame.companyATicker}</div>
+                    <p className="text-sm font-medium" style={{ color: "var(--color-foreground)" }}>
+                      {todayGame.companyAName}
+                    </p>
+                  </div>
+                  <div className="text-lg font-display font-bold px-3" style={{ color: "var(--color-subtle)" }}>
+                    vs
+                  </div>
+                  <div className="flex-1 text-center">
+                    <div className="ticker-chip mb-2">{todayGame.companyBTicker}</div>
+                    <p className="text-sm font-medium" style={{ color: "var(--color-foreground)" }}>
+                      {todayGame.companyBName}
+                    </p>
+                  </div>
+                </div>
+                {todayGame.sector && (
+                  <p
+                    className="text-xs text-center mb-5 pb-5"
+                    style={{ color: "var(--color-subtle)", borderBottom: "1px solid var(--color-border)" }}
+                  >
+                    Sector: {todayGame.sector}
+                  </p>
+                )}
+                <Link href="/game" className="btn-brand w-full justify-center text-sm">
+                  Make Your Pick
+                  <ArrowRight size={14} />
+                </Link>
               </div>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div
+              className="rounded-3xl p-5 flex flex-col gap-4 mx-auto max-w-sm"
+              style={{
+                background: "oklch(0.15 0.06 160)",
+                border: "1.5px solid oklch(0.28 0.10 160)",
+                boxShadow: "0 20px 60px oklch(0.10 0.08 160 / 0.5)",
+              }}
+            >
+              <div className="flex gap-3">
+                <CompanyCard
+                  label="Company A"
+                  sector="Tech"
+                  candles={CANDLES_A}
+                  selected={selectedCompany === "A"}
+                  onSelect={() =>
+                    setSelectedCompany((p) => (p === "A" ? null : "A"))
+                  }
+                />
+                <CompanyCard
+                  label="Company B"
+                  sector="Tech"
+                  candles={CANDLES_B}
+                  selected={selectedCompany === "B"}
+                  onSelect={() =>
+                    setSelectedCompany((p) => (p === "B" ? null : "B"))
+                  }
+                />
+              </div>
+              {selectedCompany && (
+                <div
+                  className="text-center text-xs py-2 rounded-xl font-semibold animate-fade-up"
+                  style={{ background: "oklch(0.58 0.16 155 / 0.15)", color: "#4ade80" }}
+                >
+                  Good instinct. Now read the research →
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </section>
 
@@ -599,7 +643,7 @@ export default function Home() {
               style={{ background: "var(--color-border)" }}
             />
 
-            <div className="grid md:grid-cols-4 gap-8">
+            <div className="grid md:grid-cols-4 gap-6 md:gap-8">
               {[
                 {
                   icon: Brain,
@@ -628,13 +672,13 @@ export default function Home() {
               ].map((item, i) => (
                 <div
                   key={item.step}
-                  className="flex flex-col items-center text-center md:items-start md:text-left animate-fade-up"
+                  className="flex flex-row items-start gap-4 text-left md:flex-col md:gap-0 animate-fade-up"
                   style={{ animationDelay: `${i * 60}ms` }}
                 >
-                  {/* Step circle */}
-                  <div className="relative mb-5">
+                  {/* Step circle — compact beside the text on mobile, large above it on desktop */}
+                  <div className="relative flex-shrink-0 md:mb-5">
                     <div
-                      className="w-[4.5rem] h-[4.5rem] rounded-full flex items-center justify-center"
+                      className="w-12 h-12 md:w-[4.5rem] md:h-[4.5rem] rounded-full flex items-center justify-center"
                       style={{
                         background: "var(--color-brand-muted)",
                         border: "1px solid oklch(0.35 0.10 160 / 0.2)",
@@ -652,15 +696,17 @@ export default function Home() {
                       {i + 1}
                     </span>
                   </div>
-                  <h4
-                    className="font-display text-base mb-2"
-                    style={{ color: "var(--color-foreground)" }}
-                  >
-                    {item.title}
-                  </h4>
-                  <p className="text-sm leading-relaxed" style={{ color: "var(--color-muted)" }}>
-                    {item.body}
-                  </p>
+                  <div>
+                    <h4
+                      className="font-display text-base mb-2"
+                      style={{ color: "var(--color-foreground)" }}
+                    >
+                      {item.title}
+                    </h4>
+                    <p className="text-sm leading-relaxed" style={{ color: "var(--color-muted)" }}>
+                      {item.body}
+                    </p>
+                  </div>
                 </div>
               ))}
             </div>

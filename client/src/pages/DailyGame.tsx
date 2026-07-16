@@ -481,7 +481,10 @@ export default function DailyGame() {
           {lockoutTime && !isLocked && (
             <p className="text-sm flex items-center gap-1.5" style={{ color: "var(--color-muted)" }}>
               <Clock size={13} />
-              Locks at {lockoutTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              Locks at {lockoutTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} your time
+              <span style={{ color: "var(--color-subtle)" }}>
+                ({lockoutTime.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })} New York)
+              </span>
             </p>
           )}
           {game.sector && (

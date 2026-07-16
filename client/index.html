@@ -16,10 +16,13 @@
       (function () {
         try {
           var sizes = { small: "100%", medium: "112.5%", large: "125%" };
+          var icons = { small: "1", medium: "1.125", large: "1.25" };
           var saved = localStorage.getItem("munymo-text-size");
           document.documentElement.style.fontSize = sizes[saved] || sizes.medium;
+          document.documentElement.style.setProperty("--icon-scale", icons[saved] || icons.medium);
         } catch (e) {
           document.documentElement.style.fontSize = "112.5%";
+          document.documentElement.style.setProperty("--icon-scale", "1.125");
         }
       })();
     </script>

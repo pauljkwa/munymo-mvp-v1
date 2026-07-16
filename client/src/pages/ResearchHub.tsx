@@ -50,14 +50,17 @@ export default function ResearchHub() {
                     <span className="text-xs" style={{ color: "var(--color-subtle)" }}>vs</span>
                     <span className="ticker-chip">{game.companyBTicker}</span>
                   </div>
-                  <p className="text-sm font-medium truncate" style={{ color: "var(--color-foreground)" }}>
+                  <p className="text-sm font-medium leading-snug" style={{ color: "var(--color-foreground)" }}>
                     {game.companyAName} vs {game.companyBName}
                   </p>
-                  {game.sector && (
-                    <p className="text-xs mt-0.5" style={{ color: "var(--color-subtle)" }}>
-                      {game.sector}
-                    </p>
-                  )}
+                  <p className="text-xs mt-0.5 flex items-center gap-1.5 flex-wrap" style={{ color: "var(--color-subtle)" }}>
+                    {game.sector && <span>{game.sector}</span>}
+                    {game.sector && <span aria-hidden="true">·</span>}
+                    <span className="inline-flex items-center gap-1">
+                      <Calendar size={12} />
+                      {game.gameDate}
+                    </span>
+                  </p>
                 </div>
                 <div className="flex items-center gap-4 flex-shrink-0">
                   <div className="text-right hidden sm:block">
@@ -67,10 +70,6 @@ export default function ResearchHub() {
                     <p className="text-sm font-semibold" style={{ color: "var(--color-brand)" }}>
                       {game.winner === "A" ? game.companyATicker : game.companyBTicker}
                     </p>
-                  </div>
-                  <div className="flex items-center gap-1 text-xs" style={{ color: "var(--color-subtle)" }}>
-                    <Calendar size={12} />
-                    {game.gameDate}
                   </div>
                   <ArrowRight
                     size={16}
