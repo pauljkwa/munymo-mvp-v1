@@ -60,8 +60,26 @@ const trpcClient = trpc.createClient({
   ],
 });
 
+// Overrides Clerk's generic dialog copy so the sign-up flow carries the
+// founding-beta framing through the moment of commitment. Only the strings
+// listed here change; everything else keeps Clerk's defaults.
+const clerkLocalization = {
+  signUp: {
+    start: {
+      title: "Join the Munymo founding beta",
+      subtitle: "Free to play — your join date is recorded from day one",
+    },
+  },
+  signIn: {
+    start: {
+      title: "Welcome back to Munymo",
+      subtitle: "Sign in to keep your streak going",
+    },
+  },
+};
+
 createRoot(document.getElementById("root")!).render(
-  <ClerkProvider publishableKey={PUBLISHABLE_KEY} afterSignOutUrl="/">
+  <ClerkProvider publishableKey={PUBLISHABLE_KEY} afterSignOutUrl="/" localization={clerkLocalization}>
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
         <App />

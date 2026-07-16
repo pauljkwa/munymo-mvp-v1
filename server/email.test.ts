@@ -32,6 +32,7 @@ import {
   buildGameAvailableEmail,
   buildResultPublishedEmail,
   buildStreakAtRiskEmail,
+  buildWelcomeEmail,
   sendEmail,
   broadcastEmail,
 } from "./email";
@@ -190,6 +191,21 @@ describe("buildStreakAtRiskEmail", () => {
       lockoutAt: new Date("2026-06-11T20:00:00Z"),
     });
     expect(subject).toContain("7");
+  });
+});
+
+describe("buildWelcomeEmail", () => {
+  it("frames the email around founding beta membership", () => {
+    const { subject, html } = buildWelcomeEmail({ playerName: "Claire", joinDate: "16 July 2026" });
+    expect(subject.toLowerCase()).toContain("founding beta");
+    expect(html).toContain("Hi Claire,");
+    expect(html).toContain("16 July 2026");
+  });
+
+  it("links to the game and handles a null player name", () => {
+    const { html } = buildWelcomeEmail({ playerName: null, joinDate: "16 July 2026" });
+    expect(html).toContain("Hi,");
+    expect(html).toContain("https://munymo.com/game");
   });
 });
 

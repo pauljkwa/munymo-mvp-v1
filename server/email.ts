@@ -62,6 +62,12 @@ export type MissedGameData = {
   magicLink?: string | null;
 };
 
+export type WelcomeData = {
+  playerName: string | null;
+  /** Join date shown as the founding-member record, e.g. "16 July 2026" */
+  joinDate: string;
+};
+
 export type StreakAtRiskData = {
   playerName: string | null;
   currentStreak: number;
@@ -367,6 +373,50 @@ export function buildStreakAtRiskEmail(data: StreakAtRiskData): { subject: strin
     </p>
     <div style="text-align:center;">
       ${greenButton(ctaUrl, "Play Now — Keep Your Streak →")}
+    </div>
+  `);
+
+  return { subject, html };
+}
+
+// ─── Template: Welcome (first sign-in) ────────────────────────────────────────
+
+export function buildWelcomeEmail(data: WelcomeData): { subject: string; html: string } {
+  const greeting = data.playerName ? `Hi ${data.playerName},` : "Hi,";
+  const subject = "You're in — welcome to the Munymo founding beta";
+
+  const html = emailWrapper(`
+    <p style="margin:0 0 20px 0;font-size:15px;color:${TEXT_MAIN};">${greeting}</p>
+    <h1 style="margin:0 0 6px 0;font-size:24px;font-weight:700;color:${DEEP_GREEN};">
+      You're in.
+    </h1>
+    <p style="margin:0 0 28px 0;font-size:15px;color:${TEXT_MUTED};line-height:1.6;">
+      You're now a <strong style="color:${TEXT_MAIN};">founding beta tester</strong>.
+      Your founding-member status is recorded from <strong style="color:${TEXT_MAIN};">${data.joinDate}</strong> —
+      when MunyIQ launches, players who were here first will have the deepest
+      prediction history and the founding badge to show for it.
+    </p>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color:${BG_SUBTLE};border:1px solid ${BORDER};border-radius:8px;margin:0 0 24px 0;">
+      <tr>
+        <td style="padding:20px 24px;">
+          ${label("How it works")}
+          <p style="margin:10px 0 0 0;font-size:14px;color:${TEXT_MUTED};line-height:1.8;">
+            <strong style="color:${TEXT_MAIN};">1.</strong> Gut pick — choose a winner on instinct alone<br/>
+            <strong style="color:${TEXT_MAIN};">2.</strong> Read the research brief and charts<br/>
+            <strong style="color:${TEXT_MAIN};">3.</strong> Lock in your final pick + answer one timed question<br/>
+            <strong style="color:${TEXT_MAIN};">4.</strong> See the result after market close
+          </p>
+        </td>
+      </tr>
+    </table>
+
+    <p style="margin:0 0 24px 0;font-size:14px;color:${TEXT_MUTED};line-height:1.6;">
+      One game a day, about five minutes. Play daily to build your streak —
+      and tell us what feels rough; shaping the product is the founding tester's job.
+    </p>
+    <div style="text-align:center;">
+      ${greenButton(`${BASE_URL}/game`, "Play Your First Game →")}
     </div>
   `);
 

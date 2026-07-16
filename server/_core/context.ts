@@ -10,6 +10,12 @@ export type TrpcContext = {
   user: User | null;
 };
 
+// Guards the founding-beta welcome email against double-sends when a brand-new
+// user's first page load fires several requests concurrently (each would see
+// "no user row yet" and take the first-sign-in branch). Per-process is enough:
+// Railway runs a single instance, and a rare duplicate is harmless.
+const welcomeEmailSent = new Set<string>();
+
 // Lazy-initialised Clerk client for user lookups and deletion.
 // Returns null when Clerk isn't configured — callers must handle that.
 let _clerk: ReturnType<typeof createClerkClient> | null = null;
@@ -76,6 +82,30 @@ export async function createContext(
           lastSignedIn: new Date(),
         });
         user = (await db.getUserByClerkId(clerkUserId)) ?? null;
+
+        // First sign-in = joining the founding beta. Send the welcome email
+        // fire-and-forget: a delivery failure must never block authentication.
+        if (user?.email && !welcomeEmailSent.has(clerkUserId)) {
+          welcomeEmailSent.add(clerkUserId);
+          const to = user.email;
+          const playerName = user.name;
+          import("../email")
+            .then(({ buildWelcomeEmail, sendEmail }) => {
+              const joinDate = new Date().toLocaleDateString("en-AU", {
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+              });
+              const { subject, html } = buildWelcomeEmail({ playerName, joinDate });
+              return sendEmail({ to, subject, html });
+            })
+            .then((result) => {
+              if (result && !result.success) {
+                console.warn("[Welcome email] send failed:", result.error);
+              }
+            })
+            .catch((err) => console.warn("[Welcome email] unexpected error:", err));
+        }
       }
     } else {
       // Update last signed in timestamp

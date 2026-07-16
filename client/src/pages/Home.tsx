@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { SignInButton } from "@clerk/clerk-react";
+import { SignUpButton } from "@clerk/clerk-react";
 import { trpc } from "@/lib/trpc";
 import { Link } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
@@ -311,14 +311,14 @@ export default function Home() {
           <span className="hidden sm:inline" style={{ color: "oklch(0.92 0.04 155)" }}>We're recruiting founding beta testers — play free, shape the product, earn founding member status.</span>
           <span className="sm:hidden" style={{ color: "oklch(0.92 0.04 155)" }}>Beta testers wanted.</span>
           {!isAuthenticated && (
-            <SignInButton mode="modal">
+            <SignUpButton mode="modal">
               <button
                 className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold flex-shrink-0 transition-all duration-150 hover:opacity-90 active:scale-95"
                 style={{ background: "oklch(0.58 0.16 155)", color: "#ffffff" }}
               >
                 Join now <ArrowRight size={11} />
               </button>
-            </SignInButton>
+            </SignUpButton>
           )}
           <button
             onClick={dismissBanner}
@@ -418,12 +418,12 @@ export default function Home() {
                     <ArrowRight size={16} />
                   </Link>
                 ) : (
-                  <SignInButton mode="modal">
+                  <SignUpButton mode="modal">
                     <button className="btn-gold text-sm px-7 py-3">
                       Start Playing — It's Free
                       <ArrowRight size={16} />
                     </button>
-                  </SignInButton>
+                  </SignUpButton>
                 )}
                 <Link href="/demo" className="btn-ghost text-sm px-6 py-3">
                   See How It Works
@@ -1119,12 +1119,12 @@ export default function Home() {
                     </button>
                   </Link>
                 ) : (
-                  <SignInButton mode="modal">
+                  <SignUpButton mode="modal">
                     <button className="btn-gold text-sm px-8 py-3.5 mb-4">
                       Apply as a Beta Tester — It's Free
                       <ArrowRight size={16} />
                     </button>
-                  </SignInButton>
+                  </SignUpButton>
                 )}
                 <p className="text-xs" style={{ color: "oklch(0.55 0.008 260)" }}>
                   No credit card. No financial knowledge required. Just play every day and tell us what you think.
@@ -1171,12 +1171,12 @@ export default function Home() {
                 <p className="mb-8 text-sm leading-relaxed" style={{ color: "var(--color-muted)" }}>
                   Free to play. No financial knowledge required. Just curiosity.
                 </p>
-                <SignInButton mode="modal">
+                <SignUpButton mode="modal">
                   <button className="btn-gold text-sm px-8 py-3">
                     Start Playing Free
                     <ArrowRight size={16} />
                   </button>
-                </SignInButton>
+                </SignUpButton>
               </div>
             </div>
           </div>
