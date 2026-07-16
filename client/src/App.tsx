@@ -6,6 +6,7 @@ import { useEffect } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import ReferralAttribution from "./components/ReferralAttribution";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { TextSizeProvider } from "./contexts/TextSizeContext";
 import Home from "./pages/Home";
 import DailyGame from "./pages/DailyGame";
 import GameResult from "./pages/GameResult";
@@ -74,12 +75,14 @@ function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="light" switchable>
-        <TooltipProvider>
-          <Toaster richColors position="top-right" />
-          <ScrollToTop />
-          <ReferralAttribution />
-          <Router />
-        </TooltipProvider>
+        <TextSizeProvider>
+          <TooltipProvider>
+            <Toaster richColors position="top-right" />
+            <ScrollToTop />
+            <ReferralAttribution />
+            <Router />
+          </TooltipProvider>
+        </TextSizeProvider>
       </ThemeProvider>
     </ErrorBoundary>
   );

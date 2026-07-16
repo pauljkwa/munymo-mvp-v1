@@ -3,6 +3,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Menu, X, Sun, Moon, ChevronRight } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import MunymoLogo from "@/components/MunymoLogo";
+import TextSizeToggle from "@/components/TextSizeToggle";
 import { SignInButton, SignOutButton } from "@clerk/clerk-react";
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
@@ -62,13 +63,18 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
           borderBottom: "1px solid var(--color-border)",
         }}
       >
-        {/* Logo */}
+        {/* Logo — fixed px height, not rem: the wordmark is a brand mark, not
+            reading text, so it must not grow with the text-size setting and
+            crowd out the controls beside it on narrow phones. */}
         <Link href="/" className="flex items-center gap-2 shrink-0">
-          <MunymoLogo className="h-7 w-auto" />
+          <MunymoLogo height={28} />
         </Link>
 
         {/* Right controls */}
         <div className="flex items-center gap-2">
+          {/* Text size */}
+          <TextSizeToggle />
+
           {/* Theme toggle */}
           <button
             onClick={toggleTheme}

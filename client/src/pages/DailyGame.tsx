@@ -810,7 +810,7 @@ export default function DailyGame() {
                               className="px-3 py-2.5 flex flex-col gap-0.5"
                               style={{ borderRight: "1px solid var(--color-border)" }}
                             >
-                              <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--color-muted)" }}>
+                              <p className="text-[0.625rem] font-semibold uppercase tracking-wider" style={{ color: "var(--color-muted)" }}>
                                 {row.labelA}
                               </p>
                               <p className="text-sm font-bold font-display" style={{ color: "var(--color-foreground)" }}>
@@ -820,7 +820,7 @@ export default function DailyGame() {
                             </div>
                             {/* Company B cell */}
                             <div className="px-3 py-2.5 flex flex-col gap-0.5">
-                              <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--color-muted)" }}>
+                              <p className="text-[0.625rem] font-semibold uppercase tracking-wider" style={{ color: "var(--color-muted)" }}>
                                 {row.labelB}
                               </p>
                               <p className="text-sm font-bold font-display" style={{ color: "var(--color-foreground)" }}>
@@ -1072,7 +1072,7 @@ export default function DailyGame() {
                                 {ticker}
                               </span>
                             </div>
-                            <p className="text-[10px] mb-1" style={{ color: "var(--color-subtle)" }}>{name}</p>
+                            <p className="text-[0.625rem] mb-1" style={{ color: "var(--color-subtle)" }}>{name}</p>
                             {perf != null && (
                               <span className="text-lg font-bold font-mono" style={{ color: perfColor }}>
                                 {fmt(perf)}

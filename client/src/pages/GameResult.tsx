@@ -158,11 +158,11 @@ export default function GameResult() {
                           {ticker}
                         </span>
                       </div>
-                      <p className="text-[10px] mb-2 truncate" style={{ color: "var(--color-subtle)" }}>{name}</p>
+                      <p className="text-[0.625rem] mb-2 truncate" style={{ color: "var(--color-subtle)" }}>{name}</p>
                       <p className="text-2xl font-bold font-mono" style={{ color: perfColor }}>
                         {perf != null ? fmt(perf) : "—"}
                       </p>
-                      <p className="text-[10px] mt-1" style={{ color: "var(--color-subtle)" }}>day's change</p>
+                      <p className="text-[0.625rem] mt-1" style={{ color: "var(--color-subtle)" }}>day's change</p>
                       {start != null && end != null && (
                         <p className="text-xs font-mono mt-2" style={{ color: "var(--color-muted)" }}>
                           {fmtPrice(start)} → {fmtPrice(end)}

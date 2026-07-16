@@ -3,9 +3,26 @@
 
   <head>
     <meta charset="UTF-8" />
+    <!-- No maximum-scale/user-scalable: capping zoom blocks pinch-to-zoom on
+         Android Chrome and fails WCAG 1.4.4. Readers must be able to zoom. -->
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+      content="width=device-width, initial-scale=1.0" />
+
+    <!-- Applies the saved text size before first paint, so the page doesn't
+         render at the default and then jump. Mirrors ROOT_FONT_SIZE in
+         client/src/contexts/TextSizeContext.tsx — keep the two in sync. -->
+    <script>
+      (function () {
+        try {
+          var sizes = { small: "100%", medium: "112.5%", large: "125%" };
+          var saved = localStorage.getItem("munymo-text-size");
+          document.documentElement.style.fontSize = sizes[saved] || sizes.medium;
+        } catch (e) {
+          document.documentElement.style.fontSize = "112.5%";
+        }
+      })();
+    </script>
 
     <!-- Google tag (gtag.js) — GA4 (G-RLCKFXCSF3).
          Munymo is a single-page app: this ONE install covers every route,

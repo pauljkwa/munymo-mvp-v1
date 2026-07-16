@@ -302,7 +302,7 @@ export default function Home() {
           }}
         >
           <span
-            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest flex-shrink-0"
+            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[0.625rem] font-bold uppercase tracking-widest flex-shrink-0"
             style={{ background: "oklch(0.58 0.16 155 / 0.30)", color: "oklch(0.88 0.12 155)" }}
           >
             <FlaskConical size={10} />
@@ -643,7 +643,7 @@ export default function Home() {
                       <item.icon size={22} style={{ color: "var(--color-brand)" }} />
                     </div>
                     <span
-                      className="absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold"
+                      className="absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-[0.625rem] font-bold"
                       style={{
                         background: "var(--color-gold)",
                         color: "white",
@@ -953,7 +953,7 @@ export default function Home() {
                     {item.title}
                   </h4>
                   <span
-                    className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wide"
+                    className="text-[0.625rem] px-2 py-0.5 rounded-full font-bold uppercase tracking-wide"
                     style={{
                       background: "var(--color-border)",
                       color: "var(--color-subtle)",
