@@ -10,9 +10,10 @@ export type TrpcContext = {
   user: User | null;
 };
 
-// Lazy-initialised Clerk client for user lookups
+// Lazy-initialised Clerk client for user lookups and deletion.
+// Returns null when Clerk isn't configured — callers must handle that.
 let _clerk: ReturnType<typeof createClerkClient> | null = null;
-function getClerk() {
+export function getClerkClient() {
   if (!_clerk && ENV.clerkSecretKey) {
     _clerk = createClerkClient({ secretKey: ENV.clerkSecretKey });
   }
@@ -55,7 +56,7 @@ export async function createContext(
 
     if (!user) {
       // First sign-in: fetch user details from Clerk and upsert into our DB
-      const clerk = getClerk();
+      const clerk = getClerkClient();
       if (clerk) {
         const clerkUser = await clerk.users.getUser(clerkUserId);
         const email = clerkUser.emailAddresses[0]?.emailAddress ?? null;

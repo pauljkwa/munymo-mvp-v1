@@ -372,3 +372,98 @@ describe("auth.logout", () => {
     expect(result).toEqual({ success: true });
   });
 });
+
+// ─── Account Erasure (right to erasure) ───────────────────────────────────────
+
+import { getTableColumns } from "drizzle-orm";
+import { users } from "../drizzle/schema";
+import { ERASED_USER_FIELDS } from "./db";
+
+/**
+ * Columns on `users` that hold no personal data and so survive erasure.
+ * Everything NOT listed here must be cleared by ERASED_USER_FIELDS — that is
+ * what the first test below enforces, so adding a personal column to the table
+ * and forgetting to erase it fails the build rather than leaking quietly.
+ */
+const NON_PERSONAL_USER_COLUMNS = [
+  "id",             // opaque integer — the anonymous handle game history hangs off
+  "role",
+  "tier",
+  "awayStatus",
+  "awayStatusUntil",
+  "deactivated",    // set by erasure, asserted separately below
+  "emailOptIn",     // set by erasure, asserted separately below
+  "pushOptIn",      // set by erasure, asserted separately below
+  "createdAt",
+  "updatedAt",
+  "lastSignedIn",
+];
+
+describe("ERASED_USER_FIELDS — covers every personal column on users", () => {
+  it("nulls every users column not explicitly marked non-personal", () => {
+    const allColumns = Object.keys(getTableColumns(users));
+    const mustBeErased = allColumns.filter(c => !NON_PERSONAL_USER_COLUMNS.includes(c));
+
+    // Guard against the allowlist drifting out of sync with the table.
+    expect(mustBeErased.length).toBeGreaterThan(0);
+
+    for (const column of mustBeErased) {
+      expect(ERASED_USER_FIELDS).toHaveProperty(column);
+      expect(ERASED_USER_FIELDS[column as keyof typeof ERASED_USER_FIELDS]).toBeNull();
+    }
+  });
+
+  it("clears the identity fields that let someone sign back in", () => {
+    expect(ERASED_USER_FIELDS.clerkId).toBeNull();
+    expect(ERASED_USER_FIELDS.openId).toBeNull();
+    expect(ERASED_USER_FIELDS.deactivated).toBe(true);
+  });
+
+  it("clears direct contact details", () => {
+    expect(ERASED_USER_FIELDS.email).toBeNull();
+    expect(ERASED_USER_FIELDS.name).toBeNull();
+    expect(ERASED_USER_FIELDS.displayName).toBeNull();
+  });
+
+  it("revokes notification opt-ins so nothing is sent to an erased account", () => {
+    expect(ERASED_USER_FIELDS.emailOptIn).toBe(false);
+    expect(ERASED_USER_FIELDS.pushOptIn).toBe(false);
+  });
+
+  it("does not touch columns needed to keep game history anonymous but intact", () => {
+    // Erasing these would break scoring/leaderboard history for no privacy gain.
+    expect(ERASED_USER_FIELDS).not.toHaveProperty("id");
+    expect(ERASED_USER_FIELDS).not.toHaveProperty("tier");
+    expect(ERASED_USER_FIELDS).not.toHaveProperty("createdAt");
+  });
+});
+
+describe("dashboard.deleteAccount — never reports success it didn't achieve", () => {
+  /**
+   * The whole safety argument for erasure rests on this: if any step fails, the
+   * user must be told, not handed a false "deleted!". In the test environment
+   * there is no database, so eraseUserPersonalData throws — and the mutation
+   * must surface that rather than swallow it and return success.
+   *
+   * clerkId is nulled here so the Clerk call is skipped and the database step
+   * is the one under test.
+   */
+  it("throws rather than returning success when the erasure step fails", async () => {
+    const { ctx } = createAuthContext2();
+    const ctxWithoutClerk: TrpcContext = {
+      ...ctx,
+      user: { ...ctx.user!, clerkId: null },
+    };
+    const caller = appRouter.createCaller(ctxWithoutClerk);
+
+    await expect(caller.dashboard.deleteAccount({ confirm: true })).rejects.toThrow(/error clearing your data/);
+  });
+
+  it("rejects a call that does not explicitly confirm", async () => {
+    const { ctx } = createAuthContext2();
+    const caller = appRouter.createCaller(ctx);
+
+    // @ts-expect-error — confirm: false is intentionally invalid input
+    await expect(caller.dashboard.deleteAccount({ confirm: false })).rejects.toThrow();
+  });
+});

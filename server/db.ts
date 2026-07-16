@@ -11,6 +11,7 @@ import {
   metricExplanations,
   outboundClicks,
   playerPicks,
+  pushSubscriptions,
   streakRecords,
   users,
   validationQuestions,
@@ -138,6 +139,54 @@ export async function updateUserProfile(userId: number, data: {
   const db = await getDb();
   if (!db) return;
   await db.update(users).set(data).where(eq(users.id, userId));
+}
+
+/**
+ * Every personal-data column on `users`, and the value erasure resets it to.
+ *
+ * Named rather than inlined so the test suite can assert it covers every
+ * personal column on the table — add a personal field to `users` and forget it
+ * here, and that test fails rather than the field silently surviving erasure.
+ *
+ * Columns absent from this list carry no identity once these are cleared:
+ * `id` is an opaque integer, and role/tier/streak timestamps say nothing about
+ * who the person was.
+ */
+export const ERASED_USER_FIELDS = {
+  clerkId: null,
+  openId: null,
+  name: null,
+  displayName: null,
+  email: null,
+  loginMethod: null,
+  // Nothing left to send to, and no lawful basis to keep the opt-in.
+  emailOptIn: false,
+  pushOptIn: false,
+  // Blocks sign-in via the legacy openId path even if a row is somehow matched.
+  deactivated: true,
+} as const;
+
+/**
+ * Irreversibly strip personal data from a user row and drop their push
+ * subscriptions (an endpoint URL identifies a device, so it is personal data).
+ *
+ * The row itself is deliberately kept. Picks, scores, streaks and leaderboard
+ * stats reference the user only by integer id, so leaving the scrubbed row in
+ * place keeps game history intact but anonymous — which is what the privacy
+ * policy reserves the right to retain — without cascading deletes across half
+ * the schema.
+ *
+ * Idempotent: running it again on an already-erased row is a no-op.
+ *
+ * Throws if the database is unreachable. Callers must not report success when
+ * nothing was erased, so this deliberately does not follow the `if (!db) return`
+ * convention used by the read helpers above.
+ */
+export async function eraseUserPersonalData(userId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable — erasure aborted");
+  await db.update(users).set(ERASED_USER_FIELDS).where(eq(users.id, userId));
+  await db.delete(pushSubscriptions).where(eq(pushSubscriptions.userId, userId));
 }
 
 export async function getAllUsers() {

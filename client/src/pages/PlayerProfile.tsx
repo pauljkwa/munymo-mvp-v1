@@ -55,6 +55,10 @@ export default function PlayerProfile() {
   // Delete account confirmation state
   const [deleteStep, setDeleteStep] = useState<"idle" | "confirm" | "typing">("idle");
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  // Permanent erasure — kept separate from the deactivate flow above so the two
+  // confirmations can never be confused for one another.
+  const [eraseStep, setEraseStep] = useState<"idle" | "confirm">("idle");
+  const [eraseConfirmText, setEraseConfirmText] = useState("");
 
   // Password change/set state (Clerk under the hood — invisible to the user)
   const { user: clerkUser } = useUser();
@@ -150,6 +154,14 @@ export default function PlayerProfile() {
   const deactivate = trpc.dashboard.deactivateAccount.useMutation({
     onSuccess: async () => {
       toast.success("Account deactivated. Signing you out...");
+      await signOut();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const eraseAccount = trpc.dashboard.deleteAccount.useMutation({
+    onSuccess: async () => {
+      toast.success("Your account and personal data have been deleted.");
       await signOut();
     },
     onError: (e) => toast.error(e.message),
@@ -667,6 +679,89 @@ export default function PlayerProfile() {
                 </div>
               </div>
             )}
+
+            {/* ── Permanent deletion ── */}
+            <div className="mt-5 pt-5" style={{ borderTop: "1px solid var(--color-border)" }}>
+              {eraseStep === "idle" && (
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold mb-1" style={{ color: "var(--color-foreground)" }}>
+                      Delete Account Permanently
+                    </p>
+                    <p className="text-xs leading-relaxed" style={{ color: "var(--color-muted)" }}>
+                      This erases your personal data — your name, email and sign-in — for good. It
+                      cannot be undone and support cannot recover it. Your past game results stay in
+                      the leaderboard history, but anonymously, with nothing linking them to you.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setEraseStep("confirm")}
+                    className="flex-shrink-0 flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg"
+                    style={{ background: "transparent", color: "var(--color-error)", border: "1px solid var(--color-error)" }}
+                  >
+                    <Trash2 size={12} />
+                    Delete
+                  </button>
+                </div>
+              )}
+
+              {eraseStep === "confirm" && (
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <AlertTriangle size={16} style={{ color: "var(--color-error)" }} />
+                    <p className="text-sm font-semibold" style={{ color: "var(--color-foreground)" }}>
+                      Permanently delete everything?
+                    </p>
+                  </div>
+                  <p className="text-xs mb-4" style={{ color: "var(--color-muted)" }}>
+                    Type <strong>DELETE</strong> below to confirm. This is irreversible — your
+                    sign-in will be removed and your personal data erased. No one can undo it, not
+                    even us.
+                  </p>
+                  <input
+                    type="text"
+                    value={eraseConfirmText}
+                    onChange={(e) => setEraseConfirmText(e.target.value)}
+                    placeholder="Type DELETE to confirm"
+                    className="w-full rounded-lg px-3 py-2 text-sm mb-3 outline-none"
+                    style={{
+                      background: "var(--color-surface-raised)",
+                      border: "1px solid var(--color-error)",
+                      color: "var(--color-foreground)",
+                    }}
+                    autoFocus
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        if (eraseConfirmText !== "DELETE") {
+                          toast.error("Please type DELETE exactly to confirm.");
+                          return;
+                        }
+                        eraseAccount.mutate({ confirm: true });
+                      }}
+                      disabled={eraseAccount.isPending || eraseConfirmText !== "DELETE"}
+                      className="flex items-center gap-2 text-xs font-semibold px-4 py-2 rounded-lg"
+                      style={{
+                        background: eraseConfirmText === "DELETE" ? "var(--color-error)" : "var(--color-surface-raised)",
+                        color: eraseConfirmText === "DELETE" ? "#fff" : "var(--color-muted)",
+                        cursor: eraseConfirmText === "DELETE" ? "pointer" : "not-allowed",
+                      }}
+                    >
+                      {eraseAccount.isPending ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                      Permanently Delete
+                    </button>
+                    <button
+                      onClick={() => { setEraseStep("idle"); setEraseConfirmText(""); }}
+                      className="text-xs px-4 py-2 rounded-lg"
+                      style={{ background: "var(--color-surface-raised)", color: "var(--color-muted)" }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </Section>
 

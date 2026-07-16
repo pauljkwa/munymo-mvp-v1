@@ -12,12 +12,14 @@ import { z } from "zod";
 import { COOKIE_NAME } from "@shared/const";
 import { ENV } from "./_core/env";
 import { getSessionCookieOptions } from "./_core/cookies";
+import { getClerkClient } from "./_core/context";
 import { systemRouter } from "./_core/systemRouter";
 import { referralRouter } from "./referralRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import {
   computeAndStoreCommunityStats,
   createGame,
+  eraseUserPersonalData,
   getAllUsers,
   getAuditLog,
   getCommunityStats,
@@ -1248,6 +1250,69 @@ const dashboardRouter = router({
     .input(z.object({ confirm: z.literal(true) }))
     .mutation(async ({ ctx }) => {
       await updateUserProfile(ctx.user.id, { deactivated: true });
+      return { success: true };
+    }),
+
+  /**
+   * Permanently erase the account — the right-to-erasure path promised by the
+   * privacy policy ("if you delete your account, we will remove your personal
+   * data"). Distinct from deactivateAccount, which is reversible and keeps
+   * everything.
+   *
+   * Clerk is deleted FIRST and our row scrubbed second, because Clerk holds the
+   * authoritative copy of the email, name and credentials. If Clerk deletion
+   * fails we abort having changed nothing, so the user can simply retry. The
+   * reverse order would risk scrubbing our row — including the clerkId needed to
+   * find them again — while their identity lived on in Clerk, unreachable.
+   *
+   * Game history is intentionally retained: it references the user only by
+   * integer id, so it survives as anonymous data.
+   */
+  deleteAccount: protectedProcedure
+    .input(z.object({ confirm: z.literal(true) }))
+    .mutation(async ({ ctx }) => {
+      const userId = ctx.user.id;
+      const { clerkId } = ctx.user;
+
+      if (clerkId) {
+        const clerk = getClerkClient();
+        if (!clerk) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message:
+              "Account deletion is unavailable right now. Nothing has been changed — please contact us.",
+          });
+        }
+        try {
+          await clerk.users.deleteUser(clerkId);
+        } catch (err) {
+          console.error("[deleteAccount] Clerk deletion failed; aborting before local erasure. userId:", userId, err);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message:
+              "We couldn't delete your account just now. Nothing has been changed — please try again.",
+          });
+        }
+      }
+
+      try {
+        await eraseUserPersonalData(userId);
+      } catch (err) {
+        // Clerk identity is already gone, so the account is inaccessible, but
+        // personal data is still in our database. This needs manual completion —
+        // log loudly rather than reporting a success we didn't achieve.
+        console.error(
+          "[deleteAccount] ERASURE INCOMPLETE — Clerk user deleted but database scrub failed. Personal data remains for userId:",
+          userId,
+          err
+        );
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message:
+            "Your sign-in was removed, but we hit an error clearing your data. Please contact us so we can finish it.",
+        });
+      }
+
       return { success: true };
     }),
 
