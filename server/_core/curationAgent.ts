@@ -76,6 +76,12 @@ While you're on the article that gave you the "buzz" signal for this matchup, ke
 - researchMetrics: for each ticker — Market Cap, P/E Ratio, Revenue Growth, EPS (TTM), 52-Week Range, Analyst Consensus (with avg target).
 - validationQuestion: one question testing a verifiable fact answerable from your research.
 
+## Dates in player-facing content — no relative time
+You are writing the night BEFORE the game day, and players read this content the next day (or later, after a weekend). Relative time words go stale and embarrass us: a company "scheduled to report earnings today" may have reported by the time anyone reads it. In pairingRationale, researchContent, researchSummary, and the validation question:
+- NEVER write "today", "tomorrow", "this morning", "later this week", or similar relative phrases for scheduled or recent events.
+- ALWAYS anchor events to an explicit day and date: "reports Q2 earnings on Tuesday, July 21", "announced its guidance cut on July 15".
+- Double-check via web_search whether a "scheduled" event (earnings, product launch, ruling) has ALREADY happened before describing it as upcoming — if it happened, describe the outcome instead.
+
 ## Validation question type — vary it, don't default to multiple choice
 Each recent game in the list you were given includes its "questionType" (may be null for older games). Look at the most recent game(s) and pick a DIFFERENT type than whatever was used last time — never repeat the immediately-previous type. Choose randomly among the other two eligible types (don't always alternate in the same fixed order; keep it unpredictable but never a repeat).
 
