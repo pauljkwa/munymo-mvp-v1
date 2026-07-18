@@ -15,7 +15,14 @@ export default function AdminEditGame() {
   const { data: validationQ, refetch: refetchVQ } = trpc.games.getValidationQuestion.useQuery({ gameId });
 
   const [researchContent, setResearchContent] = useState("");
+  const [researchSummary, setResearchSummary] = useState("");
   const [lockoutAtInput, setLockoutAtInput] = useState("");
+  const [matchupForm, setMatchupForm] = useState({
+    pairingRationale: "",
+    sourceTitle: "",
+    sourcePublisher: "",
+    sourceUrl: "",
+  });
   const [vqForm, setVqForm] = useState({
     questionText: "",
     questionType: "multiple_choice" as "multiple_choice" | "yes_no" | "true_false",
@@ -25,7 +32,19 @@ export default function AdminEditGame() {
 
   useEffect(() => {
     if (research?.content) setResearchContent(research.content);
+    if (research?.researchSummary) setResearchSummary(research.researchSummary);
   }, [research]);
+
+  useEffect(() => {
+    if (game) {
+      setMatchupForm({
+        pairingRationale: game.pairingRationale ?? "",
+        sourceTitle: game.sourceTitle ?? "",
+        sourcePublisher: game.sourcePublisher ?? "",
+        sourceUrl: game.sourceUrl ?? "",
+      });
+    }
+  }, [game]);
 
   // Pre-populate lockoutAt from the game record (convert ISO → datetime-local)
   useEffect(() => {
@@ -56,6 +75,11 @@ export default function AdminEditGame() {
   const saveResearch = trpc.admin.updateResearch.useMutation({
     onSuccess: () => { toast.success("Research saved."); refetchResearch(); },
     onError: (e: { message: string }) => toast.error(e.message),
+  });
+
+  const saveMatchup = trpc.admin.updateGame.useMutation({
+    onSuccess: () => { toast.success("Matchup details saved."); refetch(); },
+    onError: (e) => toast.error(e.message),
   });
 
   const saveVQ = trpc.admin.setValidationQuestion.useMutation({
@@ -162,6 +186,87 @@ export default function AdminEditGame() {
           </div>
         )}
 
+        {/* Matchup Details */}
+        <div className="card-glass p-6 mb-5">
+          <div className="flex items-center gap-2 mb-4">
+            <BookOpen size={16} style={{ color: "var(--color-brand)" }} />
+            <h2 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-brand)" }}>
+              Matchup Details
+            </h2>
+          </div>
+          <p className="text-xs mb-3" style={{ color: "var(--color-subtle)" }}>
+            The pairing rationale and news source shown to players alongside the matchup.
+          </p>
+          <div className="flex flex-col gap-4">
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--color-subtle)" }}>
+                Pairing Rationale
+              </label>
+              <textarea
+                value={matchupForm.pairingRationale}
+                onChange={(e) => setMatchupForm((f) => ({ ...f, pairingRationale: e.target.value }))}
+                disabled={!isEditable}
+                rows={3}
+                placeholder="Why these two companies, today."
+                className="input-field w-full resize-y"
+              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--color-subtle)" }}>
+                  Source Title
+                </label>
+                <input
+                  type="text"
+                  value={matchupForm.sourceTitle}
+                  onChange={(e) => setMatchupForm((f) => ({ ...f, sourceTitle: e.target.value }))}
+                  disabled={!isEditable}
+                  placeholder="Article headline"
+                  className="input-field w-full"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--color-subtle)" }}>
+                  Source Publisher
+                </label>
+                <input
+                  type="text"
+                  value={matchupForm.sourcePublisher}
+                  onChange={(e) => setMatchupForm((f) => ({ ...f, sourcePublisher: e.target.value }))}
+                  disabled={!isEditable}
+                  placeholder="e.g. Reuters"
+                  className="input-field w-full"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--color-subtle)" }}>
+                Source URL
+              </label>
+              <input
+                type="url"
+                value={matchupForm.sourceUrl}
+                onChange={(e) => setMatchupForm((f) => ({ ...f, sourceUrl: e.target.value }))}
+                disabled={!isEditable}
+                placeholder="https://…"
+                className="input-field w-full"
+              />
+            </div>
+            {isEditable && (
+              <div className="flex justify-end">
+                <button
+                  onClick={() => saveMatchup.mutate({ gameId, ...matchupForm })}
+                  disabled={saveMatchup.isPending}
+                  className="btn-brand"
+                >
+                  {saveMatchup.isPending ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+                  Save Matchup Details
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Research */}
         <div className="card-glass p-6 mb-5">
           <div className="flex items-center gap-2 mb-4">
@@ -173,6 +278,22 @@ export default function AdminEditGame() {
           <p className="text-xs mb-3" style={{ color: "var(--color-subtle)" }}>
             This content is displayed on the game page for players to review before making their Final Selection.
           </p>
+          <div className="mb-4">
+            <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--color-subtle)" }}>
+              Basic Summary (shown to Free tier)
+            </label>
+            <textarea
+              value={researchSummary}
+              onChange={(e) => setResearchSummary(e.target.value)}
+              disabled={!isEditable}
+              rows={3}
+              placeholder="Plain-English beginner summary of the research."
+              className="input-field w-full resize-y"
+            />
+          </div>
+          <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--color-subtle)" }}>
+            Full Analysis
+          </label>
           <textarea
             value={researchContent}
             onChange={(e) => setResearchContent(e.target.value)}
@@ -184,7 +305,7 @@ export default function AdminEditGame() {
           {isEditable && (
             <div className="flex justify-end mt-3">
               <button
-                onClick={() => saveResearch.mutate({ gameId, content: researchContent })}
+                onClick={() => saveResearch.mutate({ gameId, content: researchContent, summary: researchSummary || undefined })}
                 disabled={saveResearch.isPending}
                 className="btn-brand"
               >

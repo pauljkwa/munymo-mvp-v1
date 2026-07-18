@@ -669,6 +669,9 @@ const adminRouter = router({
         companyBTicker: z.string().min(1).optional(),
         sector: z.string().optional(),
         pairingRationale: z.string().optional(),
+        sourceUrl: z.string().optional(),
+        sourceTitle: z.string().max(256).optional(),
+        sourcePublisher: z.string().max(128).optional(),
         lockoutAt: z.string().datetime().optional(),
       })
     )
@@ -686,14 +689,14 @@ const adminRouter = router({
     }),
 
   updateResearch: adminProcedure
-    .input(z.object({ gameId: z.number(), content: z.string().min(1) }))
+    .input(z.object({ gameId: z.number(), content: z.string().min(1), summary: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
       const game = await getGameById(input.gameId);
       if (!game) throw new TRPCError({ code: "NOT_FOUND" });
       if (game.status === "result_published" || game.status === "cancelled") {
         throw new TRPCError({ code: "FORBIDDEN", message: "Cannot edit research for a closed game" });
       }
-      await upsertResearch(input.gameId, input.content);
+      await upsertResearch(input.gameId, input.content, input.summary);
       await writeAuditLog(ctx.user.id, "update_research", "game", input.gameId);
       return { success: true };
     }),

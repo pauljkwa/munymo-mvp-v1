@@ -285,13 +285,15 @@ export async function getResearchByGameId(gameId: number) {
   return result[0];
 }
 
-export async function upsertResearch(gameId: number, content: string) {
+export async function upsertResearch(gameId: number, content: string, researchSummary?: string) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  // researchSummary only when provided — existing content-only callers must not null out the summary
+  const summaryPatch = researchSummary !== undefined ? { researchSummary } : {};
   await db
     .insert(gameResearch)
-    .values({ gameId, content })
-    .onDuplicateKeyUpdate({ set: { content } });
+    .values({ gameId, content, ...summaryPatch })
+    .onDuplicateKeyUpdate({ set: { content, ...summaryPatch } });
 }
 
 export async function upsertResearchWithMetrics(
