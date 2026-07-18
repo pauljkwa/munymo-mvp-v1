@@ -228,11 +228,19 @@ async function research(
     // 2026-07-07/08: "Request timed out" at ~904s even with a 25-minute
     // client timeout configured). Streaming keeps bytes flowing for the
     // whole research turn, so nothing sees an idle connection to kill.
+    // Prompt caching: the loop re-sends the whole growing conversation every
+    // turn, so cached prefix reads (~10% of normal input price) are where most
+    // of a run's cost goes away. Breakpoint 1 on the system prompt caches the
+    // tools+system prefix for the entire run; the top-level cache_control
+    // auto-places a breakpoint at the end of the current history each turn.
+    // 1h TTL (not the 5m default) because a single research turn can stream
+    // for longer than 5 minutes, which would let the entry expire mid-run.
     const stream = client.messages.stream({
       model: MODEL,
       max_tokens: MAX_OUTPUT_TOKENS,
       thinking: { type: "adaptive" },
-      system: SYSTEM_PROMPT,
+      cache_control: { type: "ephemeral", ttl: "1h" },
+      system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral", ttl: "1h" } }],
       tools,
       messages,
       ...(containerRef.id ? { container: containerRef.id } : {}),
@@ -249,6 +257,14 @@ async function research(
       }
     });
     const response = await stream.finalMessage();
+    // Cache verification: cache_read should be large (and input small) on every
+    // turn after the first. All-zero cache fields across a run = a silent
+    // invalidator crept into the prefix.
+    const u = response.usage;
+    console.log(
+      `[curation-agent] turn ${i + 1}: input=${u.input_tokens} cache_read=${u.cache_read_input_tokens ?? 0} ` +
+        `cache_write=${u.cache_creation_input_tokens ?? 0} output=${u.output_tokens}`
+    );
     messages.push({ role: "assistant", content: response.content });
     if (response.container?.id) containerRef.id = response.container.id;
 
