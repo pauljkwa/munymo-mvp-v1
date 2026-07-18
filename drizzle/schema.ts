@@ -475,3 +475,33 @@ export const adminAuditLog = mysqlTable("admin_audit_log", {
 
 export type AdminAuditLog = typeof adminAuditLog.$inferSelect;
 export type InsertAdminAuditLog = typeof adminAuditLog.$inferInsert;
+
+// ─── Learning Hub — Lesson Progress ───────────────────────────────────────────
+
+/**
+ * One row per (user, lesson) completion. Lessons themselves are static
+ * content shipped in the client bundle (client/src/content/lessons/) — this
+ * table only tracks who has completed what, for the Hub's completion rings
+ * and the future MunyIQ/review-card work.
+ */
+export const lessonProgress = mysqlTable(
+  "lesson_progress",
+  {
+    id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+    userId: int("userId").notNull(),
+    lessonId: varchar("lessonId", { length: 32 }).notNull(), // e.g. "l100-1"
+    completedAt: timestamp("completedAt").defaultNow().notNull(),
+    // Whether the player's first quiz attempt on this lesson was correct —
+    // captured now for future MunyIQ/review-card work, not yet used.
+    quizCorrect: boolean("quizCorrect").notNull(),
+  },
+  (table) => ({
+    userLessonUnique: uniqueIndex("lesson_progress_user_lesson_unique").on(
+      table.userId,
+      table.lessonId
+    ),
+  })
+);
+
+export type LessonProgress = typeof lessonProgress.$inferSelect;
+export type InsertLessonProgress = typeof lessonProgress.$inferInsert;

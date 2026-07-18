@@ -12,6 +12,8 @@ import DailyGame from "./pages/DailyGame";
 import GameResult from "./pages/GameResult";
 import Leaderboard from "./pages/Leaderboard";
 import ResearchHub from "./pages/ResearchHub";
+import LearningHub from "./pages/LearningHub";
+import LessonPage from "./pages/LessonPage";
 import ArchiveGame from "./pages/ArchiveGame";
 import PlayerProfile from "./pages/PlayerProfile";
 import AdminDashboard from "./pages/admin/AdminDashboard";
@@ -48,6 +50,8 @@ function Router() {
       <Route path="/leaderboard" component={Leaderboard} />
       <Route path="/research" component={ResearchHub} />
       <Route path="/research/:id" component={ArchiveGame} />
+      <Route path="/learn" component={LearningHub} />
+      <Route path="/learn/:lessonId" component={LessonPage} />
       <Route path="/profile" component={PlayerProfile} />
       <Route path="/dashboard" component={MyDashboard} />
       <Route path="/demo" component={Demo} />

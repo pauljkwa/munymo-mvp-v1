@@ -48,7 +48,8 @@ Every lesson body must follow these rules. This is the quality bar; Fable will r
 5. **No real-company claims that can go stale.** Use hypothetical companies ("imagine a grocery chain...") or fully generic framing. Never cite a real company's current P/E, price, or market cap in a lesson body.
 6. **Always end with the matchup connection**: the final paragraph tells the player exactly where to see this concept in the daily game (e.g. "You'll find Beta in the Game-Day Setup section of every matchup's metrics panel — check which company's is higher before your next pick.").
 7. **No financial advice.** Lessons teach how to read information, never what to buy. Do not use "you should invest", "good investment", or similar phrasing.
-8. **Quizzes test the concept, not memory of the lesson's exact wording.** One question per lesson, `multiple_choice` (4 options) or `true_false`. The wrong options must be plausible misconceptions, not jokes. Include a one-sentence `explanation` shown after answering, whether right or wrong.
+8. **US English spelling throughout** ("capitalization", "normalizes", "behavior"). The US is the first target market; localization is a possible future accessibility project, so keep the source language consistent until then.
+9. **Quizzes test the concept, not memory of the lesson's exact wording.** One question per lesson, `multiple_choice` (4 options) or `true_false`. The wrong options must be plausible misconceptions, not jokes. Include a one-sentence `explanation` shown after answering, whether right or wrong.
 
 ---
 
@@ -111,8 +112,8 @@ Goal: a player who has never bought a stock can explain what the daily game meas
 1. **What a Share Actually Is** — ownership of a slice of a company; why it has a price at all (someone will pay it); *share*. Must include: shares exist in fixed quantities; owning one means owning a fraction of the business.
 2. **Why Prices Move** — prices are set by buyers and sellers agreeing; price = the market's current best guess of what the company is worth; new information shifts the guess. No jargon term. Must include: nobody sets the price centrally.
 3. **The Trading Day** — market open and close; pre-market/after-hours exist; why Munymo scores close-to-close; *closing price*. Must include: the close is the day's settled verdict.
-4. **Percentage Change, Not Price** — why a $2 stock can beat a $500 stock in the game; % change normalises size; *percentage change*. Must include: a worked toy example with two made-up prices.
-5. **Market Cap** — company size = price × shares outstanding; big ≠ better, small ≠ cheaper; *market capitalisation*. Must include: why a high share price alone tells you nothing about company size.
+4. **Percentage Change, Not Price** — why a $2 stock can beat a $500 stock in the game; % change normalizes size; *percentage change*. Must include: a worked toy example with two made-up prices.
+5. **Market Cap** — company size = price × shares outstanding; big ≠ better, small ≠ cheaper; *market capitalization*. Must include: why a high share price alone tells you nothing about company size.
 6. **CAPSTONE: Reading a Matchup Page** — guided tour of the game page: pairing rationale, research summary, the two metric groups, lockout. No new jargon. Must include: the two metric group names and what question each answers. `isCapstone: true`.
 
 ### Level 200 — "Game-Day Setup: What Moves a Stock in One Day" (7 lessons)

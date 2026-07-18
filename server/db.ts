@@ -8,6 +8,7 @@ import {
   gameCommunityStats,
   gameResearch,
   leaderboardStats,
+  lessonProgress,
   metricExplanations,
   outboundClicks,
   playerPicks,
@@ -854,4 +855,32 @@ export async function upsertMetricExplanation(
     .insert(metricExplanations)
     .values({ metricKey: key, metricLabel, explanation, aiGenerated })
     .onDuplicateKeyUpdate({ set: { explanation, aiGenerated, updatedAt: new Date() } });
+}
+
+// ─── Learning Hub — Lesson Progress ────────────────────────────────────────────
+
+export async function getLessonProgressForUser(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({ lessonId: lessonProgress.lessonId, quizCorrect: lessonProgress.quizCorrect })
+    .from(lessonProgress)
+    .where(eq(lessonProgress.userId, userId));
+}
+
+/** Upsert a lesson completion. First write wins for quizCorrect — a later
+ * retake never overwrites the original attempt's result. */
+export async function markLessonComplete(
+  userId: number,
+  lessonId: string,
+  quizCorrect: boolean
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  // No-op update on duplicate: atomic first-write-wins without a
+  // select-then-insert race against the (userId, lessonId) unique index.
+  await db
+    .insert(lessonProgress)
+    .values({ userId, lessonId, quizCorrect })
+    .onDuplicateKeyUpdate({ set: { lessonId: sql`lessonId` } });
 }

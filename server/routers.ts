@@ -66,7 +66,10 @@ import {
   countPublishedGameDaysBetween,
   recordOutboundClick,
   getOutboundClickStats,
+  getLessonProgressForUser,
+  markLessonComplete,
 } from "./db";
+import { ALL_LESSON_IDS } from "@shared/lessonIds";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1453,6 +1456,28 @@ const metricsRouter = router({
     }),
 });
 
+// ─── Learning Hub Router ──────────────────────────────────────────────────────
+
+const KNOWN_LESSON_IDS = new Set(ALL_LESSON_IDS);
+
+const learnRouter = router({
+  /** The caller's lesson completions */
+  getProgress: protectedProcedure.query(async ({ ctx }) => {
+    return getLessonProgressForUser(ctx.user.id);
+  }),
+
+  /** Record a lesson completion. First write wins for quizCorrect. */
+  markComplete: protectedProcedure
+    .input(z.object({ lessonId: z.string().min(1).max(32), quizCorrect: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      if (!KNOWN_LESSON_IDS.has(input.lessonId)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Unknown lesson id" });
+      }
+      await markLessonComplete(ctx.user.id, input.lessonId, input.quizCorrect);
+      return { ok: true } as const;
+    }),
+});
+
 // ─── Push Notifications Router ──────────────────────────────────────────────
 
 const pushRouter = router({
@@ -1604,5 +1629,6 @@ export const appRouter = router({
   push: pushRouter,
   referral: referralRouter,
   feedback: feedbackRouter,
+  learn: learnRouter,
 });
 export type AppRouter = typeof appRouter;

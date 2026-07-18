@@ -12,6 +12,7 @@ const mainLinks = [
   { href: "/game", label: "Today's Game" },
   { href: "/leaderboard", label: "Leaderboard" },
   { href: "/research", label: "Research Hub" },
+  { href: "/learn", label: "Learning Hub" },
 ];
 
 const moreLinks = [

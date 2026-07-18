@@ -8,6 +8,8 @@ import PublicLayout from "@/components/PublicLayout";
 import { ChartSheet } from "@/components/ChartSheet";
 import { MetricExplanationSheet } from "@/components/MetricExplanationSheet";
 import { metricGroupInfo } from "@/lib/metricGroups";
+import { selectLessonOfTheDay } from "@/lib/lessonOfTheDay";
+import { ALL_LEVELS } from "@/content/lessons";
 import { toast } from "sonner";
 import {
   Brain,
@@ -26,7 +28,10 @@ import {
   BarChart2,
   X as XIcon,
   ExternalLink,
+  GraduationCap,
 } from "lucide-react";
+
+const ALL_LESSONS_FLAT = ALL_LEVELS.flatMap((level) => level.lessons);
 
 type GameStep = "gut" | "research" | "final" | "submitted";
 
@@ -304,6 +309,34 @@ export default function DailyGame() {
     { gameId: game?.id ?? 0 },
     { enabled: !!game?.id }
   );
+
+  const { data: learnProgress } = trpc.learn.getProgress.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+
+  const [lessonCardDismissed, setLessonCardDismissed] = useState(false);
+  useEffect(() => {
+    if (!game?.gameDate) return;
+    setLessonCardDismissed(localStorage.getItem(`learn-lod-dismissed-${game.gameDate}`) === "1");
+  }, [game?.gameDate]);
+
+  const lessonOfTheDay =
+    game && research
+      ? selectLessonOfTheDay({
+          gameId: game.id,
+          gameDate: game.gameDate,
+          metrics: (research.metrics as Record<string, string>) ?? {},
+          pairingRationale: game.pairingRationale ?? null,
+          completedLessonIds: (learnProgress ?? []).map((p) => p.lessonId),
+          lessons: ALL_LESSONS_FLAT,
+        })
+      : null;
+
+  const dismissLessonCard = () => {
+    if (!game?.gameDate) return;
+    localStorage.setItem(`learn-lod-dismissed-${game.gameDate}`, "1");
+    setLessonCardDismissed(true);
+  };
 
   // Fire-and-forget: log clicks on the source-article link for referral reporting.
   const recordOutboundClick = trpc.games.recordOutboundClick.useMutation();
@@ -1146,6 +1179,39 @@ export default function DailyGame() {
                 >
                   {research.hindsightSpotlight}
                 </div>
+              </div>
+            )}
+
+            {/* Lesson of the day — slim, dismissable card */}
+            {lessonOfTheDay && !lessonCardDismissed && (
+              <div
+                className="card-glass p-4 flex items-center gap-3"
+                style={{ borderColor: "var(--color-brand)" }}
+              >
+                <GraduationCap size={20} className="shrink-0" style={{ color: "var(--color-brand)" }} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm" style={{ color: "var(--color-foreground)" }}>
+                    📚 Lesson for this matchup: <strong>{lessonOfTheDay.title}</strong>
+                    {" — "}
+                    {ALL_LEVELS.find((lv) => lv.level === lessonOfTheDay.level)?.goal}
+                  </p>
+                  <Link
+                    href={`/learn/${lessonOfTheDay.id}`}
+                    className="text-xs font-semibold inline-flex items-center gap-1 mt-1"
+                    style={{ color: "var(--color-brand)" }}
+                  >
+                    Start (3 min) <ArrowRight size={12} />
+                  </Link>
+                </div>
+                <button
+                  type="button"
+                  onClick={dismissLessonCard}
+                  aria-label="Dismiss"
+                  className="shrink-0 p-1 rounded-lg"
+                  style={{ color: "var(--color-subtle)" }}
+                >
+                  <XIcon size={16} />
+                </button>
               </div>
             )}
           </div>
