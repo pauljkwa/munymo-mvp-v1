@@ -39,6 +39,7 @@ import {
   getActiveOrUpcomingGame,
   getStreakForUser,
   getTodayGame,
+  getQueuedGameAfter,
   getValidationQuestion,
   initStreakForUser,
   insertDailyScore,
@@ -928,22 +929,25 @@ const adminRouter = router({
         scoredPicks.push(...closed);
       }
 
-      // ── 2. Create tomorrow's game — unless a game for that date already exists ──
-      // A non-cancelled game for this date can already exist when an earlier run
-      // curated ahead (e.g. a manual recovery run left the schedule a day ahead of
-      // itself). Do NOT create a duplicate and do NOT error: the concluded game has
-      // already been closed above, which is the important work. No-op the creation
-      // and reuse the existing game as "tomorrow's game" for teasers/notifications,
-      // so a valid close is never lost to a CONFLICT. Still prevents pileups —
-      // nothing new is inserted.
-      const existingNextGame = await getTodayGame(input.nextGameDate);
+      // ── 2. Create tomorrow's game — unless a queued game already exists ──
+      // Cadence guard (canonical spec: each close publishes exactly ONE next
+      // game). The old exact-date check let a payload proposing a LATER date
+      // slip through — the agent picks "the next free trading day", so a game
+      // queued ahead pushed every new one a day further out and the schedule
+      // ran permanently ahead of the spec. Now ANY queued (draft/active) game
+      // dated after the game just closed — or after today, when nothing was
+      // closed — IS "tomorrow's game": keep it, create nothing, and the close
+      // still applies. The exact-date lookup remains as a fallback so a
+      // same-date re-submission still reuses rather than CONFLICTs.
+      const queueRefDate = game?.gameDate ?? new Date().toISOString().slice(0, 10);
+      const existingNextGame = (await getQueuedGameAfter(queueRefDate)) ?? (await getTodayGame(input.nextGameDate));
       const nextGameAlreadyExists = !!existingNextGame && existingNextGame.status !== "cancelled";
       const nextGameCreated = !nextGameAlreadyExists;
 
       let nextGameId: number;
       if (nextGameAlreadyExists) {
         console.warn(
-          `[endOfDay] A game already exists for ${input.nextGameDate} (id ${existingNextGame!.id}, ${existingNextGame!.status}) — skipping creation; the close was still applied.`
+          `[endOfDay] Queued game already exists (id ${existingNextGame!.id}, ${existingNextGame!.gameDate}, ${existingNextGame!.status}) — cadence guard kept it and skipped creating the proposed ${input.nextGameDate} game; the close was still applied.`
         );
         nextGameId = existingNextGame!.id;
       } else {
@@ -1115,7 +1119,17 @@ const adminRouter = router({
         }
       }
 
-      return { success: true, nextGameId, nextGameCreated };
+      return {
+        success: true,
+        nextGameId,
+        nextGameCreated,
+        // The ACTUAL next game — the kept queued game when the guard fired,
+        // otherwise the one just created. Callers report this, not the proposal.
+        nextGameDate: nextGameCreated ? input.nextGameDate : existingNextGame!.gameDate,
+        nextGameTickers: nextGameCreated
+          ? `${input.nextCompanyATicker} vs ${input.nextCompanyBTicker}`
+          : `${existingNextGame!.companyATicker} vs ${existingNextGame!.companyBTicker}`,
+      };
     }),
 
   listPlayers: adminProcedure.query(async () => {

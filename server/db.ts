@@ -209,6 +209,28 @@ export async function getTodayGame(gameDate: string) {
 }
 
 /**
+ * Earliest queued game strictly after `afterDate` (YYYY-MM-DD) — a draft or
+ * active game waiting to be played. Locked games are excluded: locked means
+ * in-play past lockout, not queued. Used by the endOfDay cadence guard.
+ */
+export async function getQueuedGameAfter(afterDate: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db
+    .select()
+    .from(dailyGames)
+    .where(
+      and(
+        or(eq(dailyGames.status, "draft"), eq(dailyGames.status, "active")),
+        gt(dailyGames.gameDate, afterDate)
+      )
+    )
+    .orderBy(asc(dailyGames.gameDate))
+    .limit(1);
+  return result[0];
+}
+
+/**
  * Returns the current playable game:
  * - Any active/locked game whose gameDate is today OR in the future (up to next trading day)
  * - This allows a game to become visible the afternoon before its trading date

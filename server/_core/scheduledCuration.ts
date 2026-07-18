@@ -258,7 +258,7 @@ async function dailyCurationHandler(req: Request, res: Response) {
       console.log("[daily-curation] Market closed today — skipping result scoring, creating next game only.");
     }
 
-    const { getDb } = await import("../db");
+    const { getDb, getQueuedGameAfter } = await import("../db");
     const { dailyGames } = await import("../../drizzle/schema.js");
     const { lte, ne, or, eq, and, asc } = await import("drizzle-orm");
     const db = await getDb();
@@ -314,12 +314,16 @@ async function dailyCurationHandler(req: Request, res: Response) {
     // from endOfDay's duplicate-game guard and emailing a false alarm.
     if (!closeGameId) {
       const [existingNext] = await db
-        .select({ id: dailyGames.id, status: dailyGames.status })
+        .select({ id: dailyGames.id, status: dailyGames.status, gameDate: dailyGames.gameDate })
         .from(dailyGames)
         .where(and(eq(dailyGames.gameDate, tomorrow.gameDate), ne(dailyGames.status, "cancelled")))
         .limit(1);
-      if (existingNext) {
-        const msg = `Nothing to close and a game already exists for ${tomorrow.gameDate} (id ${existingNext.id}, ${existingNext.status}) — no-op.`;
+      // Also treat ANY queued game after today as "next already exists" — the
+      // exact-date check alone missed a queued game at a different date than
+      // the agent's proposal (same blind spot as endOfDay's old guard).
+      const queuedAhead = existingNext ?? (await getQueuedGameAfter(todayUtc));
+      if (queuedAhead) {
+        const msg = `Nothing to close and a game is already queued (id ${queuedAhead.id}, ${queuedAhead.gameDate}, ${queuedAhead.status}) — no-op.`;
         console.log("[daily-curation]", msg);
         return res.json({ ok: true, skipped: true, reason: msg });
       }
@@ -410,10 +414,11 @@ async function dailyCurationHandler(req: Request, res: Response) {
       : closeGameId
         ? `Closed game #${closeGameId} (winner: ${winner}).`
         : "No game closed (first game).";
-    // Reflect whether we actually created the next game or reused an existing one.
+    // Reflect whether we actually created the next game or the cadence guard
+    // kept an already-queued one (in which case the agent's proposal was discarded).
     const nextNote = result.nextGameCreated
       ? `Next game: ${tomorrow.companyATicker} vs ${tomorrow.companyBTicker} on ${tomorrow.gameDate}.`
-      : `Next game for ${tomorrow.gameDate} already existed — kept it, did not recreate.`;
+      : `Next game already queued — kept ${result.nextGameTickers} on ${result.nextGameDate} (cadence guard; proposed ${tomorrow.companyATicker} vs ${tomorrow.companyBTicker} for ${tomorrow.gameDate} discarded).`;
     const summary = `Daily curation completed in ${elapsed}ms. ${nextNote} ${closedNote}`;
     console.log("[daily-curation]", summary);
 
