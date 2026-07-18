@@ -481,9 +481,18 @@ export default function DailyGame() {
           {lockoutTime && !isLocked && (
             <p className="text-sm" style={{ color: "var(--color-muted)" }}>
               <Clock size={13} className="inline -mt-0.5 mr-1.5" />
-              Locks at {lockoutTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} your time{" "}
+              {/* Weekend games lock days away — name the day whenever the lockout isn't today */}
+              Locks {lockoutTime.toDateString() !== new Date().toDateString()
+                ? `${lockoutTime.toLocaleDateString([], { weekday: "long" })} at`
+                : "at"}{" "}
+              {lockoutTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} your time{" "}
               <span className="whitespace-nowrap" style={{ color: "var(--color-subtle)" }}>
-                ({lockoutTime.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })} New York)
+                ({lockoutTime.toLocaleString("en-US", {
+                  ...(lockoutTime.toDateString() !== new Date().toDateString() ? { weekday: "short" } : {}),
+                  hour: "numeric",
+                  minute: "2-digit",
+                  timeZone: "America/New_York",
+                })} New York)
               </span>
             </p>
           )}
