@@ -280,7 +280,7 @@ export default function AdminEditGame() {
           </p>
           <div className="mb-4">
             <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--color-subtle)" }}>
-              Basic Summary (shown to Free tier)
+              Basic Summary (default beginner view — all players)
             </label>
             <textarea
               value={researchSummary}
