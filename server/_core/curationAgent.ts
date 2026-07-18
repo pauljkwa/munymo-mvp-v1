@@ -12,7 +12,7 @@
  *      check_freshness tool to confirm a candidate sector + pair BEFORE researching or
  *      writing anything for it — an ineligible pick costs one cheap tool call instead
  *      of a whole rebuilt game.
- *   3. Once confirmed fresh: full research (claude-opus-4-8 + web_search) + CurationPayload JSON.
+ *   3. Once confirmed fresh: full research (claude-sonnet-5 + web_search) + CurationPayload JSON.
  *   4. POST /api/scheduled/daily-curation            → close today + publish tomorrow
  *   5. On HTTP 422 (freshness violation) feed the violations back to Claude and
  *      retry with a different matchup, up to MAX_SUBMIT_ATTEMPTS times. This should be
@@ -27,10 +27,10 @@ import Anthropic from "@anthropic-ai/sdk";
 import { ENV } from "./env";
 import { notifyOwner } from "./notification";
 
-const MODEL = "claude-opus-4-8";
+const MODEL = "claude-sonnet-5"; // Sonnet 5 ≈ 60% cheaper than Opus 4.8; switched 2026-07-18 to keep curation under the API spend limit
 const MAX_SUBMIT_ATTEMPTS = 4; // freshness retry budget (safety net; should rarely trigger — see check_freshness)
 const MAX_PAUSE_TURNS = 16; // server-tool + check_freshness loop safety cap
-const MAX_OUTPUT_TOKENS = 16000;
+const MAX_OUTPUT_TOKENS = 24000; // headroom for Sonnet 5's tokenizer (~30% more tokens than Opus for the same text); streaming, so unused headroom costs nothing
 
 // ─── System prompt ───────────────────────────────────────────────────────────
 // Adapted from references/daily-curation-agent-prompt.md for the Claude API
