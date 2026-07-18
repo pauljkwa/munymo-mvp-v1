@@ -5,6 +5,8 @@ import PublicLayout from "@/components/PublicLayout";
 import { Link } from "wouter";
 import { ArrowLeft, Trophy, BookOpen, Users, Loader2, HelpCircle, Lightbulb, ExternalLink } from "lucide-react";
 import { MetricExplanationSheet } from "@/components/MetricExplanationSheet";
+import { metricGroupInfo } from "@/lib/metricGroups";
+import { Fragment } from "react";
 
 export default function ArchiveGame() {
   const { id } = useParams<{ id: string }>();
@@ -156,21 +158,43 @@ export default function ArchiveGame() {
             <div className="rounded-lg overflow-hidden" style={{ border: "1px solid var(--color-border)" }}>
               <table className="w-full text-sm">
                 <tbody>
-                  {Object.entries(research.metrics as Record<string, string>).map(([label, value], i, arr) => (
-                    <tr
-                      key={label}
-                      style={{
-                        borderBottom: i < arr.length - 1 ? "1px solid var(--color-border)" : undefined,
-                        background: i % 2 === 0 ? "var(--color-surface)" : "transparent",
-                      }}
-                    >
-                      <td className="px-4 py-2.5 font-medium" style={{ color: "var(--color-muted)" }}>
-                        <div>{label}</div>
-                        <MetricExplanationSheet metricLabel={label} />
-                      </td>
-                      <td className="px-4 py-2.5 text-right font-mono font-semibold" style={{ color: "var(--color-foreground)" }}>{value}</td>
-                    </tr>
-                  ))}
+                  {(() => {
+                    // Order by metric group (The Long Game → Game-Day Setup) and
+                    // insert a header row where the group changes; legacy games
+                    // whose metrics all share one group render without headers
+                    const entries = Object.entries(research.metrics as Record<string, string>).sort(
+                      (a, b) => metricGroupInfo(a[0]).rank - metricGroupInfo(b[0]).rank
+                    );
+                    const groups = entries.map(([label]) => metricGroupInfo(label));
+                    const showGroupHeaders = new Set(groups.map((g) => g.id)).size > 1;
+                    return entries.map(([label, value], i, arr) => (
+                      <Fragment key={label}>
+                        {showGroupHeaders && (i === 0 || groups[i - 1].id !== groups[i].id) && (
+                          <tr style={{ background: "var(--color-surface-raised)", borderBottom: "1px solid var(--color-border)" }}>
+                            <td
+                              colSpan={2}
+                              className="px-4 py-1.5 text-[0.625rem] font-bold uppercase tracking-widest"
+                              style={{ color: "var(--color-brand)" }}
+                            >
+                              {groups[i].title}
+                            </td>
+                          </tr>
+                        )}
+                        <tr
+                          style={{
+                            borderBottom: i < arr.length - 1 ? "1px solid var(--color-border)" : undefined,
+                            background: i % 2 === 0 ? "var(--color-surface)" : "transparent",
+                          }}
+                        >
+                          <td className="px-4 py-2.5 font-medium" style={{ color: "var(--color-muted)" }}>
+                            <div>{label}</div>
+                            <MetricExplanationSheet metricLabel={label} />
+                          </td>
+                          <td className="px-4 py-2.5 text-right font-mono font-semibold" style={{ color: "var(--color-foreground)" }}>{value}</td>
+                        </tr>
+                      </Fragment>
+                    ));
+                  })()}
                 </tbody>
               </table>
             </div>

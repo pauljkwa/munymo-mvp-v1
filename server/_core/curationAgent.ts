@@ -73,8 +73,25 @@ While you're on the article that gave you the "buzz" signal for this matchup, ke
 - sourceUrl / sourceTitle / sourcePublisher: the exact URL, headline, and publisher of the news article that inspired this matchup (captured above) — this is credited on the game page and links back to the article, so it must be the real, specific URL you read, not a homepage or search results page.
 - researchContent: 4–6 balanced, educational paragraphs (competitive landscape, performance drivers, risks/catalysts, current debate, upcoming events). Do not telegraph a winner.
 - researchSummary: 3–4 short plain-English paragraphs for beginners, NO jargon (no P/E, EPS, TTM, EBITDA). What each company does in one sentence; one reason to pick each; one thing to keep in mind.
-- researchMetrics: for each ticker — Market Cap, P/E Ratio, Revenue Growth, EPS (TTM), 52-Week Range, Analyst Consensus (with avg target).
+- researchMetrics: EIGHT metrics per ticker in two groups — see "researchMetrics rules" below.
 - validationQuestion: one question testing a verifiable fact answerable from your research.
+
+## researchMetrics rules
+The metrics panel is a teaching surface. The game page renders it in two labelled groups so players learn the horizon distinction every day — fundamentals vs. what shapes a single session. Use these EXACT metric names (after the ticker prefix), in this order:
+
+**"The Long Game" (fundamentals):**
+- Market Cap — e.g. "$1.2T"
+- P/E Ratio — TTM, e.g. "28.4"
+- Revenue Growth — YoY %, e.g. "+14% YoY"
+- Analyst Consensus — e.g. "Buy, avg target $520"
+
+**"Game-Day Setup" (what shapes this session):**
+- Next Earnings — the confirmed next earnings date with timing when known, e.g. "Jul 29 (after close)". Verify via web_search — NEVER guess an earnings date. If no date is confirmed, write "No confirmed date". If earnings land ON the gameDate, that is the single most important fact of the matchup — say so in pairingRationale and researchContent as well.
+- Beta — 5-year monthly beta from Yahoo Finance statistics, e.g. "1.35". This tells players which stock is the bigger mover.
+- Last Session Move — the company's % price change in the just-concluded session, with its explicit date, e.g. "+2.3% (Jul 17)". Use real closing data.
+- vs 52-Week High — how far the latest close sits below the 52-week high, e.g. "4% below high" (or "At 52-week high").
+
+Every value must stand alone without relative time words — anchor any date explicitly (see the no-relative-time rule below).
 
 ## Dates in player-facing content — no relative time
 You are writing the night BEFORE the game day, and players read this content the next day (or later, after a weekend). Relative time words go stale and embarrass us: a company "scheduled to report earnings today" may have reported by the time anyone reads it. In pairingRationale, researchContent, researchSummary, and the validation question:
@@ -134,16 +151,20 @@ Your FINAL message must contain ONLY the JSON object below — no markdown fence
     "researchMetrics": {
       "<A ticker> Market Cap": "<value>",
       "<A ticker> P/E Ratio": "<value>",
-      "<A ticker> Revenue Growth": "<value>",
-      "<A ticker> EPS (TTM)": "<value>",
-      "<A ticker> 52-Week Range": "<low> – <high>",
+      "<A ticker> Revenue Growth": "<+/-X% YoY>",
       "<A ticker> Analyst Consensus": "<Buy/Hold/Sell, avg target $X>",
+      "<A ticker> Next Earnings": "<Mon DD (before open|after close)> or No confirmed date",
+      "<A ticker> Beta": "<value>",
+      "<A ticker> Last Session Move": "<+/-X.X% (Mon DD)>",
+      "<A ticker> vs 52-Week High": "<X% below high>",
       "<B ticker> Market Cap": "<value>",
       "<B ticker> P/E Ratio": "<value>",
-      "<B ticker> Revenue Growth": "<value>",
-      "<B ticker> EPS (TTM)": "<value>",
-      "<B ticker> 52-Week Range": "<low> – <high>",
-      "<B ticker> Analyst Consensus": "<Buy/Hold/Sell, avg target $X>"
+      "<B ticker> Revenue Growth": "<+/-X% YoY>",
+      "<B ticker> Analyst Consensus": "<Buy/Hold/Sell, avg target $X>",
+      "<B ticker> Next Earnings": "<Mon DD (before open|after close)> or No confirmed date",
+      "<B ticker> Beta": "<value>",
+      "<B ticker> Last Session Move": "<+/-X.X% (Mon DD)>",
+      "<B ticker> vs 52-Week High": "<X% below high>"
     },
     "validationQuestion": {
       "questionType": "<multiple_choice | true_false | yes_no — see 'Validation question type' rule above>",

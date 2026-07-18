@@ -7,6 +7,7 @@ import { Link } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
 import { ChartSheet } from "@/components/ChartSheet";
 import { MetricExplanationSheet } from "@/components/MetricExplanationSheet";
+import { metricGroupInfo } from "@/lib/metricGroups";
 import { toast } from "sonner";
 import {
   Brain,
@@ -753,6 +754,11 @@ export default function DailyGame() {
                   metricsB = allMetrics.slice(mid);
                 }
 
+                // Order both columns by metric group (The Long Game → Game-Day Setup)
+                // so the rows pair up and group header bands can be inserted
+                metricsA = [...metricsA].sort((a, b) => metricGroupInfo(a[0]).rank - metricGroupInfo(b[0]).rank);
+                metricsB = [...metricsB].sort((a, b) => metricGroupInfo(a[0]).rank - metricGroupInfo(b[0]).rank);
+
                 // Normalise metric labels to strip ticker prefix for display
                 const shortLabel = (label: string, ticker: string) =>
                   label.replace(new RegExp(`^${ticker}\\s*[—\\-:]\\s*`, "i"), "");
@@ -769,7 +775,11 @@ export default function DailyGame() {
                   labelB: metricLabelsB[i] ?? "",
                   valueB: metricsB[i]?.[1] ?? "—",
                   rawLabelB: metricsB[i]?.[0] ?? "",
+                  group: metricGroupInfo(metricsA[i]?.[0] ?? metricsB[i]?.[0] ?? ""),
                 }));
+                // Only show group header bands when the game actually spans
+                // multiple groups (legacy games render exactly as before)
+                const showGroupHeaders = new Set(rows.map((r) => r.group.id)).size > 1;
 
                 return (
                   <>
@@ -807,10 +817,23 @@ export default function DailyGame() {
                           ))}
                         </div>
 
-                        {/* Metric rows */}
+                        {/* Metric rows, banded by group (The Long Game / Game-Day Setup) */}
                         {rows.map((row, i) => (
+                          <div key={i}>
+                          {showGroupHeaders && (i === 0 || rows[i - 1].group.id !== row.group.id) && (
+                            <div
+                              className="px-3 py-1.5 text-[0.625rem] font-bold uppercase tracking-widest"
+                              style={{
+                                color: "var(--color-brand)",
+                                background: "var(--color-surface-raised)",
+                                borderBottom: "1px solid var(--color-border)",
+                                borderTop: i > 0 ? "2px solid var(--color-border)" : undefined,
+                              }}
+                            >
+                              {row.group.title}
+                            </div>
+                          )}
                           <div
-                            key={i}
                             className="grid grid-cols-2"
                             style={{
                               borderBottom: i < rows.length - 1 ? "1px solid var(--color-border)" : undefined,
@@ -840,6 +863,7 @@ export default function DailyGame() {
                               </p>
                               {row.rawLabelB && <MetricExplanationSheet metricLabel={row.rawLabelB} />}
                             </div>
+                          </div>
                           </div>
                         ))}
 

@@ -27,6 +27,18 @@ const STATIC_EXPLANATIONS: Record<string, string> = {
 
   "analyst consensus":
     "Analyst consensus summarizes what professional stock analysts, on average, currently recommend for a stock — typically Buy, Hold, or Sell — along with their average 12-month price target. It reflects the collective view of people who study the company closely, but it's an opinion, not a guarantee: analysts can be wrong, slow to update, or biased toward optimism. A strong \"Buy\" consensus with a price target well above the current share price suggests analysts see upside; a \"Hold\" or \"Sell\" suggests more caution. When comparing two companies, consensus can be a useful gut-check against your own reasoning — but it shouldn't replace it.",
+
+  "next earnings":
+    "This is the date of the company's next scheduled earnings report — the quarterly announcement of its sales, profits, and outlook. Earnings day is the single biggest scheduled event for a stock: if results beat or miss what investors expected, the price can jump or drop sharply within minutes. Even the days leading up to a report can be jumpy, as traders position themselves for the news. When comparing two companies, check whether either one reports on or near the game day — a stock facing an imminent earnings report is far more likely to make a big move (in either direction) than one with nothing on the calendar.",
+
+  "beta":
+    "Beta measures how much a stock tends to move relative to the overall market. A beta of 1.0 means the stock roughly tracks the market; above 1.0 means it swings harder in both directions (a beta of 1.5 suggests a 1% market move typically becomes a 1.5% move in the stock); below 1.0 means it's steadier than the market. Beta doesn't tell you which direction a stock will go — only how forcefully it tends to move. In a head-to-head matchup, the higher-beta company is usually the bigger mover: more likely to win big on a good day, and to lose big on a bad one.",
+
+  "last session move":
+    "This shows how much the stock's price changed in its most recent trading session before the game day. A big move often means the company is \"in play\" — some news, earnings result, or analyst action has traders' attention, and that attention frequently carries into the next session. But momentum can cut both ways: a strong day can continue (follow-through) or snap back (a reversal or profit-taking), and a big drop can keep sliding or bounce. Use it as a clue about which company currently has the market's attention — then ask whether the story behind the move is finished or still unfolding.",
+
+  "vs 52-week high":
+    "This shows how far the stock's latest closing price sits below its highest point of the past year. A stock trading at or near its 52-week high has strong recent momentum — investors have been willing to keep paying up for it, though some may be tempted to lock in profits. A stock a long way below its high has been beaten down: it may be a bargain recovering, or still in trouble — the number alone won't tell you which. Comparing the two companies on this measure shows which one the market has been rewarding lately, and which one has ground to make up.",
 };
 
 /**

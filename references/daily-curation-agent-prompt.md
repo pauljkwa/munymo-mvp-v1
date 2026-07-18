@@ -86,16 +86,21 @@ If any check fails, discard the pick and choose different companies. Do not proc
 
 ## Step 4 — Research Tomorrow's Companies
 
-For each company, gather the following metrics. Use Yahoo Finance, financial news sources, and any available data:
+For each company, gather the following metrics. Use Yahoo Finance, financial news sources, and any available data. The game page renders these in two labelled groups — fundamentals ("The Long Game") and single-session context ("Game-Day Setup") — so use these exact metric names:
 
-**For each company (A and B):**
+**"The Long Game" (per company):**
 - Market Cap
 - P/E Ratio (TTM)
 - Revenue Growth (YoY %)
-- EPS (TTM)
-- 52-Week High / Low
 - Analyst Consensus (Buy / Hold / Sell and average price target)
-- Recent news headline (1 sentence, most relevant to the matchup)
+
+**"Game-Day Setup" (per company):**
+- Next Earnings — confirmed next earnings date with timing when known, e.g. "Jul 29 (after close)"; "No confirmed date" if none. Never guess an earnings date — verify it. If earnings land ON the game date, that is the most important fact of the matchup — reflect it in the pairing rationale and research content too.
+- Beta — 5-year monthly beta from Yahoo Finance statistics, e.g. "1.35"
+- Last Session Move — % price change in the just-concluded session, with its explicit date, e.g. "+2.3% (Jul 17)"
+- vs 52-Week High — how far the latest close sits below the 52-week high, e.g. "4% below high"
+
+Every value must stand alone without relative time words — anchor dates explicitly.
 
 **Pairing Rationale:** Write 2–3 sentences explaining what is happening in the market **today specifically** that makes this matchup timely. Reference the actual news event, earnings release, analyst call, sector move, or macro development from the last 48 hours that motivated this pick. This is not a description of the companies or their general rivalry — it is the reason a player opening the app today will immediately understand why *these two, right now*. If you cannot point to a specific recent event, you have chosen the wrong companies.
 
@@ -200,16 +205,20 @@ The JSON structure to POST:
     "researchMetrics": {
       "<CompanyA ticker> Market Cap": "<value>",
       "<CompanyA ticker> P/E Ratio": "<value>",
-      "<CompanyA ticker> Revenue Growth": "<value>",
-      "<CompanyA ticker> EPS (TTM)": "<value>",
-      "<CompanyA ticker> 52-Week Range": "<low> – <high>",
+      "<CompanyA ticker> Revenue Growth": "<+/-X% YoY>",
       "<CompanyA ticker> Analyst Consensus": "<Buy/Hold/Sell, avg target $X>",
+      "<CompanyA ticker> Next Earnings": "<Mon DD (before open|after close)> or No confirmed date",
+      "<CompanyA ticker> Beta": "<value>",
+      "<CompanyA ticker> Last Session Move": "<+/-X.X% (Mon DD)>",
+      "<CompanyA ticker> vs 52-Week High": "<X% below high>",
       "<CompanyB ticker> Market Cap": "<value>",
       "<CompanyB ticker> P/E Ratio": "<value>",
-      "<CompanyB ticker> Revenue Growth": "<value>",
-      "<CompanyB ticker> EPS (TTM)": "<value>",
-      "<CompanyB ticker> 52-Week Range": "<low> – <high>",
-      "<CompanyB ticker> Analyst Consensus": "<Buy/Hold/Sell, avg target $X>"
+      "<CompanyB ticker> Revenue Growth": "<+/-X% YoY>",
+      "<CompanyB ticker> Analyst Consensus": "<Buy/Hold/Sell, avg target $X>",
+      "<CompanyB ticker> Next Earnings": "<Mon DD (before open|after close)> or No confirmed date",
+      "<CompanyB ticker> Beta": "<value>",
+      "<CompanyB ticker> Last Session Move": "<+/-X.X% (Mon DD)>",
+      "<CompanyB ticker> vs 52-Week High": "<X% below high>"
     },
     "validationQuestion": {
       "questionType": "multiple_choice | true_false | yes_no  (see Step 5 — vary this, don't always use multiple_choice)",
