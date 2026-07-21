@@ -31,6 +31,35 @@ const MODEL = "claude-sonnet-5"; // Sonnet 5 ≈ 60% cheaper than Opus 4.8; swit
 const MAX_SUBMIT_ATTEMPTS = 4; // freshness retry budget (safety net; should rarely trigger — see check_freshness)
 const MAX_PAUSE_TURNS = 16; // server-tool + check_freshness loop safety cap
 const MAX_OUTPUT_TOKENS = 24000; // headroom for Sonnet 5's tokenizer (~30% more tokens than Opus for the same text); streaming, so unused headroom costs nothing
+// Transient-error resilience (added after the 2026-07-20 run died on a single
+// mid-stream `overloaded_error` and Monday's game went unscored):
+const TURN_RETRY_BACKOFF_MS = [30_000, 60_000, 120_000]; // per-turn retries on transient API errors
+const FULL_RUN_ATTEMPTS = 2; // whole-run retry for anything else that throws
+const FULL_RUN_RETRY_DELAY_MS = 10 * 60 * 1000;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Errors worth retrying the SAME request for: rate limits (429), server errors
+ * (5xx incl. 529 overloaded), and connection drops. Mid-stream `error` SSE
+ * events don't always surface as typed APIError instances — the 2026-07-20
+ * failure arrived as a plain error whose message was the raw
+ * `{"type":"error","error":{"type":"overloaded_error",...}}` JSON — so the
+ * message text is checked too.
+ */
+function isTransientApiError(err: unknown): boolean {
+  const status = (err as { status?: number })?.status;
+  if (err instanceof Anthropic.APIConnectionError) return true;
+  if (typeof status === "number" && (status === 429 || status >= 500)) return true;
+  const msg = String((err as { message?: string })?.message ?? err);
+  return (
+    msg.includes("overloaded_error") ||
+    msg.includes("rate_limit_error") ||
+    msg.includes("api_error") ||
+    msg.includes("Connection error") ||
+    msg.includes("Request timed out")
+  );
+}
 
 // ─── System prompt ───────────────────────────────────────────────────────────
 // Adapted from references/daily-curation-agent-prompt.md for the Claude API
@@ -229,6 +258,68 @@ async function callCheckFreshness(
 
 // ─── Claude research loop ────────────────────────────────────────────────────
 /**
+ * Runs ONE assistant turn, retrying transient API failures (overloaded/rate
+ * limit/5xx/connection drop) with backoff. Safe to retry wholesale: `messages`
+ * is only appended to by the caller AFTER a turn completes, so a failed turn
+ * leaves the conversation exactly as it was before the request.
+ *
+ * Stream instead of awaiting one long-lived response. Non-streaming
+ * requests get severed at ~15 minutes by a layer outside our control
+ * regardless of the client timeout (observed two nights running,
+ * 2026-07-07/08: "Request timed out" at ~904s even with a 25-minute
+ * client timeout configured). Streaming keeps bytes flowing for the
+ * whole research turn, so nothing sees an idle connection to kill.
+ * Prompt caching: the loop re-sends the whole growing conversation every
+ * turn, so cached prefix reads (~10% of normal input price) are where most
+ * of a run's cost goes away. Breakpoint 1 on the system prompt caches the
+ * tools+system prefix for the entire run; the top-level cache_control
+ * auto-places a breakpoint at the end of the current history each turn.
+ * 1h TTL (not the 5m default) because a single research turn can stream
+ * for longer than 5 minutes, which would let the entry expire mid-run.
+ */
+async function runTurnWithRetry(
+  client: Anthropic,
+  messages: Anthropic.MessageParam[],
+  tools: Anthropic.ToolUnion[],
+  containerRef: { id: string | undefined }
+): Promise<Anthropic.Message> {
+  for (let retry = 0; ; retry++) {
+    try {
+      const stream = client.messages.stream({
+        model: MODEL,
+        max_tokens: MAX_OUTPUT_TOKENS,
+        thinking: { type: "adaptive" },
+        cache_control: { type: "ephemeral", ttl: "1h" },
+        system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral", ttl: "1h" } }],
+        tools,
+        messages,
+        ...(containerRef.id ? { container: containerRef.id } : {}),
+      });
+      // The container id is delivered on the raw `message_delta` stream event at
+      // the END of the turn (the container doesn't exist yet at `message_start`).
+      // The SDK's stream accumulator copies stop_reason/usage from that event but
+      // NOT `delta.container` (verified in MessageStream.mjs), so
+      // finalMessage().container is always null under streaming — it must be
+      // captured from the raw event or it is silently lost.
+      stream.on("streamEvent", (event) => {
+        if (event.type === "message_delta" && event.delta.container?.id) {
+          containerRef.id = event.delta.container.id;
+        }
+      });
+      return await stream.finalMessage();
+    } catch (err: any) {
+      if (retry >= TURN_RETRY_BACKOFF_MS.length || !isTransientApiError(err)) throw err;
+      const delayMs = TURN_RETRY_BACKOFF_MS[retry];
+      console.warn(
+        `[curation-agent] Transient API error — retrying turn in ${delayMs / 1000}s ` +
+          `(retry ${retry + 1}/${TURN_RETRY_BACKOFF_MS.length}): ${err?.message ?? err}`
+      );
+      await sleep(delayMs);
+    }
+  }
+}
+
+/**
  * Runs Claude turns to completion — driving the server-side web_search loop
  * (handling `pause_turn`) and the check_freshness client tool (handling
  * `tool_use`), appending every assistant turn (and tool result) to `messages`.
@@ -249,41 +340,7 @@ async function research(
   ];
 
   for (let i = 0; i < MAX_PAUSE_TURNS; i++) {
-    // Stream instead of awaiting one long-lived response. Non-streaming
-    // requests get severed at ~15 minutes by a layer outside our control
-    // regardless of the client timeout (observed two nights running,
-    // 2026-07-07/08: "Request timed out" at ~904s even with a 25-minute
-    // client timeout configured). Streaming keeps bytes flowing for the
-    // whole research turn, so nothing sees an idle connection to kill.
-    // Prompt caching: the loop re-sends the whole growing conversation every
-    // turn, so cached prefix reads (~10% of normal input price) are where most
-    // of a run's cost goes away. Breakpoint 1 on the system prompt caches the
-    // tools+system prefix for the entire run; the top-level cache_control
-    // auto-places a breakpoint at the end of the current history each turn.
-    // 1h TTL (not the 5m default) because a single research turn can stream
-    // for longer than 5 minutes, which would let the entry expire mid-run.
-    const stream = client.messages.stream({
-      model: MODEL,
-      max_tokens: MAX_OUTPUT_TOKENS,
-      thinking: { type: "adaptive" },
-      cache_control: { type: "ephemeral", ttl: "1h" },
-      system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral", ttl: "1h" } }],
-      tools,
-      messages,
-      ...(containerRef.id ? { container: containerRef.id } : {}),
-    });
-    // The container id is delivered on the raw `message_delta` stream event at
-    // the END of the turn (the container doesn't exist yet at `message_start`).
-    // The SDK's stream accumulator copies stop_reason/usage from that event but
-    // NOT `delta.container` (verified in MessageStream.mjs), so
-    // finalMessage().container is always null under streaming — it must be
-    // captured from the raw event or it is silently lost.
-    stream.on("streamEvent", (event) => {
-      if (event.type === "message_delta" && event.delta.container?.id) {
-        containerRef.id = event.delta.container.id;
-      }
-    });
-    const response = await stream.finalMessage();
+    const response = await runTurnWithRetry(client, messages, tools, containerRef);
     // Cache verification: cache_read should be large (and input small) on every
     // turn after the first. All-zero cache fields across a run = a silent
     // invalidator crept into the prefix.
@@ -380,78 +437,100 @@ export async function runDailyCuration(): Promise<void> {
   const startTime = Date.now();
   const client = new Anthropic({ apiKey: ENV.anthropicApiKey, timeout: 25 * 60 * 1000 });
 
-  try {
-    const recentGames = await fetchRecentGames();
-    const todayUtc = new Date().toISOString().slice(0, 10);
-
-    const messages: Anthropic.MessageParam[] = [
-      {
-        role: "user",
-        content:
-          `Today's date (UTC) is ${todayUtc}. Run the full daily curation now.\n\n` +
-          `Recent games, freshness rules, and pre-computed exclusion lists (bannedSectors, bannedTickers, bannedPairs) ` +
-          `from /api/scheduled/recent-games:\n${recentGames}\n\n` +
-          `Follow the freshness pre-qualification sequence from your system prompt: scan news, abandon any thread whose ` +
-          `sector/companies are banned immediately, then call check_freshness to confirm your candidate BEFORE researching ` +
-          `prices or writing content. Once confirmed, research today's result and tomorrow's matchup using web_search, ` +
-          `then output the single CurationPayload JSON object as your final message.`,
-      },
-    ];
-
-    // Persists across retry attempts — messages (the conversation history) does
-    // too, and a retry's first request must keep resending whatever container
-    // id the conversation has already touched, or it 400s immediately.
-    const containerRef: { id: string | undefined } = { id: undefined };
-
-    for (let attempt = 1; attempt <= MAX_SUBMIT_ATTEMPTS; attempt++) {
-      const finalMessage = await research(client, messages, containerRef);
-      const text = extractText(finalMessage);
-      const payload = parsePayload(text);
-
-      if (!payload) {
-        throw new Error(`Could not parse CurationPayload JSON from Claude's response (attempt ${attempt}).`);
-      }
-
-      const { status, body } = await submitCuration(payload);
-
-      if (status === 200) {
-        const elapsed = Math.round((Date.now() - startTime) / 1000);
-        console.log(`[curation-agent] Success in ${elapsed}s (attempt ${attempt}). nextGameId=${body?.nextGameId}`);
-        // The endpoint already sends a success notification; nothing more to do.
-        return;
-      }
-
-      if (status === 422) {
-        const violations = body?.violations ?? body?.detail ?? body?.error ?? "unknown";
-        console.warn(`[curation-agent] Attempt ${attempt} rejected (422):`, violations);
-        messages.push({
-          role: "user",
-          content:
-            `The submission was REJECTED with HTTP 422. Reason: ${JSON.stringify(violations)}.\n` +
-            `Choose a DIFFERENT matchup that satisfies all freshness rules (re-check the recent games list), ` +
-            `keep the same today/result block, and output the full corrected CurationPayload JSON again — only JSON.`,
-        });
-        continue; // retry
-      }
-
-      // Any other status is a hard failure.
-      throw new Error(`daily-curation endpoint returned HTTP ${status}: ${JSON.stringify(body)}`);
-    }
-
-    throw new Error(`Exhausted ${MAX_SUBMIT_ATTEMPTS} attempts without a 200 response (freshness).`);
-  } catch (err: any) {
-    const elapsed = Math.round((Date.now() - startTime) / 1000);
-    const msg = err?.message ?? String(err);
-    console.error("[curation-agent] Error:", msg);
+  // Whole-run retry: transient errors inside a research turn are already
+  // retried in place (runTurnWithRetry), but anything else that throws —
+  // recent-games fetch failure, unparseable payload, an error that outlived
+  // its per-turn budget — gets one more attempt from scratch after a pause,
+  // instead of leaving the day's game unscored until someone reads the
+  // failure email (2026-07-20: one overloaded_error killed the night's run).
+  let lastError: unknown;
+  for (let runAttempt = 1; runAttempt <= FULL_RUN_ATTEMPTS; runAttempt++) {
     try {
-      await notifyOwner({
-        title: "❌ Daily curation FAILED",
-        content: `Claude curation agent failed after ${elapsed}s: ${msg}\n\nPlease run End of Day manually before 9:00 PM Perth time.`,
-      });
-    } catch {
-      /* notification best-effort */
+      await attemptDailyCuration(client, startTime);
+      return;
+    } catch (err) {
+      lastError = err;
+      const msg = (err as any)?.message ?? String(err);
+      console.error(`[curation-agent] Run attempt ${runAttempt}/${FULL_RUN_ATTEMPTS} failed:`, msg);
+      if (runAttempt < FULL_RUN_ATTEMPTS) {
+        console.log(`[curation-agent] Retrying full run in ${FULL_RUN_RETRY_DELAY_MS / 60000} min…`);
+        await sleep(FULL_RUN_RETRY_DELAY_MS);
+      }
     }
   }
+
+  const elapsed = Math.round((Date.now() - startTime) / 1000);
+  const msg = (lastError as any)?.message ?? String(lastError);
+  try {
+    await notifyOwner({
+      title: "❌ Daily curation FAILED",
+      content: `Claude curation agent failed after ${elapsed}s (${FULL_RUN_ATTEMPTS} attempts): ${msg}\n\nPlease run End of Day manually before 9:00 PM Perth time.`,
+    });
+  } catch {
+    /* notification best-effort */
+  }
+}
+
+/** One full curation attempt: fetch context → research → submit (with freshness retries). Throws on failure. */
+async function attemptDailyCuration(client: Anthropic, startTime: number): Promise<void> {
+  const recentGames = await fetchRecentGames();
+  const todayUtc = new Date().toISOString().slice(0, 10);
+
+  const messages: Anthropic.MessageParam[] = [
+    {
+      role: "user",
+      content:
+        `Today's date (UTC) is ${todayUtc}. Run the full daily curation now.\n\n` +
+        `Recent games, freshness rules, and pre-computed exclusion lists (bannedSectors, bannedTickers, bannedPairs) ` +
+        `from /api/scheduled/recent-games:\n${recentGames}\n\n` +
+        `Follow the freshness pre-qualification sequence from your system prompt: scan news, abandon any thread whose ` +
+        `sector/companies are banned immediately, then call check_freshness to confirm your candidate BEFORE researching ` +
+        `prices or writing content. Once confirmed, research today's result and tomorrow's matchup using web_search, ` +
+        `then output the single CurationPayload JSON object as your final message.`,
+    },
+  ];
+
+  // Persists across retry attempts — messages (the conversation history) does
+  // too, and a retry's first request must keep resending whatever container
+  // id the conversation has already touched, or it 400s immediately.
+  const containerRef: { id: string | undefined } = { id: undefined };
+
+  for (let attempt = 1; attempt <= MAX_SUBMIT_ATTEMPTS; attempt++) {
+    const finalMessage = await research(client, messages, containerRef);
+    const text = extractText(finalMessage);
+    const payload = parsePayload(text);
+
+    if (!payload) {
+      throw new Error(`Could not parse CurationPayload JSON from Claude's response (attempt ${attempt}).`);
+    }
+
+    const { status, body } = await submitCuration(payload);
+
+    if (status === 200) {
+      const elapsed = Math.round((Date.now() - startTime) / 1000);
+      console.log(`[curation-agent] Success in ${elapsed}s (attempt ${attempt}). nextGameId=${body?.nextGameId}`);
+      // The endpoint already sends a success notification; nothing more to do.
+      return;
+    }
+
+    if (status === 422) {
+      const violations = body?.violations ?? body?.detail ?? body?.error ?? "unknown";
+      console.warn(`[curation-agent] Attempt ${attempt} rejected (422):`, violations);
+      messages.push({
+        role: "user",
+        content:
+          `The submission was REJECTED with HTTP 422. Reason: ${JSON.stringify(violations)}.\n` +
+          `Choose a DIFFERENT matchup that satisfies all freshness rules (re-check the recent games list), ` +
+          `keep the same today/result block, and output the full corrected CurationPayload JSON again — only JSON.`,
+      });
+      continue; // retry
+    }
+
+    // Any other status is a hard failure.
+    throw new Error(`daily-curation endpoint returned HTTP ${status}: ${JSON.stringify(body)}`);
+  }
+
+  throw new Error(`Exhausted ${MAX_SUBMIT_ATTEMPTS} attempts without a 200 response (freshness).`);
 }
 
 // ─── HTTP trigger (manual) ───────────────────────────────────────────────────
