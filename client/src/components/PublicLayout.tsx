@@ -4,6 +4,7 @@ import { Menu, X, Sun, Moon, ChevronRight } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import MunymoLogo from "@/components/MunymoLogo";
 import TextSizeToggle from "@/components/TextSizeToggle";
+import BottomNav from "@/components/BottomNav";
 import { SignInButton, SignOutButton } from "@clerk/clerk-react";
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
@@ -309,6 +310,9 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
           © {new Date().getFullYear()} Munymo. All rights reserved.
         </div>
       </footer>
+
+      {/* ── App-style bottom tab bar (mobile, signed-in only) ──────────── */}
+      <BottomNav />
     </div>
   );
 }

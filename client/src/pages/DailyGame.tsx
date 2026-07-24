@@ -1329,8 +1329,10 @@ function LockoutCountdown({ lockoutTime }: { lockoutTime: Date }) {
       <div
         className={[
           "fixed left-0 right-0 z-40 flex items-center justify-center gap-3 px-4 py-3 shadow-[0_-2px_16px_rgba(0,0,0,0.15)]",
-          // On mobile sit above the 56px bottom nav; on desktop sit at bottom-0
-          "bottom-[56px] md:bottom-0",
+          // On mobile dock on top of the BottomNav tab bar (56px + iOS
+          // safe-area inset — keep in sync with BottomNav.tsx); desktop has no
+          // tab bar, so sit at bottom-0.
+          "bottom-[calc(56px+env(safe-area-inset-bottom))] md:bottom-0",
           isFlashing ? "animate-pulse" : "",
         ].join(" ")}
         style={{ background: bgColor, transition: "background 1s ease" }}
