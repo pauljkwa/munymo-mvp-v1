@@ -7,6 +7,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerMagicLinkRedirect } from "./magicLinkRedirect";
 import { registerScheduledCuration } from "./scheduledCuration";
+import { registerSeo } from "./seo";
 import { registerTesterAgent } from "./testerAgent";
 import { registerCurationAgent } from "./curationAgent";
 import { autoSubmitLockedPicksHandler, runLockoutSweep } from "../autoSubmitHandler";
@@ -46,6 +47,7 @@ async function startServer() {
 
   registerOAuthRoutes(app);
   registerMagicLinkRedirect(app);
+  registerSeo(app);
   registerScheduledCuration(app);
   registerTesterAgent(app);
   registerCurationAgent(app);

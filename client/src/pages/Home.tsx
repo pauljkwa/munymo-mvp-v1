@@ -6,6 +6,12 @@ import { Link } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
 import MunymoLogo from "@/components/MunymoLogo";
 import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import {
   ArrowRight,
   Brain,
   BookOpen,
@@ -81,6 +87,53 @@ function HeroMatchupUnavailable() {
     </div>
   );
 }
+
+// ─── FAQ ──────────────────────────────────────────────────────────────────────
+// About Munymo itself — the why and how of the game as a daily learning tool.
+// Answers distilled from the Evolution of Munymo document. Plain strings so the
+// same data feeds both the visible accordion and the FAQPage JSON-LD below.
+const FAQ_ITEMS = [
+  {
+    q: "What exactly is Munymo?",
+    a: "Munymo is a daily stock market training game. Each US trading day we publish one matchup between two well-known companies in the same sector, and you predict which one will post the better performance by the close. There's no real money involved — the goal is to build genuine market intuition through daily practice, feedback, and a track record you can watch improve.",
+  },
+  {
+    q: "How does a game day work?",
+    a: "Each game takes about five minutes. First you make a gut pick on instinct alone. Then you read the day's research brief — a balanced, plain-English rundown of both companies. Finally you lock in your scored prediction and answer one quick question that checks you actually read the research. After the market closes, results are published and your score is updated.",
+  },
+  {
+    q: "Why do I pick twice — once before the research and once after?",
+    a: "The first pick captures your raw instinct before any information can influence it. Comparing your gut picks with your final picks over time reveals something no course can teach you: whether research genuinely improves your judgment, and in which direction. That gap — instinct versus informed decision — is exactly the skill Munymo is designed to sharpen.",
+  },
+  {
+    q: "How does scoring work?",
+    a: "A perfect day is 100 points: 80 for a correct final prediction and 20 for correctly answering the validation question about the day's research. The split is deliberate — the prediction is the harder, more consequential skill, while the validation points reward the habit of reading carefully. All scores are calculated on our servers after results are published, so no score can be gamed or disputed.",
+  },
+  {
+    q: "Do I need trading or investing experience to play?",
+    a: "No. Munymo was built for people who want to understand markets, not people who already do. The research summaries are written in plain English with no jargon, and the game teaches through repetition: make a decision, see the outcome, understand why. Beginners and experienced players compete on the same board.",
+  },
+  {
+    q: "Is Munymo a trading app, financial advice, or gambling?",
+    a: "None of the three. You can't buy or sell anything on Munymo, nothing on the platform is a recommendation about any security, and there is no money at stake — you can't win or lose a cent. Munymo is a training ground: the competition is real, but it's played entirely with points, streaks, and rankings.",
+  },
+  {
+    q: "Why is it daily, and what happens if I miss a day?",
+    a: "Financial intuition is a skill, and skills are built through consistent repetition — one focused decision a day beats a weekend cram. Streaks track that consistency. If life gets in the way, Away Status lets you protect your streak for a defined period while you're not playing: you keep the streak, but you don't earn points for days you sit out.",
+  },
+  {
+    q: "How are the two companies chosen each day?",
+    a: "Every matchup is curated fresh from what's actually happening in the market. The two companies always share a sector so the comparison is meaningful, both must have a genuine case for outperforming, and the pairing is tied to a real news story from the last couple of days. Strict freshness rules stop sectors and companies from repeating too often, so the game keeps showing you new territory.",
+  },
+  {
+    q: "What is MunyIQ?",
+    a: "MunyIQ is Munymo's upcoming financial intelligence score — a single number built from your full track record: instinct accuracy, research engagement, prediction accuracy, and consistency. It needs a meaningful sample of games before it can be calculated, which is by design: a credential is only worth having if it can't be lucked into. Tiered cards from Sapphire to Diamond will mark the milestones.",
+  },
+  {
+    q: "What does it cost?",
+    a: "Munymo is free to play during the beta. Founding members — the players who join now — keep their join date on record and will be recognized when MunyIQ and premium features launch later.",
+  },
+];
 
 // ─── MunyIQ card data ─────────────────────────────────────────────────────────
 const MUNYIQ_CARDS = [
@@ -966,7 +1019,69 @@ export default function Home() {
         </section>
 
       {/* ══════════════════════════════════════════════════════════════════════
-          SECTION 6 — FINAL CTA
+          SECTION 6 — FAQ
+      ══════════════════════════════════════════════════════════════════════ */}
+      <section className="py-20 border-b" style={{ borderColor: "var(--color-border)" }}>
+        <div className="container">
+          <div className="max-w-lg mb-12">
+            <p className="section-label mb-3">FAQ</p>
+            <h2 className="font-display mb-4" style={{ color: "var(--color-foreground)" }}>
+              Questions, answered.
+            </h2>
+            <p className="text-base leading-relaxed" style={{ color: "var(--color-muted)" }}>
+              The why and how of Munymo — what the game is, how it works, and why five
+              minutes a day is enough to sharpen real market judgment.
+            </p>
+          </div>
+
+          <div className="max-w-3xl">
+            <Accordion type="single" collapsible>
+              {FAQ_ITEMS.map((item, i) => (
+                <AccordionItem
+                  key={item.q}
+                  value={`faq-${i}`}
+                  style={{ borderColor: "var(--color-border)" }}
+                >
+                  <AccordionTrigger
+                    className="text-base font-semibold py-5 hover:no-underline"
+                    style={{ color: "var(--color-foreground)" }}
+                  >
+                    {item.q}
+                  </AccordionTrigger>
+                  <AccordionContent className="pb-5">
+                    <p
+                      className="text-sm leading-relaxed max-w-2xl"
+                      style={{ color: "var(--color-muted)" }}
+                    >
+                      {item.a}
+                    </p>
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
+          </div>
+
+          {/* FAQPage structured data — lets Google and AI search engines read the
+              Q&A directly. Built from the same FAQ_ITEMS the accordion renders. */}
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{
+              __html: JSON.stringify({
+                "@context": "https://schema.org",
+                "@type": "FAQPage",
+                mainEntity: FAQ_ITEMS.map((item) => ({
+                  "@type": "Question",
+                  name: item.q,
+                  acceptedAnswer: { "@type": "Answer", text: item.a },
+                })),
+              }),
+            }}
+          />
+        </div>
+      </section>
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          SECTION 7 — FINAL CTA
       ══════════════════════════════════════════════════════════════════════ */}
       {!isAuthenticated && (
         <section className="py-24">
