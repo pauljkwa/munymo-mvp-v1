@@ -25,191 +25,58 @@ import {
   Star,
   Zap,
   Gift,
+  Loader2,
 } from "lucide-react";
 
-// ─── Fake candlestick data for hero mockup ────────────────────────────────────
-const CANDLES_A = [
-  { o: 52, h: 58, l: 49, c: 56 },
-  { o: 56, h: 60, l: 53, c: 54 },
-  { o: 54, h: 57, l: 50, c: 51 },
-  { o: 51, h: 55, l: 48, c: 53 },
-  { o: 53, h: 62, l: 52, c: 60 },
-  { o: 60, h: 65, l: 57, c: 58 },
-  { o: 58, h: 63, l: 55, c: 62 },
-  { o: 62, h: 68, l: 60, c: 65 },
-  { o: 65, h: 70, l: 62, c: 63 },
-  { o: 63, h: 67, l: 59, c: 66 },
-];
-const CANDLES_B = [
-  { o: 48, h: 54, l: 45, c: 50 },
-  { o: 50, h: 56, l: 47, c: 53 },
-  { o: 53, h: 58, l: 50, c: 52 },
-  { o: 52, h: 55, l: 46, c: 48 },
-  { o: 48, h: 52, l: 44, c: 51 },
-  { o: 51, h: 57, l: 49, c: 55 },
-  { o: 55, h: 60, l: 52, c: 57 },
-  { o: 57, h: 62, l: 54, c: 56 },
-  { o: 56, h: 61, l: 53, c: 59 },
-  { o: 59, h: 64, l: 56, c: 62 },
-];
-
-function MiniCandlestick({ candles }: { candles: typeof CANDLES_A }) {
-  const min = Math.min(...candles.map((c) => c.l));
-  const max = Math.max(...candles.map((c) => c.h));
-  const range = max - min || 1;
-  const W = 180;
-  const H = 72;
-  const pad = 4;
-  const candleW = 12;
-  const gap = (W - pad * 2 - candleW * candles.length) / (candles.length - 1);
-
-  const toY = (v: number) => H - pad - ((v - min) / range) * (H - pad * 2);
-
-  // MA line
-  const closes = candles.map((c) => c.c);
-  const maPoints = closes
-    .map((_, i) => {
-      const slice = closes.slice(Math.max(0, i - 2), i + 1);
-      return slice.reduce((a, b) => a + b, 0) / slice.length;
-    })
-    .map((v, i) => `${pad + i * (candleW + gap) + candleW / 2},${toY(v)}`)
-    .join(" ");
-
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full">
-      {/* MA line */}
-      <polyline
-        points={maPoints}
-        fill="none"
-        stroke="rgba(255,255,255,0.5)"
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-      />
-      {candles.map((c, i) => {
-        const x = pad + i * (candleW + gap);
-        const bull = c.c >= c.o;
-        const bodyTop = toY(Math.max(c.o, c.c));
-        const bodyBot = toY(Math.min(c.o, c.c));
-        const bodyH = Math.max(bodyBot - bodyTop, 2);
-        const cx = x + candleW / 2;
-        return (
-          <g key={i}>
-            <line
-              x1={cx} y1={toY(c.h)}
-              x2={cx} y2={toY(c.l)}
-              stroke={bull ? "#4ade80" : "#f87171"}
-              strokeWidth="1"
-            />
-            <rect
-              x={x} y={bodyTop}
-              width={candleW} height={bodyH}
-              rx="1.5"
-              fill={bull ? "#4ade80" : "#f87171"}
-            />
-          </g>
-        );
-      })}
-    </svg>
-  );
-}
-
-function CompanyCard({
-  label,
-  sector,
-  candles,
-  onSelect,
-  selected,
-}: {
-  label: string;
-  sector: string;
-  candles: typeof CANDLES_A;
-  onSelect: () => void;
-  selected: boolean;
-}) {
-  return (
-    <button
-      onClick={onSelect}
-      className="flex-1 rounded-2xl p-4 flex flex-col gap-3 transition-all duration-300 text-left"
-      style={{
-        background: selected
-          ? "oklch(0.30 0.12 160)"
-          : "oklch(0.20 0.08 160)",
-        border: selected
-          ? "2px solid oklch(0.58 0.16 155)"
-          : "2px solid oklch(0.28 0.10 160)",
-        boxShadow: selected
-          ? "0 0 24px oklch(0.58 0.16 155 / 0.3)"
-          : "none",
-        transform: selected ? "scale(1.02)" : "scale(1)",
-      }}
-    >
-      <div className="flex items-center justify-between">
-        <span className="text-white font-bold text-sm">{label}</span>
-        <span
-          className="text-xs px-2 py-0.5 rounded-full font-semibold"
-          style={{ background: "oklch(0.58 0.16 155 / 0.25)", color: "#4ade80" }}
-        >
-          {sector}
-        </span>
-      </div>
-      <div className="h-[72px]">
-        <MiniCandlestick candles={candles} />
-      </div>
-      <div
-        className="w-full py-2 rounded-xl text-center text-sm font-bold transition-all duration-200"
-        style={{
-          background: selected ? "oklch(0.58 0.16 155)" : "oklch(0.35 0.12 160)",
-          color: "white",
-        }}
-      >
-        {selected ? "✓ Selected" : "Select"}
-      </div>
-    </button>
-  );
-}
-
 /**
- * Placeholder shown while games.getToday is in flight. Mirrors the live
- * matchup card's layout so the resolved card appears in place without a
- * jarring swap — without this, the demo mockup rendered first and visibly
- * flashed before being replaced by the live game every page load.
+ * Shown while games.getToday is in flight: a plain spinner in the matchup
+ * card's frame — an unmistakable "loading" signal. Never show placeholder
+ * game content here: the old demo mockup used to render during this window
+ * and visibly flashed before being replaced by the live game every page load.
  */
-function HeroMatchupSkeleton() {
-  const bar = (w: string, h = "h-3") => (
-    <div
-      className={`${h} ${w} rounded-full animate-pulse mx-auto`}
-      style={{ background: "var(--color-border)" }}
-    />
-  );
+function HeroMatchupLoading() {
   return (
-    <div className="w-full max-w-sm mx-auto" aria-hidden="true">
+    <div className="w-full max-w-sm mx-auto">
       <p
         className="text-xs font-bold uppercase tracking-widest mb-5"
         style={{ color: "var(--color-subtle)" }}
       >
         Today's Matchup
       </p>
-      <div className="card-glass p-6 shadow-card">
-        <div className="flex items-center justify-between gap-4 mb-5">
-          <div className="flex-1 flex flex-col items-center gap-2">
-            {bar("w-14", "h-6")}
-            {bar("w-20")}
-          </div>
-          <div className="text-lg font-display font-bold px-3" style={{ color: "var(--color-subtle)" }}>
-            vs
-          </div>
-          <div className="flex-1 flex flex-col items-center gap-2">
-            {bar("w-14", "h-6")}
-            {bar("w-20")}
-          </div>
-        </div>
-        <div className="mb-5 pb-5" style={{ borderBottom: "1px solid var(--color-border)" }}>
-          {bar("w-28")}
-        </div>
-        <div
-          className="h-10 rounded-xl animate-pulse"
-          style={{ background: "var(--color-border)" }}
-        />
+      <div className="card-glass p-6 shadow-card flex flex-col items-center justify-center gap-3 min-h-[220px]">
+        <Loader2 size={28} className="animate-spin" style={{ color: "var(--color-brand)" }} />
+        <p className="text-sm" style={{ color: "var(--color-subtle)" }}>
+          Loading today's matchup…
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Shown only when loading has finished and there is genuinely no live game
+ * (rare — normally only between a game closing and the next one publishing).
+ */
+function HeroMatchupUnavailable() {
+  return (
+    <div className="w-full max-w-sm mx-auto">
+      <p
+        className="text-xs font-bold uppercase tracking-widest mb-5"
+        style={{ color: "var(--color-subtle)" }}
+      >
+        Today's Matchup
+      </p>
+      <div className="card-glass p-6 shadow-card flex flex-col items-center justify-center gap-3 min-h-[220px] text-center">
+        <Trophy size={24} style={{ color: "var(--color-brand)" }} />
+        <p className="text-sm font-medium" style={{ color: "var(--color-foreground)" }}>
+          The next matchup is being prepared.
+        </p>
+        <p className="text-xs" style={{ color: "var(--color-subtle)" }}>
+          A new game goes live every US trading day.
+        </p>
+        <Link href="/demo" className="btn-ghost text-xs px-4 py-2 mt-1">
+          See how the game works
+        </Link>
       </div>
     </div>
   );
@@ -293,7 +160,6 @@ export default function Home() {
   const isAdmin = user?.role === "admin";
   const { data: todayGame, isLoading: todayGameLoading } = trpc.games.getToday.useQuery();
   const [activeCard, setActiveCard] = useState(0);
-  const [selectedCompany, setSelectedCompany] = useState<"A" | "B" | null>(null);
   const touchStartX = useRef<number | null>(null);
   const [bannerDismissed, setBannerDismissed] = useState(() => {
     try { return sessionStorage.getItem("munymo_beta_banner_dismissed") === "1"; } catch { return false; }
@@ -484,9 +350,7 @@ export default function Home() {
               style={{ borderColor: "var(--color-border)" }}
             >
               {todayGameLoading ? (
-                /* Neutral skeleton while the query resolves — never flash the
-                   demo mockup at visitors when a live game is about to load */
-                <HeroMatchupSkeleton />
+                <HeroMatchupLoading />
               ) : todayGame ? (
                 /* Live game card when a game is active */
                 <div className="w-full max-w-sm">
@@ -529,58 +393,7 @@ export default function Home() {
                   </div>
                 </div>
               ) : (
-                /* Demo card mockup when no live game */
-                <div className="w-full max-w-xs">
-                  <p
-                    className="text-xs font-bold uppercase tracking-widest mb-4 text-center"
-                    style={{ color: "var(--color-subtle)" }}
-                  >
-                    Today's Matchup
-                  </p>
-                  <div
-                    className="rounded-3xl p-5 flex flex-col gap-4"
-                    style={{
-                      background: "oklch(0.15 0.06 160)",
-                      border: "1.5px solid oklch(0.28 0.10 160)",
-                      boxShadow: "0 20px 60px oklch(0.10 0.08 160 / 0.5)",
-                    }}
-                  >
-                    <div className="flex gap-3">
-                      <CompanyCard
-                        label="Company A"
-                        sector="Tech"
-                        candles={CANDLES_A}
-                        selected={selectedCompany === "A"}
-                        onSelect={() =>
-                          setSelectedCompany((p) => (p === "A" ? null : "A"))
-                        }
-                      />
-                      <CompanyCard
-                        label="Company B"
-                        sector="Tech"
-                        candles={CANDLES_B}
-                        selected={selectedCompany === "B"}
-                        onSelect={() =>
-                          setSelectedCompany((p) => (p === "B" ? null : "B"))
-                        }
-                      />
-                    </div>
-                    {selectedCompany && (
-                      <div
-                        className="text-center text-xs py-2 rounded-xl font-semibold animate-fade-up"
-                        style={{ background: "oklch(0.58 0.16 155 / 0.15)", color: "#4ade80" }}
-                      >
-                        Good instinct. Now read the research →
-                      </div>
-                    )}
-                  </div>
-                  <p
-                    className="text-xs text-center mt-4"
-                    style={{ color: "var(--color-subtle)" }}
-                  >
-                    Try clicking a card ↑
-                  </p>
-                </div>
+                <HeroMatchupUnavailable />
               )}
             </div>
 
@@ -591,7 +404,7 @@ export default function Home() {
             Live matchup when a game is running (same as desktop), demo card otherwise. */}
         <div className="lg:hidden container pb-12">
           {todayGameLoading ? (
-            <HeroMatchupSkeleton />
+            <HeroMatchupLoading />
           ) : todayGame ? (
             <div className="mx-auto max-w-sm">
               <p
@@ -633,43 +446,7 @@ export default function Home() {
               </div>
             </div>
           ) : (
-            <div
-              className="rounded-3xl p-5 flex flex-col gap-4 mx-auto max-w-sm"
-              style={{
-                background: "oklch(0.15 0.06 160)",
-                border: "1.5px solid oklch(0.28 0.10 160)",
-                boxShadow: "0 20px 60px oklch(0.10 0.08 160 / 0.5)",
-              }}
-            >
-              <div className="flex gap-3">
-                <CompanyCard
-                  label="Company A"
-                  sector="Tech"
-                  candles={CANDLES_A}
-                  selected={selectedCompany === "A"}
-                  onSelect={() =>
-                    setSelectedCompany((p) => (p === "A" ? null : "A"))
-                  }
-                />
-                <CompanyCard
-                  label="Company B"
-                  sector="Tech"
-                  candles={CANDLES_B}
-                  selected={selectedCompany === "B"}
-                  onSelect={() =>
-                    setSelectedCompany((p) => (p === "B" ? null : "B"))
-                  }
-                />
-              </div>
-              {selectedCompany && (
-                <div
-                  className="text-center text-xs py-2 rounded-xl font-semibold animate-fade-up"
-                  style={{ background: "oklch(0.58 0.16 155 / 0.15)", color: "#4ade80" }}
-                >
-                  Good instinct. Now read the research →
-                </div>
-              )}
-            </div>
+            <HeroMatchupUnavailable />
           )}
         </div>
       </section>
