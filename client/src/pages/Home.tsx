@@ -168,6 +168,53 @@ function CompanyCard({
   );
 }
 
+/**
+ * Placeholder shown while games.getToday is in flight. Mirrors the live
+ * matchup card's layout so the resolved card appears in place without a
+ * jarring swap — without this, the demo mockup rendered first and visibly
+ * flashed before being replaced by the live game every page load.
+ */
+function HeroMatchupSkeleton() {
+  const bar = (w: string, h = "h-3") => (
+    <div
+      className={`${h} ${w} rounded-full animate-pulse mx-auto`}
+      style={{ background: "var(--color-border)" }}
+    />
+  );
+  return (
+    <div className="w-full max-w-sm mx-auto" aria-hidden="true">
+      <p
+        className="text-xs font-bold uppercase tracking-widest mb-5"
+        style={{ color: "var(--color-subtle)" }}
+      >
+        Today's Matchup
+      </p>
+      <div className="card-glass p-6 shadow-card">
+        <div className="flex items-center justify-between gap-4 mb-5">
+          <div className="flex-1 flex flex-col items-center gap-2">
+            {bar("w-14", "h-6")}
+            {bar("w-20")}
+          </div>
+          <div className="text-lg font-display font-bold px-3" style={{ color: "var(--color-subtle)" }}>
+            vs
+          </div>
+          <div className="flex-1 flex flex-col items-center gap-2">
+            {bar("w-14", "h-6")}
+            {bar("w-20")}
+          </div>
+        </div>
+        <div className="mb-5 pb-5" style={{ borderBottom: "1px solid var(--color-border)" }}>
+          {bar("w-28")}
+        </div>
+        <div
+          className="h-10 rounded-xl animate-pulse"
+          style={{ background: "var(--color-border)" }}
+        />
+      </div>
+    </div>
+  );
+}
+
 // ─── MunyIQ card data ─────────────────────────────────────────────────────────
 const MUNYIQ_CARDS = [
   {
@@ -244,7 +291,7 @@ const MUNYIQ_CARDS = [
 export default function Home() {
   const { isAuthenticated, user } = useAuth();
   const isAdmin = user?.role === "admin";
-  const { data: todayGame } = trpc.games.getToday.useQuery();
+  const { data: todayGame, isLoading: todayGameLoading } = trpc.games.getToday.useQuery();
   const [activeCard, setActiveCard] = useState(0);
   const [selectedCompany, setSelectedCompany] = useState<"A" | "B" | null>(null);
   const touchStartX = useRef<number | null>(null);
@@ -436,7 +483,11 @@ export default function Home() {
               className="hidden lg:flex flex-col justify-center items-center border-l py-24 pl-16"
               style={{ borderColor: "var(--color-border)" }}
             >
-              {todayGame ? (
+              {todayGameLoading ? (
+                /* Neutral skeleton while the query resolves — never flash the
+                   demo mockup at visitors when a live game is about to load */
+                <HeroMatchupSkeleton />
+              ) : todayGame ? (
                 /* Live game card when a game is active */
                 <div className="w-full max-w-sm">
                   <p
@@ -539,7 +590,9 @@ export default function Home() {
         {/* Mobile hero card — shown below copy on small screens.
             Live matchup when a game is running (same as desktop), demo card otherwise. */}
         <div className="lg:hidden container pb-12">
-          {todayGame ? (
+          {todayGameLoading ? (
+            <HeroMatchupSkeleton />
+          ) : todayGame ? (
             <div className="mx-auto max-w-sm">
               <p
                 className="text-xs font-bold uppercase tracking-widest mb-4 text-center"
