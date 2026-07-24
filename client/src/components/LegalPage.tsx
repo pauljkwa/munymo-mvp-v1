@@ -1,4 +1,5 @@
 import PublicLayout from "@/components/PublicLayout";
+import { usePageMeta } from "@/hooks/usePageMeta";
 
 interface LegalPageProps {
   title: string;
@@ -8,6 +9,7 @@ interface LegalPageProps {
 }
 
 export default function LegalPage({ title, subtitle, lastUpdated, children }: LegalPageProps) {
+  usePageMeta({ title: `${title} | Munymo` });
   return (
     <PublicLayout>
       <div className="container py-12 md:py-16">

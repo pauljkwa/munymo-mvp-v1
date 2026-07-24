@@ -5,6 +5,7 @@ import { trpc } from "@/lib/trpc";
 import { Link } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
 import MunymoLogo from "@/components/MunymoLogo";
+import { usePageMeta } from "@/hooks/usePageMeta";
 import {
   Accordion,
   AccordionContent,
@@ -98,6 +99,10 @@ const FAQ_ITEMS = [
     a: "Munymo is a daily stock market training game. Each US trading day we publish one matchup between two well-known companies in the same sector, and you predict which one will post the better performance by the close. There's no real money involved — the goal is to build genuine market intuition through daily practice, feedback, and a track record you can watch improve.",
   },
   {
+    q: "Is Munymo like Wordle for the stock market?",
+    a: "That's a fair way to picture it. Like Wordle, there's one puzzle a day, everyone plays the same one, it takes a few minutes, and streaks reward showing up. The difference is what the puzzle is made of: a real head-to-head between two listed companies, settled by actual market performance at the close. The daily-game habit is the same — but every round quietly trains stock analysis instead of vocabulary.",
+  },
+  {
     q: "How does a game day work?",
     a: "Each game takes about five minutes. First you make a gut pick on instinct alone. Then you read the day's research brief — a balanced, plain-English rundown of both companies. Finally you lock in your scored prediction and answer one quick question that checks you actually read the research. After the market closes, results are published and your score is updated.",
   },
@@ -112,6 +117,14 @@ const FAQ_ITEMS = [
   {
     q: "Do I need trading or investing experience to play?",
     a: "No. Munymo is daily calisthenics for your financial brain, whichever end of the spectrum you're on. If you're new to markets, the plain-English research briefs and daily repetition build genuine intuition from zero. If you already know your way around a balance sheet, it's a morning kickstart for the trading day, or five focused minutes on the train — and the leaderboard doesn't care which one you are.",
+  },
+  {
+    q: "Can a complete beginner learn stock analysis by playing a game?",
+    a: "Yes — daily repetition with feedback is how the skill actually forms. Each game walks you through a plain-English research brief comparing two real companies, you make a prediction, and the market itself grades you by the close. Do that every trading day and the vocabulary, the metrics, and the judgment compound — without risking a cent. It's stock market basics learned by doing, structured as a five-minute game.",
+  },
+  {
+    q: "Is Munymo a stock market simulator?",
+    a: "Not quite — and that's deliberate. A stock market simulator or paper trading app hands you a virtual portfolio and dozens of open-ended decisions to manage. Munymo distills the same practice into one sharp daily decision: two real companies, one prediction, real market results by the close. You get the learning and the feedback loop without the busywork of managing fake money — and because every player faces the identical matchup, results are genuinely comparable.",
   },
   {
     q: "Is Munymo a trading app, financial advice, or gambling?",
@@ -209,6 +222,7 @@ const MUNYIQ_CARDS = [
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function Home() {
+  usePageMeta(); // landing page uses the site-wide default title/description
   const { isAuthenticated, user } = useAuth();
   const isAdmin = user?.role === "admin";
   const { data: todayGame, isLoading: todayGameLoading } = trpc.games.getToday.useQuery();
@@ -348,8 +362,10 @@ export default function Home() {
                 <MunymoLogo height={52} />
               </div>
 
-              {/* Introducing headline */}
-              <p
+              {/* Introducing headline — the page's h1. Styled identically to
+                  the old p-tag; the heading level exists for search engines,
+                  which previously saw no h1 anywhere on the landing page. */}
+              <h1
                 className="font-display font-bold animate-fade-up mb-4"
                 style={{
                   color: "var(--color-foreground)",
@@ -357,8 +373,8 @@ export default function Home() {
                   animationDelay: "110ms",
                 }}
               >
-                Introducing Munymo.
-              </p>
+                Introducing Munymo — the daily stock market prediction game.
+              </h1>
 
               {/* Body copy — single combined paragraph */}
               <div
@@ -369,7 +385,7 @@ export default function Home() {
                   className="text-base leading-relaxed"
                   style={{ color: "var(--color-muted)" }}
                 >
-                  Not a guessing game. A daily stock market training game that asks one simple question: who will perform better today — Company A or Company B?
+                  Not a guessing game. A free daily stock market game built around one simple prediction: who will perform better today — Company A or Company B?
                 </p>
               </div>
 
@@ -510,7 +526,7 @@ export default function Home() {
       <section className="py-20 border-b" style={{ borderColor: "var(--color-border)" }}>
         <div className="container">
           <div className="max-w-lg mb-14">
-            <p className="section-label mb-3">How It Works</p>
+            <p className="section-label mb-3">How the Daily Game Works</p>
             <h2 className="font-display" style={{ color: "var(--color-foreground)" }}>
               Four steps. Five minutes.
               <br />
@@ -1029,8 +1045,9 @@ export default function Home() {
               Questions, answered.
             </h2>
             <p className="text-base leading-relaxed" style={{ color: "var(--color-muted)" }}>
-              The why and how of Munymo — what the game is, how it works, and why five
-              minutes a day is enough to sharpen real market judgment.
+              The why and how of Munymo — what the daily stock market game is, how
+              scoring works, and why five minutes a day is enough to sharpen real
+              market judgment.
             </p>
           </div>
 

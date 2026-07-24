@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
+import { usePageMeta } from "@/hooks/usePageMeta";
 import { ChartSheet } from "@/components/ChartSheet";
 import {
   Brain,
@@ -375,6 +376,11 @@ function DemoBanner() {
 type DemoStep = "gut" | "research" | "final" | "validation" | "result";
 
 export default function Demo() {
+  usePageMeta({
+    title: "How Munymo Works — Daily Stock Market Game Demo | Munymo",
+    description:
+      "Walk through a full Munymo game day: the gut pick, the research brief, the scored prediction, and the result. See how the free daily stock market game works.",
+  });
   const [step, setStep] = useState<DemoStep>("gut");
   const [gutSelection, setGutSelection] = useState<"A" | "B" | null>(null);
   const [finalSelection, setFinalSelection] = useState<"A" | "B" | null>(null);

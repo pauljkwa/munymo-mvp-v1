@@ -1,6 +1,7 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { SignInButton } from "@clerk/clerk-react";
 import { trpc } from "@/lib/trpc";
+import { usePageMeta } from "@/hooks/usePageMeta";
 import PublicLayout from "@/components/PublicLayout";
 import { ALL_LEVELS } from "@/content/lessons";
 import { Link, useParams } from "wouter";
@@ -30,6 +31,15 @@ function LessonView({ lessonId }: { lessonId: string }) {
 
   const lesson = ALL_LESSONS.find((l) => l.id === lessonId);
   const level = lesson ? ALL_LEVELS.find((lv) => lv.level === lesson.level) : undefined;
+
+  usePageMeta(
+    lesson
+      ? {
+          title: `${lesson.title} — Learn the Stock Market | Munymo`,
+          description: `A short Munymo lesson: ${lesson.title}. Learn stock market basics and analysis skills alongside the free daily stock market game.`,
+        }
+      : undefined
+  );
 
   const { data: progress } = trpc.learn.getProgress.useQuery(undefined, {
     enabled: isAuthenticated,

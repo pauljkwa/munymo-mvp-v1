@@ -39,7 +39,62 @@
       gtag('config', 'G-RLCKFXCSF3');
     </script>
 
-    <title>Munymo</title>
+    <!-- SEO defaults for the landing page. Per-route titles/descriptions are
+         set client-side by usePageMeta (client/src/hooks/usePageMeta.ts) —
+         keep these defaults in sync with DEFAULT_TITLE/DEFAULT_DESCRIPTION
+         there. The og:/twitter: tags stay static: social scrapers don't run
+         JS, so they always see the site-wide card below. -->
+    <title>Munymo — Free Daily Stock Market Prediction Game</title>
+    <meta
+      name="description"
+      content="Munymo is a free daily stock market game. Predict which of two companies will perform better, read the day's research, and build real market intuition in five minutes a day." />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Munymo" />
+    <meta property="og:title" content="Munymo — Free Daily Stock Market Prediction Game" />
+    <meta
+      property="og:description"
+      content="One matchup between two real companies every US trading day. Predict the winner, read the research, build real market intuition — five minutes, no real money." />
+    <meta property="og:url" content="https://munymo.com/" />
+    <meta property="og:image" content="https://munymo.com/munymo-logo-cropped_e625fcf7.png" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Munymo — Free Daily Stock Market Prediction Game" />
+    <meta
+      name="twitter:description"
+      content="One matchup between two real companies every US trading day. Predict the winner, read the research, build real market intuition — five minutes, no real money." />
+    <meta name="twitter:image" content="https://munymo.com/apple-touch-icon.png" />
+
+    <!-- Site-level structured data. FAQPage JSON-LD is rendered separately on
+         the landing page (client/src/pages/Home.tsx). -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://munymo.com/#org",
+            "name": "Munymo",
+            "url": "https://munymo.com/",
+            "logo": "https://munymo.com/apple-touch-icon.png"
+          },
+          {
+            "@type": "WebSite",
+            "name": "Munymo",
+            "url": "https://munymo.com/",
+            "publisher": { "@id": "https://munymo.com/#org" }
+          },
+          {
+            "@type": "WebApplication",
+            "name": "Munymo",
+            "url": "https://munymo.com/",
+            "applicationCategory": "GameApplication",
+            "operatingSystem": "Web",
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+            "description": "A free daily stock market prediction game. Each US trading day, players predict which of two companies will perform better, read a plain-English research brief, and build market intuition through practice."
+          }
+        ]
+      }
+    </script>
+
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />

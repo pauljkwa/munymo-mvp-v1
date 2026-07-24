@@ -1,5 +1,6 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
+import { usePageMeta } from "@/hooks/usePageMeta";
 import PublicLayout from "@/components/PublicLayout";
 import { Progress } from "@/components/ui/progress";
 import { ALL_LEVELS } from "@/content/lessons";
@@ -8,6 +9,11 @@ import { useState } from "react";
 import { GraduationCap, ChevronDown, CheckCircle2, Award } from "lucide-react";
 
 export default function LearningHub() {
+  usePageMeta({
+    title: "Learn Stock Market Basics by Playing | Munymo Learning Hub",
+    description:
+      "Short lessons on stock market basics, analysis, and investing concepts — built to pair with Munymo's free daily stock market game.",
+  });
   const { isAuthenticated } = useAuth();
   const { data: progress } = trpc.learn.getProgress.useQuery(undefined, {
     enabled: isAuthenticated,

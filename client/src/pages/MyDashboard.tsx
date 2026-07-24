@@ -2,6 +2,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { SignInButton } from "@clerk/clerk-react";
 import PublicLayout from "@/components/PublicLayout";
+import { usePageMeta } from "@/hooks/usePageMeta";
 import {
   User,
   Flame,
@@ -83,6 +84,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function MyDashboard() {
+  usePageMeta({ title: "My Dashboard | Munymo" });
   const { isAuthenticated, user, loading } = useAuth();
 
   // ── Data queries ──────────────────────────────────────────────────────────

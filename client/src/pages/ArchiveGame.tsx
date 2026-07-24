@@ -1,4 +1,5 @@
 import { trpc } from "@/lib/trpc";
+import { usePageMeta } from "@/hooks/usePageMeta";
 import { withReferralParams } from "@/lib/utils";
 import { useParams } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
@@ -21,6 +22,17 @@ export default function ArchiveGame() {
   const { data: validationQ } = trpc.games.getValidationQuestion.useQuery({ gameId });
   // Fire-and-forget: log clicks on the source-article link for referral reporting.
   const recordOutboundClick = trpc.games.recordOutboundClick.useMutation();
+
+  // Every archive game is a unique "TICKER vs TICKER" page in the sitemap —
+  // the per-game title is what lets each one rank for comparison searches.
+  usePageMeta(
+    game
+      ? {
+          title: `${game.companyATicker} vs ${game.companyBTicker} — Which Stock Performed Better? | Munymo`,
+          description: `${game.companyAName} (${game.companyATicker}) vs ${game.companyBName} (${game.companyBTicker}), ${game.gameDate}: research brief, result, and community stats from Munymo's daily stock market game.`,
+        }
+      : undefined
+  );
 
   if (isLoading) {
     return (

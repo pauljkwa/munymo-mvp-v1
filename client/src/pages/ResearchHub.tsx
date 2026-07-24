@@ -1,9 +1,15 @@
 import { trpc } from "@/lib/trpc";
+import { usePageMeta } from "@/hooks/usePageMeta";
 import PublicLayout from "@/components/PublicLayout";
 import { Link } from "wouter";
 import { BookOpen, ArrowRight, Loader2, Calendar } from "lucide-react";
 
 export default function ResearchHub() {
+  usePageMeta({
+    title: "Stock Matchup Archive — Daily Company Comparisons | Munymo",
+    description:
+      "Every completed Munymo matchup: two real companies, the research brief, the market result, and how the community voted. A growing archive of daily stock comparisons.",
+  });
   const { data: games, isLoading } = trpc.games.listArchive.useQuery({ limit: 30, offset: 0 });
 
   return (

@@ -5,6 +5,7 @@ import { withReferralParams } from "@/lib/utils";
 import { useState, useEffect, useRef } from "react";
 import { Link } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
+import { usePageMeta } from "@/hooks/usePageMeta";
 import { ChartSheet } from "@/components/ChartSheet";
 import { MetricExplanationSheet } from "@/components/MetricExplanationSheet";
 import { metricGroupInfo } from "@/lib/metricGroups";
@@ -287,6 +288,7 @@ function ValidationModal({
 // ─── Main DailyGame Component ─────────────────────────────────────────────────
 
 export default function DailyGame() {
+  usePageMeta({ title: "Today's Game | Munymo" });
   const { isAuthenticated } = useAuth();
   const { data: game, isLoading } = trpc.games.getToday.useQuery();
   const { data: recentPublished } = trpc.games.listArchive.useQuery(

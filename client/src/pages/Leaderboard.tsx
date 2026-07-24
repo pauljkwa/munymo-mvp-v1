@@ -1,9 +1,11 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import PublicLayout from "@/components/PublicLayout";
+import { usePageMeta } from "@/hooks/usePageMeta";
 import { Trophy, Medal, Info, Loader2, TrendingUp } from "lucide-react";
 
 export default function Leaderboard() {
+  usePageMeta({ title: "Leaderboard | Munymo" });
   const { isAuthenticated, user } = useAuth();
   const { data: leaderboard, isLoading } = trpc.leaderboard.get.useQuery();
   const { data: provisional } = trpc.leaderboard.getProvisional.useQuery();

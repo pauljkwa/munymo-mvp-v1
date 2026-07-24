@@ -3,6 +3,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { useClerk, useUser, SignInButton } from "@clerk/clerk-react";
 import PublicLayout from "@/components/PublicLayout";
+import { usePageMeta } from "@/hooks/usePageMeta";
 import { toast } from "sonner";
 import {
   User,
@@ -44,6 +45,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function PlayerProfile() {
+  usePageMeta({ title: "Profile | Munymo" });
   const { isAuthenticated, user, loading } = useAuth();
   const { signOut } = useClerk();
   const utils = trpc.useUtils();

@@ -4,10 +4,12 @@ import { SignInButton } from "@clerk/clerk-react";
 import { trpc } from "@/lib/trpc";
 import { Link } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
+import { usePageMeta } from "@/hooks/usePageMeta";
 import { toast } from "sonner";
 import { MessageSquare, CheckCircle2, ArrowRight, Loader2 } from "lucide-react";
 
 export default function Feedback() {
+  usePageMeta({ title: "Feedback | Munymo" });
   const { isAuthenticated, loading } = useAuth();
   const [message, setMessage] = useState("");
   const [sent, setSent] = useState(false);
