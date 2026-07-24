@@ -103,7 +103,7 @@ const FAQ_ITEMS = [
   },
   {
     q: "Why do I pick twice — once before the research and once after?",
-    a: "The first pick captures your raw instinct before any information can influence it. Comparing your gut picks with your final picks over time reveals something no course can teach you: whether research genuinely improves your judgment, and in which direction. That gap — instinct versus informed decision — is exactly the skill Munymo is designed to sharpen.",
+    a: "The first pick captures your raw instinct before any information can influence it. Comparing your gut picks with your final picks over time reveals something no course can teach you: whether research genuinely improves your judgment, and in which direction. The gut pick is also your safety net: it registers you as in the game, so if life pulls you away before you finish, it's automatically submitted as your final pick at lockout — your streak stays alive — and the validation question is held for you to answer later, even after the next trading day has begun, so its 20 points aren't lost.",
   },
   {
     q: "How does scoring work?",
@@ -111,7 +111,7 @@ const FAQ_ITEMS = [
   },
   {
     q: "Do I need trading or investing experience to play?",
-    a: "No. Munymo was built for people who want to understand markets, not people who already do. The research summaries are written in plain English with no jargon, and the game teaches through repetition: make a decision, see the outcome, understand why. Beginners and experienced players compete on the same board.",
+    a: "No. Munymo is daily calisthenics for your financial brain, whichever end of the spectrum you're on. If you're new to markets, the plain-English research briefs and daily repetition build genuine intuition from zero. If you already know your way around a balance sheet, it's a morning kickstart for the trading day, or five focused minutes on the train — and the leaderboard doesn't care which one you are.",
   },
   {
     q: "Is Munymo a trading app, financial advice, or gambling?",
@@ -123,11 +123,11 @@ const FAQ_ITEMS = [
   },
   {
     q: "How are the two companies chosen each day?",
-    a: "Every matchup is curated fresh from what's actually happening in the market. The two companies always share a sector so the comparison is meaningful, both must have a genuine case for outperforming, and the pairing is tied to a real news story from the last couple of days. Strict freshness rules stop sectors and companies from repeating too often, so the game keeps showing you new territory.",
+    a: "Every matchup is curated fresh from what's actually happening in the market. The two companies always share a sector so the comparison is meaningful, both must have a genuine case for outperforming, and the pairing is tied to a real news story from the last couple of days. That article is credited and linked right on the game page — click through and read it if you want the full story behind the day's pairing. Strict freshness rules stop sectors and companies from repeating too often, so the game keeps showing you new territory.",
   },
   {
     q: "What is MunyIQ?",
-    a: "MunyIQ is Munymo's upcoming financial intelligence score — a single number built from your full track record: instinct accuracy, research engagement, prediction accuracy, and consistency. It needs a meaningful sample of games before it can be calculated, which is by design: a credential is only worth having if it can't be lucked into. Tiered cards from Sapphire to Diamond will mark the milestones.",
+    a: "MunyIQ is Munymo's upcoming financial intelligence score — a single number built from your full track record: instinct accuracy, research engagement, prediction accuracy, consistency, and — most important of all — improvement over time. That last one is the learned metric: it measures whether you're actually getting better, which is the whole point. MunyIQ needs a meaningful sample of games before it can be calculated, which is by design: a credential is only worth having if it can't be lucked into. Tiered cards from Sapphire to Diamond will mark the milestones.",
   },
   {
     q: "What does it cost?",
