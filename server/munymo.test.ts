@@ -467,3 +467,42 @@ describe("dashboard.deleteAccount — never reports success it didn't achieve", 
     await expect(caller.dashboard.deleteAccount({ confirm: false })).rejects.toThrow();
   });
 });
+
+// ─── isTransientApiError — retry classification for the curation agent ───────
+import { isTransientApiError } from "./_core/curationAgent";
+
+describe("isTransientApiError — curation-agent retry classification", () => {
+  /*
+   * Regression for 2026-07-25: both nightly run attempts died on undici's
+   * `TypeError: terminated` (connection severed mid-stream). "terminated" was
+   * not classified as transient, so the cheap per-turn retry never fired and
+   * the night ended unscored. Mid-stream severance must be retryable.
+   */
+  it("classifies undici mid-stream 'terminated' as transient (2026-07-25 failure)", () => {
+    expect(isTransientApiError(new TypeError("terminated"))).toBe(true);
+  });
+
+  it("finds the real network error buried in the cause chain", () => {
+    const socketErr = Object.assign(new Error("other side closed"), { code: "UND_ERR_SOCKET" });
+    expect(isTransientApiError(new TypeError("fetch failed", { cause: socketErr }))).toBe(true);
+    const reset = Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" });
+    expect(isTransientApiError(new TypeError("terminated", { cause: reset }))).toBe(true);
+  });
+
+  it("keeps the 2026-07-20 mid-stream overloaded_error transient", () => {
+    expect(
+      isTransientApiError(new Error('{"type":"error","error":{"type":"overloaded_error"}}'))
+    ).toBe(true);
+  });
+
+  it("treats 429/5xx statuses as transient", () => {
+    expect(isTransientApiError(Object.assign(new Error("x"), { status: 429 }))).toBe(true);
+    expect(isTransientApiError(Object.assign(new Error("x"), { status: 529 }))).toBe(true);
+  });
+
+  it("does NOT retry genuine agent failures (bad payload, auth, 4xx)", () => {
+    expect(isTransientApiError(new Error("Could not parse CurationPayload JSON from Claude's response"))).toBe(false);
+    expect(isTransientApiError(Object.assign(new Error("invalid_request_error"), { status: 400 }))).toBe(false);
+    expect(isTransientApiError(new Error("authentication_error: invalid x-api-key"))).toBe(false);
+  });
+});

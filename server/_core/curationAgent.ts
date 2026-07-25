@@ -46,18 +46,38 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * failure arrived as a plain error whose message was the raw
  * `{"type":"error","error":{"type":"overloaded_error",...}}` JSON — so the
  * message text is checked too.
+ *
+ * Stream severance (2026-07-25, killed both run attempts that night): when the
+ * connection dies MID-STREAM — after headers, while the response body is being
+ * read — undici surfaces `TypeError: terminated`, not APIConnectionError (the
+ * SDK only wraps request-time failures). The real network error (SocketError
+ * "other side closed", ECONNRESET, …) is buried in the `cause` chain, so both
+ * the chain's messages and error codes are matched below.
  */
-function isTransientApiError(err: unknown): boolean {
+export function isTransientApiError(err: unknown): boolean {
   const status = (err as { status?: number })?.status;
   if (err instanceof Anthropic.APIConnectionError) return true;
   if (typeof status === "number" && (status === 429 || status >= 500)) return true;
-  const msg = String((err as { message?: string })?.message ?? err);
+  const parts: string[] = [];
+  for (let e = err as any, depth = 0; e && depth < 5; e = e.cause, depth++) {
+    parts.push(String(e?.message ?? e), String(e?.code ?? ""));
+  }
+  const msg = parts.join(" | ");
   return (
     msg.includes("overloaded_error") ||
     msg.includes("rate_limit_error") ||
     msg.includes("api_error") ||
     msg.includes("Connection error") ||
-    msg.includes("Request timed out")
+    msg.includes("Request timed out") ||
+    msg.includes("terminated") ||
+    msg.includes("Premature close") ||
+    msg.includes("other side closed") ||
+    msg.includes("socket hang up") ||
+    msg.includes("fetch failed") ||
+    msg.includes("aborted") ||
+    msg.includes("ECONNRESET") ||
+    msg.includes("ETIMEDOUT") ||
+    msg.includes("EPIPE")
   );
 }
 
