@@ -436,7 +436,28 @@ async function submitCuration(payload: unknown): Promise<{ status: number; body:
 }
 
 // ─── Main entry point ────────────────────────────────────────────────────────
+// One run at a time: the nightly cron, the /api/scheduled/run-curation
+// endpoint, and the admin "Run Curation Now" button all funnel through here,
+// and two concurrent agents would race to close/create the same games.
+let runInFlight = false;
+export function isCurationRunInFlight(): boolean {
+  return runInFlight;
+}
+
 export async function runDailyCuration(): Promise<void> {
+  if (runInFlight) {
+    console.warn("[curation-agent] Run already in flight — skipping duplicate trigger");
+    return;
+  }
+  runInFlight = true;
+  try {
+    await runDailyCurationInner();
+  } finally {
+    runInFlight = false;
+  }
+}
+
+async function runDailyCurationInner(): Promise<void> {
   if (!ENV.anthropicApiKey) {
     console.error("[curation-agent] ANTHROPIC_API_KEY not set — skipping");
     await notifyOwner({

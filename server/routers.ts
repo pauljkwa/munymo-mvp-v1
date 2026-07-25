@@ -19,6 +19,7 @@ import { getClerkClient } from "./_core/context";
 import { systemRouter } from "./_core/systemRouter";
 import { referralRouter } from "./referralRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import { isCurationRunInFlight, runDailyCuration } from "./_core/curationAgent";
 import {
   computeAndStoreCommunityStats,
   createGame,
@@ -602,6 +603,20 @@ const adminRouter = router({
   // breakdown. Ammunition for "we sent you N thousand readers" partnership pitches.
   outboundClickStats: adminProcedure.query(async () => {
     return getOutboundClickStats();
+  }),
+
+  // Fire-and-forget trigger for the full Claude curation agent — the identical
+  // run the nightly cron performs (score the earliest concluded game, curate the
+  // next one; the cadence guard keeps any already-queued future game). Recovery
+  // path for a failed overnight run that needs no Railway secret: the admin
+  // session is the auth. Completion is reported by the usual curation email.
+  runCuration: adminProcedure.mutation(async ({ ctx }) => {
+    if (isCurationRunInFlight()) {
+      return { started: false as const, alreadyRunning: true as const };
+    }
+    await writeAuditLog(ctx.user.id, "run_curation_manual", "game");
+    void runDailyCuration();
+    return { started: true as const, alreadyRunning: false as const };
   }),
 
   createGame: adminProcedure

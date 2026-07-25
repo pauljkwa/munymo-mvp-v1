@@ -12,6 +12,7 @@ import {
   RotateCcw,
   ExternalLink,
   Bell,
+  Bot,
 } from "lucide-react";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
@@ -29,6 +30,17 @@ export default function AdminDashboard() {
 
   const resetMyPick = trpc.admin.resetPlayerPick.useMutation({
     onSuccess: () => toast.success("Your pick has been reset — you can replay the game."),
+    onError: (e: { message: string }) => toast.error(e.message),
+  });
+
+  const runCuration = trpc.admin.runCuration.useMutation({
+    onSuccess: (r) => {
+      if (r.alreadyRunning) {
+        toast.info("A curation run is already in flight — wait for its completion email.");
+      } else {
+        toast.success("Curation agent started. It runs ~10–20 minutes; the usual ✅/❌ email reports the outcome.");
+      }
+    },
     onError: (e: { message: string }) => toast.error(e.message),
   });
 
@@ -102,6 +114,28 @@ export default function AdminDashboard() {
             )}
           </div>
         )}
+
+        {/* Curation agent — manual recovery trigger. Same run as the nightly
+            cron; server-side in-flight guard prevents concurrent runs. */}
+        <div className="card-glass p-4 mb-6 flex items-center gap-3 flex-wrap" style={{ borderColor: "var(--color-subtle)" }}>
+          <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-subtle)" }}>Curation Agent</span>
+          <button
+            onClick={() => {
+              if (window.confirm("Start a full curation run now? It scores the earliest concluded game and curates the next one (~10–20 min, ~$1 in API usage). Only needed after a ❌ Daily curation FAILED email.")) {
+                runCuration.mutate();
+              }
+            }}
+            disabled={runCuration.isPending}
+            className="btn-ghost text-xs py-1 px-3 flex items-center gap-1"
+            style={{ color: "var(--color-brand)" }}
+          >
+            {runCuration.isPending ? <Loader2 size={13} className="animate-spin" /> : <Bot size={13} />}
+            Run Curation Now
+          </button>
+          <span className="text-xs" style={{ color: "var(--color-subtle)" }}>
+            Recovery for a failed overnight run — the agent scores the concluded game and curates the next one, exactly like the nightly cron.
+          </span>
+        </div>
 
         {/* Notifications test */}
         <div className="card-glass p-4 mb-6 flex items-center gap-3 flex-wrap" style={{ borderColor: "var(--color-subtle)" }}>
