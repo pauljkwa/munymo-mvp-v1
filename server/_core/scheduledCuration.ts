@@ -8,6 +8,7 @@
 import type { Express, Request, Response } from "express";
 import { notifyOwner } from "./notification";
 import { ENV } from "./env";
+import { createMagicLink } from "./magicLink";
 import { resolveWinner } from "../scoring";
 
 /**
@@ -236,6 +237,9 @@ async function checkFreshnessHandler(req: Request, res: Response) {
 }
 
 // ─── POST /api/scheduled/daily-curation ──────────────────────────────────────
+/** Agent wall-clock past this gets flagged in the owner's completion email. */
+const SLOW_RUN_MS = 15 * 60 * 1000;
+
 async function dailyCurationHandler(req: Request, res: Response) {
   const startTime = Date.now();
   try {
@@ -245,7 +249,7 @@ async function dailyCurationHandler(req: Request, res: Response) {
     }
 
     const body = req.body as CurationPayload;
-    const { today, tomorrow, marketClosed } = body;
+    const { today, tomorrow, marketClosed, agentElapsedMs } = body;
 
     if (!tomorrow) {
       return res.status(400).json({ error: "Missing 'tomorrow' block in payload" });
@@ -419,7 +423,18 @@ async function dailyCurationHandler(req: Request, res: Response) {
     const nextNote = result.nextGameCreated
       ? `Next game: ${tomorrow.companyATicker} vs ${tomorrow.companyBTicker} on ${tomorrow.gameDate}.`
       : `Next game already queued — kept ${result.nextGameTickers} on ${result.nextGameDate} (cadence guard; proposed ${tomorrow.companyATicker} vs ${tomorrow.companyBTicker} for ${tomorrow.gameDate} discarded).`;
-    const summary = `Daily curation completed in ${elapsed}ms. ${nextNote} ${closedNote}`;
+    // `elapsed` times THIS endpoint only (typically a few seconds). The agent's
+    // own wall-clock — research turns, transient-error backoff, whole-run
+    // retries — dwarfs it and is what "curation took an hour" actually refers
+    // to, so report it separately rather than letting 8884ms imply the run was
+    // quick. The agent passes it in `agentElapsedMs`; older callers omit it.
+    const agentNote =
+      typeof agentElapsedMs === "number"
+        ? ` Agent wall-clock: ${Math.round(agentElapsedMs / 1000)}s${agentElapsedMs > SLOW_RUN_MS ? " ⚠️ SLOW" : ""}.`
+        : "";
+    const summary =
+      `Daily curation completed in ${elapsed}ms (endpoint only).${agentNote} ${nextNote} ${closedNote}` +
+      ` Push: ${result.pushSummary}.`;
     console.log("[daily-curation]", summary);
 
     await notifyOwner({
@@ -454,6 +469,13 @@ async function dailyCurationHandler(req: Request, res: Response) {
 interface CurationPayload {
   /** Set to true by the agent when the market was closed today (holiday). */
   marketClosed?: boolean;
+  /**
+   * Wall-clock ms the agent spent before POSTing, injected by the agent (not
+   * by Claude). Lets the completion email distinguish "the endpoint was fast"
+   * from "the whole run was fast" — they differ by orders of magnitude when
+   * research turns retry.
+   */
+  agentElapsedMs?: number;
   today?: {
     gameId?: number | null;
     companyAPerf?: number;
@@ -519,7 +541,6 @@ async function streakAtRiskHandler(req: Request, res: Response) {
     const { getDb } = await import("../db");
     const { getActiveOrUpcomingGame, getAllUsers, getPlayerPick, getStreakForUser } = await import("../db");
     const { buildStreakAtRiskEmail, sendEmail } = await import("../email");
-    const { ENV } = await import("./env");
 
     const game = await getActiveOrUpcomingGame();
     if (!game || game.status !== "active" || !game.lockoutAt) {
@@ -548,19 +569,10 @@ async function streakAtRiskHandler(req: Request, res: Response) {
       const pick = await getPlayerPick(u.id, game.id);
       if (pick?.finalSelection) { skipped++; continue; } // already submitted
 
-      // Generate magic link if Clerk is configured
-      let magicLink: string | null = null;
-      if (u.clerkId && ENV.clerkSecretKey) {
-        try {
-          const res2 = await fetch("https://api.clerk.com/v1/sign_in_tokens", {
-            method: "POST",
-            headers: { "Authorization": `Bearer ${ENV.clerkSecretKey}`, "Content-Type": "application/json" },
-            body: JSON.stringify({ user_id: u.clerkId, expires_in_seconds: 7200 }),
-          });
-          const data = await res2.json() as { id?: string };
-          if (data.id) magicLink = `https://munymo.com/api/magic?token=${encodeURIComponent(data.id)}&to=${encodeURIComponent("/game")}`;
-        } catch { /* non-fatal */ }
-      }
+      // Magic link via the shared helper. This used to mint its own 2-hour
+      // token — shorter than the window the game stays open, so a streak
+      // reminder sent 2h before lockout could expire before lockout.
+      const magicLink = await createMagicLink(u.clerkId, "/game");
 
       const { subject, html } = buildStreakAtRiskEmail({
         playerName: u.name,

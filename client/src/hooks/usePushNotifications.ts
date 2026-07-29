@@ -112,6 +112,45 @@ export function usePushNotifications() {
     checkState();
   }, []);
 
+  // ─── Re-sync a browser subscription the server has lost ──────────────────────
+  //
+  // The browser and the server can disagree, and until 2026-07-29 nothing ever
+  // noticed. `sendPushToUsers` deletes a subscription row the moment a push
+  // service answers 410/404 — which happens routinely (endpoint rotation, a
+  // PWA update, a transient 410) and does NOT unsubscribe the browser. After
+  // that the browser still reports an active subscription, so `checkState`
+  // above still says "subscribed" and the settings toggle still reads ON,
+  // while every broadcast silently reaches nobody. There is no user-visible
+  // symptom and no way back except manually toggling push off and on again.
+  //
+  // So: whenever the browser holds a subscription the server doesn't know
+  // about, re-register it. `push.subscribe` is an upsert keyed on the endpoint
+  // hash, so replaying a subscription the server already has is harmless.
+  useEffect(() => {
+    if (state !== "subscribed" || !subscription) return;
+    if (statusData === undefined) return; // status query still in flight
+    if (statusData.subscribed) return; // already in sync
+
+    const subJson = subscription.toJSON();
+    const p256dh = subJson.keys?.p256dh;
+    const auth = subJson.keys?.auth;
+    if (!p256dh || !auth) return;
+
+    console.warn("[push] Server has no subscription for this device — re-registering");
+    subscribeMutation
+      .mutateAsync({
+        endpoint: subscription.endpoint,
+        p256dh,
+        auth,
+        userAgent: navigator.userAgent.slice(0, 512),
+      })
+      .then(() => refetchStatus())
+      .catch((err) => console.warn("[push] Re-registration failed:", err));
+    // subscribeMutation is intentionally omitted — tRPC returns a new object
+    // identity each render, which would make this fire in a loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, subscription, statusData, refetchStatus]);
+
   // ─── Register service worker ─────────────────────────────────────────────────
 
   useEffect(() => {

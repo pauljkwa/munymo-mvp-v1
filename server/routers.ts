@@ -1004,6 +1004,12 @@ const adminRouter = router({
 
       await writeAuditLog(ctx.user.id, "end_of_day", "game", input.closeGameId ?? 0, JSON.stringify({ winner: input.winner, nextGameDate: input.nextGameDate }));
 
+      // Push delivery counts, surfaced in the return value so the curation
+      // endpoint can put them in the owner's completion email. A silent
+      // `sent: 0` used to be indistinguishable from a healthy run (2026-07-29:
+      // the result/new-game pushes never arrived and nothing recorded why).
+      const pushReport: string[] = [];
+
       // ── 3. Send result emails to ALL registered users (only if a game was closed) ──
       // Players who participated get a score summary; non-players get a re-engagement email.
       if (game) {
@@ -1020,23 +1026,9 @@ const adminRouter = router({
           let emailsSent = 0;
           let emailsFailed = 0;
 
-          // Helper: generate a Clerk sign-in token and return a /api/magic wrapper URL.
-          // The wrapper checks token validity server-side before forwarding to Clerk,
-          // so expired/used tokens show our custom fallback instead of Clerk's error screen.
-          const createMagicLink = async (clerkId: string | null, destination: string): Promise<string | null> => {
-            if (!clerkId || !ENV.clerkSecretKey) return null;
-            try {
-              const res = await fetch("https://api.clerk.com/v1/sign_in_tokens", {
-                method: "POST",
-                headers: { "Authorization": `Bearer ${ENV.clerkSecretKey}`, "Content-Type": "application/json" },
-                body: JSON.stringify({ user_id: clerkId, expires_in_seconds: 86400 }),
-              });
-              const data = await res.json() as { id?: string; url?: string };
-              if (!data.id) return null;
-              // Wrap in our own redirect endpoint — token ID + destination, not the raw Clerk URL
-              return `https://munymo.com/api/magic?token=${encodeURIComponent(data.id)}&to=${encodeURIComponent(destination)}`;
-            } catch { return null; }
-          };
+          // Magic links share one helper and one TTL with every other sender —
+          // see server/_core/magicLink.ts.
+          const { createMagicLink } = await import("./_core/magicLink");
 
           for (const user of allUsers) {
             if (!user.email) continue;
@@ -1111,8 +1103,13 @@ const adminRouter = router({
             tag: `munymo-result-${game.id}`,
           });
           console.log(`[Push] Result notifications: ${pushResult.sent} sent, ${pushResult.expired} expired, ${pushResult.errors} errors`);
+          pushReport.push(
+            `results ${pushResult.sent} sent/${pushResult.expired} expired/${pushResult.errors} errors ` +
+              `(${optedInUserIds.length} opted-in users)`
+          );
         } catch (err) {
           console.warn("[Push] End-of-day push notifications failed:", err);
+          pushReport.push(`results FAILED (${(err as any)?.message ?? String(err)})`);
         }
       }
 
@@ -1124,7 +1121,7 @@ const adminRouter = router({
         try {
           const { sendPushToUsers } = await import("./push");
           const optedInIds = (await getAllUsers()).filter((u) => u.pushOptIn !== false).map((u) => u.id);
-          await sendPushToUsers(optedInIds, {
+          const newGameResult = await sendPushToUsers(optedInIds, {
             title: `Today's game is live: ${input.nextCompanyATicker} vs ${input.nextCompanyBTicker}`,
             body: input.nextSector
               ? `${input.nextCompanyAName} vs ${input.nextCompanyBName} — ${input.nextSector}. Make your pick before lockout!`
@@ -1132,15 +1129,25 @@ const adminRouter = router({
             url: `/game`,
             tag: `munymo-game-${nextGameId}`,
           });
+          console.log(`[Push] New game notifications: ${newGameResult.sent} sent, ${newGameResult.expired} expired, ${newGameResult.errors} errors`);
+          pushReport.push(
+            `new-game ${newGameResult.sent} sent/${newGameResult.expired} expired/${newGameResult.errors} errors ` +
+              `(${optedInIds.length} opted-in users)`
+          );
         } catch (err) {
           console.warn("[Push] New game push notification failed:", err);
+          pushReport.push(`new-game FAILED (${(err as any)?.message ?? String(err)})`);
         }
+      } else {
+        pushReport.push("new-game skipped (cadence guard kept an already-queued game)");
       }
 
       return {
         success: true,
         nextGameId,
         nextGameCreated,
+        /** Human-readable push delivery counts for the owner's completion email. */
+        pushSummary: pushReport.length > 0 ? pushReport.join("; ") : "no pushes attempted",
         // The ACTUAL next game — the kept queued game when the guard fired,
         // otherwise the one just created. Callers report this, not the proposal.
         nextGameDate: nextGameCreated ? input.nextGameDate : existingNextGame!.gameDate,

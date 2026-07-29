@@ -360,14 +360,19 @@ async function research(
   ];
 
   for (let i = 0; i < MAX_PAUSE_TURNS; i++) {
+    // Per-turn wall-clock: when a run takes an hour, this is what says whether
+    // it was one pathologically long research turn, many normal ones, or
+    // retry backoff between them.
+    const turnStart = Date.now();
     const response = await runTurnWithRetry(client, messages, tools, containerRef);
+    const turnSeconds = Math.round((Date.now() - turnStart) / 1000);
     // Cache verification: cache_read should be large (and input small) on every
     // turn after the first. All-zero cache fields across a run = a silent
     // invalidator crept into the prefix.
     const u = response.usage;
     console.log(
-      `[curation-agent] turn ${i + 1}: input=${u.input_tokens} cache_read=${u.cache_read_input_tokens ?? 0} ` +
-        `cache_write=${u.cache_creation_input_tokens ?? 0} output=${u.output_tokens}`
+      `[curation-agent] turn ${i + 1}: ${turnSeconds}s input=${u.input_tokens} cache_read=${u.cache_read_input_tokens ?? 0} ` +
+        `cache_write=${u.cache_creation_input_tokens ?? 0} output=${u.output_tokens} stop=${response.stop_reason}`
     );
     messages.push({ role: "assistant", content: response.content });
     if (response.container?.id) containerRef.id = response.container.id;
@@ -421,7 +426,10 @@ function parsePayload(text: string): unknown | null {
 }
 
 // ─── POST to the daily-curation endpoint ─────────────────────────────────────
-async function submitCuration(payload: unknown): Promise<{ status: number; body: any }> {
+async function submitCuration(
+  payload: unknown,
+  agentElapsedMs: number
+): Promise<{ status: number; body: any }> {
   const url = `${ENV.curationBaseUrl}/api/scheduled/daily-curation`;
   const res = await fetch(url, {
     method: "POST",
@@ -429,7 +437,9 @@ async function submitCuration(payload: unknown): Promise<{ status: number; body:
       "Content-Type": "application/json",
       "x-curation-secret": ENV.curationAgentSecret,
     },
-    body: JSON.stringify(payload),
+    // agentElapsedMs is ours, not Claude's — the endpoint reports it in the
+    // owner's completion email so a slow run is visible without reading logs.
+    body: JSON.stringify({ ...(payload as object), agentElapsedMs }),
   });
   const body = await res.json().catch(() => ({}));
   return { status: res.status, body };
@@ -545,7 +555,7 @@ async function attemptDailyCuration(client: Anthropic, startTime: number): Promi
       throw new Error(`Could not parse CurationPayload JSON from Claude's response (attempt ${attempt}).`);
     }
 
-    const { status, body } = await submitCuration(payload);
+    const { status, body } = await submitCuration(payload, Date.now() - startTime);
 
     if (status === 200) {
       const elapsed = Math.round((Date.now() - startTime) / 1000);
