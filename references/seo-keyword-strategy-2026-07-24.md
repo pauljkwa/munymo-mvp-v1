@@ -5,7 +5,17 @@ complementing the GEO/AI-search work already shipped (FAQ + JSON-LD + sitemap).
 Prepared by Fable 5 from published SEO-industry data; no paid keyword tool was
 available (no Semrush/Ahrefs/Search Console connector exists in the registry).
 
-**Status: awaiting Paul's approval. No site changes have been made.**
+**Status (updated 2026-07-29): approved and largely shipped.** P0 (titles, meta,
+h1, OG/Twitter, `WebSite`/`Organization`/`WebApplication` JSON-LD), P1 (keyword
+copy + three search-phrased FAQ items) and P2 (per-game `/research/:id` titles)
+all landed in commit `30f4571`. The sitemap was submitted to Google Search
+Console ~2026-07-22. Still deferred: P3 content (comparison page, students page,
+keyword-named lesson titles) and a proper 1200×630 OG share image.
+
+**Current posture: wait and measure.** There is no launch deadline, so the plan
+is to let the archive pages compound (a new indexed `/research/:id` every trading
+day, for zero effort) and re-read this document against real GSC Queries data in
+early September 2026 rather than acting on the estimates below.
 
 ---
 
@@ -56,7 +66,8 @@ volumes for several phrases ("how to analyze stocks", "stock prediction game",
 "wordle for stocks") are published nowhere; for those we rely on competitor
 evidence (who ranks, and how weak they are).
 
-Once Google Search Console has data (sitemap submission is still on Paul's list),
+The sitemap was submitted to Google Search Console on ~2026-07-22, so once GSC
+has accumulated 4–6 weeks of impressions (readable from early September 2026),
 its Queries report becomes our ground truth and should override all of this.
 
 ---
@@ -144,7 +155,7 @@ primary targets.
 | First `<h2>` on landing | "Four steps. Five minutes. One daily habit." | lovely copy, zero keyword value |
 | Per-route titles | no `document.title` management at all | every page (archive games, Learning Hub, demo) presents as "Munymo" in Google |
 | FAQ JSON-LD | ✅ shipped, working | keep |
-| Dynamic sitemap + robots.txt | ✅ shipped | keep; GSC submission still pending (Paul) |
+| Dynamic sitemap + robots.txt | ✅ shipped | keep; submitted to GSC ~2026-07-22 |
 | Archive pages (/research/:id) | in sitemap, have h1s, unique content | biggest untapped asset — see 5d |
 | SPA rendering | client-side only, no SSR | Google renders JS fine; Bing/others less reliably. Not urgent; noted for later |
 
@@ -215,10 +226,12 @@ primary targets.
 
 ### Ongoing
 
-16. **Submit the sitemap in Google Search Console** (already on Paul's list) —
+16. ✅ **Sitemap submitted in Google Search Console** (Paul, ~2026-07-22) —
     after 4–6 weeks the Queries report tells us which of these bets are paying
     and replaces all estimated volumes above with real data.
-17. Revisit this document once GSC data exists; prune what isn't working.
+17. Revisit this document once GSC data exists (early September 2026); prune
+    what isn't working. Until then, no further SEO work is scheduled — the
+    archive pages compound on their own.
 
 ---
 
