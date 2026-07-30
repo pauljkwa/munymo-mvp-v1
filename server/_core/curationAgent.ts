@@ -174,7 +174,8 @@ Each recent game in the list you were given includes its "questionType" (may be 
 If there is no prior game (first game ever) or no questionType history, pick any of the three at random.
 
 ## Dates
-- gameDate: the next valid US trading day (YYYY-MM-DD). Skip weekends and US market holidays.
+- The "today" you are given is the US Eastern (market-calendar) date. ALL date reasoning happens in that calendar — never re-derive "today" from UTC or any other timezone.
+- gameDate: the next valid US trading day (YYYY-MM-DD) strictly after the trading day you just scored. If you scored a Wednesday game, the next game is Thursday (unless Thursday is a holiday) — never skip a trading day.
 - If this run happens BEFORE the US market opens on a trading day (e.g. a manual recovery run in the US morning), the next valid trading day is TODAY — do NOT skip to tomorrow. The game you create locks at today's 9:30 AM ET open.
 - If the earliest active/locked game's gameDate is today-but-pre-close or in the future, its session has NOT concluded and there is no result to report: set "today": null and "marketClosed": true. Never report a result for a game whose trading day hasn't finished.
 - lockoutAt: gameDate at 13:30:00 UTC during US DST (2nd Sun Mar – 1st Sun Nov) or 14:30:00 UTC otherwise (both = 9:30 AM ET, NASDAQ open). Full ISO 8601, e.g. 2026-07-07T13:30:00.000Z.
@@ -621,13 +622,18 @@ async function runDailyCurationInner(finalAttempt: boolean): Promise<void> {
 /** One full curation attempt: fetch context → research → submit (with freshness retries). Throws on failure. */
 async function attemptDailyCuration(client: Anthropic, startTime: number): Promise<void> {
   const recentGames = await fetchRecentGames();
-  const todayUtc = new Date().toISOString().slice(0, 10);
+  // The agent must reason in the MARKET's calendar. UTC rolls to "tomorrow" at
+  // 8 PM New York — every evening watchdog/boot-sweep recovery run lands after
+  // that rollover, and on 2026-07-29 the agent was told "today is 07-30" at
+  // 20:05 ET Wednesday, scored Wednesday correctly, then queued FRIDAY's game
+  // and skipped Thursday entirely (caught within the hour; game re-dated).
+  const todayEt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
 
   const messages: Anthropic.MessageParam[] = [
     {
       role: "user",
       content:
-        `Today's date (UTC) is ${todayUtc}. Run the full daily curation now.\n\n` +
+        `Today's date (US Eastern — the market's trading date) is ${todayEt}. Run the full daily curation now.\n\n` +
         `Recent games, freshness rules, and pre-computed exclusion lists (bannedSectors, bannedTickers, bannedPairs) ` +
         `from /api/scheduled/recent-games:\n${recentGames}\n\n` +
         `Follow the freshness pre-qualification sequence from your system prompt: scan news, abandon any thread whose ` +
