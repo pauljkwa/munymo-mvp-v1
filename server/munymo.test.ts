@@ -539,3 +539,24 @@ describe("isGameSessionConcluded — watchdog time gate (America/New_York)", () 
     expect(isGameSessionConcluded("2026-01-15", new Date("2026-01-15T21:00:00Z"))).toBe(false);
   });
 });
+
+// ─── expectedLockoutIso — server-computed lockout (audit finding M2) ─────────
+import { expectedLockoutIso } from "./_core/scheduledCuration";
+
+describe("expectedLockoutIso — 9:30 AM America/New_York, DST-safe", () => {
+  it("summer (EDT): 9:30 ET = 13:30 UTC", () => {
+    expect(expectedLockoutIso("2026-07-31")).toBe("2026-07-31T13:30:00.000Z");
+  });
+
+  it("winter (EST): 9:30 ET = 14:30 UTC", () => {
+    expect(expectedLockoutIso("2026-01-15")).toBe("2026-01-15T14:30:00.000Z");
+  });
+
+  it("handles the spring-forward Monday (2026-03-09, EDT)", () => {
+    expect(expectedLockoutIso("2026-03-09")).toBe("2026-03-09T13:30:00.000Z");
+  });
+
+  it("handles the fall-back Monday (2026-11-02, EST)", () => {
+    expect(expectedLockoutIso("2026-11-02")).toBe("2026-11-02T14:30:00.000Z");
+  });
+});

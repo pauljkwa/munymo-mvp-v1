@@ -957,9 +957,30 @@ const adminRouter = router({
       // closed — IS "tomorrow's game": keep it, create nothing, and the close
       // still applies. The exact-date lookup remains as a fallback so a
       // same-date re-submission still reuses rather than CONFLICTs.
-      const queueRefDate = game?.gameDate ?? new Date().toISOString().slice(0, 10);
-      const existingNextGame = (await getQueuedGameAfter(queueRefDate)) ?? (await getTodayGame(input.nextGameDate));
-      const nextGameAlreadyExists = !!existingNextGame && existingNextGame.status !== "cancelled";
+      // "Today" in the market's timezone — UTC rolls to tomorrow at 8 PM ET,
+      // right in the evening recovery window (audit finding M6).
+      const queueRefDate =
+        game?.gameDate ?? new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
+      const queuedNext = await getQueuedGameAfter(queueRefDate);
+      const sameDateGame = queuedNext ? undefined : await getTodayGame(input.nextGameDate);
+
+      // A played/playing game at the proposed date means the proposal is
+      // misdated (agent timezone slip) — creating would dup-key on the unique
+      // gameDate index, and silently "keeping" a finished game would leave
+      // players with no game tomorrow and nobody alerted (audit finding M1).
+      if (sameDateGame && (sameDateGame.status === "result_published" || sameDateGame.status === "locked")) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: `Proposed next game date ${input.nextGameDate} already has a ${sameDateGame.status} game (#${sameDateGame.id}) — the proposal is misdated; no next game was created.`,
+        });
+      }
+
+      // A cancelled row still owns its unique gameDate, so createGame at the
+      // same date would throw ER_DUP_ENTRY every night until manual DB surgery
+      // (audit finding C3). Revive the row in place instead.
+      const cancelledAtDate = sameDateGame?.status === "cancelled" ? sameDateGame : undefined;
+      const existingNextGame = queuedNext ?? (cancelledAtDate ? undefined : sameDateGame);
+      const nextGameAlreadyExists = !!existingNextGame;
       const nextGameCreated = !nextGameAlreadyExists;
 
       let nextGameId: number;
@@ -969,7 +990,7 @@ const adminRouter = router({
         );
         nextGameId = existingNextGame!.id;
       } else {
-        nextGameId = await createGame({
+        const nextGameFields = {
           gameDate: input.nextGameDate,
           exchange: input.nextExchange,
           companyAName: input.nextCompanyAName,
@@ -983,8 +1004,15 @@ const adminRouter = router({
           sourcePublisher: input.nextSourcePublisher,
           lockoutAt: input.nextLockoutAt ? new Date(input.nextLockoutAt) : undefined,
           createdBy: ctx.user.id,
-          status: "active",
-        });
+          status: "active" as const,
+        };
+        if (cancelledAtDate) {
+          console.warn(`[endOfDay] Reviving cancelled game #${cancelledAtDate.id} at ${input.nextGameDate} with the new matchup (gameDate is unique — inserting would dup-key).`);
+          await updateGame(cancelledAtDate.id, { ...nextGameFields, winner: null, resultSummary: null });
+          nextGameId = cancelledAtDate.id;
+        } else {
+          nextGameId = await createGame(nextGameFields);
+        }
 
         if (input.nextResearchContent) {
           const metricsArray = input.nextResearchMetrics
@@ -1004,6 +1032,15 @@ const adminRouter = router({
 
       await writeAuditLog(ctx.user.id, "end_of_day", "game", input.closeGameId ?? 0, JSON.stringify({ winner: input.winner, nextGameDate: input.nextGameDate }));
 
+      // ── 3–5. Notification fan-out — detached from the response (audit M5) ──
+      // The per-user loop makes two Clerk calls + one Resend call sequentially;
+      // holding the HTTP response open through it grows linearly with the user
+      // base and was guaranteeing agent-side timeouts → retries → false
+      // failures. All DB state is final above, so the caller gets its response
+      // now and the fan-out runs in the background. Known accepted gap: if the
+      // process dies mid-fan-out the notifications are lost (fixing that needs
+      // a sent-marker column — schema change, awaiting Paul's approval; M4).
+      void (async () => {
       // ── 3. Send result emails to ALL registered users (only if a game was closed) ──
       // Players who participated get a score summary; non-players get a re-engagement email.
       if (game) {
@@ -1136,6 +1173,7 @@ const adminRouter = router({
           console.warn("[Push] New game push notification failed:", err);
         }
       }
+      })().catch((err) => console.error("[endOfDay] Detached notification fan-out crashed:", err));
 
       return {
         success: true,

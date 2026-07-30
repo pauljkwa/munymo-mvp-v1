@@ -28,6 +28,17 @@ import { ENV } from "./env";
 import { notifyOwner } from "./notification";
 
 const MODEL = "claude-sonnet-5"; // Sonnet 5 ≈ 60% cheaper than Opus 4.8; switched 2026-07-18 to keep curation under the API spend limit
+// Failsafe (2026-07-30, after an overload storm killed the night): 529
+// overloaded_error is capacity trouble in ONE model's serving pool, so waiting
+// harder is the wrong tool — switching pools is. After 2 failed retries of a
+// turn on the primary, remaining retries run on Opus 5 (separate capacity,
+// same API surface incl. web_search_20260209 + adaptive thinking; ~2.5x the
+// cost, which only rare failover nights pay). Failover is sticky for the rest
+// of the storm window so consecutive turns don't thrash between models —
+// prompt caches are model-scoped, and each switch pays a cold cache write.
+const MODEL_FALLBACK = "claude-opus-5";
+const FALLBACK_STICKY_MS = 45 * 60 * 1000;
+let fallbackUntil = 0; // epoch ms — while now < this, turns start on MODEL_FALLBACK
 const MAX_SUBMIT_ATTEMPTS = 4; // freshness retry budget (safety net; should rarely trigger — see check_freshness)
 const MAX_PAUSE_TURNS = 16; // server-tool + check_freshness loop safety cap
 const MAX_OUTPUT_TOKENS = 24000; // headroom for Sonnet 5's tokenizer (~30% more tokens than Opus for the same text); streaming, so unused headroom costs nothing
@@ -234,7 +245,7 @@ Note: "options" must be a real JSON array of 4 strings when questionType is "mul
 // ─── Recent games (freshness context) ────────────────────────────────────────
 async function fetchRecentGames(): Promise<string> {
   const url = `${ENV.curationBaseUrl}/api/scheduled/recent-games`;
-  const res = await fetch(url);
+  const res = await fetch(url, { headers: { "x-curation-secret": ENV.curationAgentSecret } });
   if (!res.ok) {
     throw new Error(`recent-games returned HTTP ${res.status}`);
   }
@@ -309,9 +320,17 @@ async function runTurnWithRetry(
   containerRef: { id: string | undefined }
 ): Promise<Anthropic.Message> {
   for (let retry = 0; ; retry++) {
+    // Model failover: retries 0-1 stay on the primary (blips resolve in
+    // seconds); from retry 2 the pool is genuinely struggling — switch to the
+    // fallback and stay there for the storm window.
+    const useFallback = Date.now() < fallbackUntil || retry >= 2;
+    if (retry >= 2 && Date.now() >= fallbackUntil) {
+      fallbackUntil = Date.now() + FALLBACK_STICKY_MS;
+      console.warn(`[curation-agent] Primary model failing repeatedly — failing over to ${MODEL_FALLBACK} for ${FALLBACK_STICKY_MS / 60000} min`);
+    }
     try {
       const stream = client.messages.stream({
-        model: MODEL,
+        model: useFallback ? MODEL_FALLBACK : MODEL,
         max_tokens: MAX_OUTPUT_TOKENS,
         thinking: { type: "adaptive" },
         cache_control: { type: "ephemeral", ttl: "1h" },

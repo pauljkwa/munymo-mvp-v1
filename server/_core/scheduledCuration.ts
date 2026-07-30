@@ -148,8 +148,14 @@ function computeBannedLists(recentGames: RecentGameRow[]): {
 }
 
 // ─── GET /api/scheduled/recent-games ─────────────────────────────────────────
-async function recentGamesHandler(_req: Request, res: Response) {
+async function recentGamesHandler(req: Request, res: Response) {
   try {
+    // Secret-gated like the other scheduled endpoints — this response includes
+    // the QUEUED future matchup, which must not be publicly readable before
+    // game day (audit minor finding, 2026-07-30).
+    if (!isAuthorisedCron(req)) {
+      return res.status(403).json({ error: "cron-only endpoint" });
+    }
     const { getDb } = await import("../db");
     const { dailyGames, validationQuestions } = await import("../../drizzle/schema.js");
     const { desc, gte, eq } = await import("drizzle-orm");
@@ -236,8 +242,42 @@ async function checkFreshnessHandler(req: Request, res: Response) {
 }
 
 // ─── POST /api/scheduled/daily-curation ──────────────────────────────────────
+/** Today's date (YYYY-MM-DD) in the market's timezone. UTC was wrong here:
+ *  it rolls to "tomorrow" at 8 PM ET — exactly the evening-recovery window —
+ *  which let future-dated games slip past the close-candidate guard (audit
+ *  finding M6, 2026-07-30). */
+function todayInET(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(now);
+}
+
+/** The one true lockout instant for a game date: 9:30 AM America/New_York,
+ *  DST-safe. The agent used to compute this itself, so a wrong DST guess
+ *  around the Mar/Nov transitions could lock players out an hour early — or
+ *  let them pick an hour into the live session (audit finding M2). The server
+ *  now always computes it; the payload's value is ignored. Exported for tests. */
+export function expectedLockoutIso(gameDate: string): string {
+  const edtGuess = new Date(`${gameDate}T13:30:00Z`); // 9:30 ET if EDT (UTC-4)
+  const etTime = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(edtGuess);
+  return etTime === "09:30" ? edtGuess.toISOString() : new Date(`${gameDate}T14:30:00Z`).toISOString();
+}
+
+// Concurrent POSTs (an agent retry racing a slow first request) used to run
+// two close-and-score passes at once — double streak increments, duplicate-key
+// noise (audit finding M3). One application at a time; the loser gets a 409
+// and the agent's retry layer treats the eventual success email as truth.
+let applyInFlight = false;
+
 async function dailyCurationHandler(req: Request, res: Response) {
   const startTime = Date.now();
+  if (applyInFlight) {
+    return res.status(409).json({ error: "A curation payload is already being applied", alreadyRunning: true });
+  }
+  applyInFlight = true;
   try {
     // ── 1. Authenticate — shared-secret cron call ──
     if (!isAuthorisedCron(req)) {
@@ -258,74 +298,122 @@ async function dailyCurationHandler(req: Request, res: Response) {
       console.log("[daily-curation] Market closed today — skipping result scoring, creating next game only.");
     }
 
-    const { getDb, getQueuedGameAfter } = await import("../db");
+    const { getDb, getQueuedGameAfter, upsertResearchWithMetrics, upsertValidationQuestion } = await import("../db");
     const { dailyGames } = await import("../../drizzle/schema.js");
-    const { lte, ne, or, eq, and, asc } = await import("drizzle-orm");
+    const { lte, or, eq, and, asc, inArray } = await import("drizzle-orm");
     const db = await getDb();
     if (!db) return res.status(500).json({ error: "Database unavailable" });
 
-    // ── 2. Freshness validation ──
-    // This is a final safety-net re-check — the agent should already have
-    // confirmed this exact sector + pair via POST /api/scheduled/check-freshness
-    // before writing any research, so a rejection here should be rare.
-    const recentGamesForFreshness = await fetchGamesWithinMatchupWindow(db);
-    const violations = checkFreshness(recentGamesForFreshness, tomorrow.sector, tomorrow.companyATicker, tomorrow.companyBTicker);
+    const todayEt = todayInET();
 
-    if (violations.length > 0) {
-      const msg = `Freshness rule violations:\n${violations.join("\n")}`;
-      console.warn("[daily-curation] Rejected:", msg);
-      await notifyOwner({ title: "⚠️ Curation rejected — freshness violations", content: msg });
-      return res.status(422).json({ error: "Freshness rule violations", violations });
+    // ── 2. Idempotency guard — was this exact payload already applied? ──
+    // MUST run before freshness: once a run has created tomorrow's game, that
+    // game's own row sits inside every freshness window, so a retried POST of
+    // the SAME payload used to 422 as a "freshness violation" — the agent's
+    // retry layer then reported failure for work that had actually succeeded,
+    // and a half-created game (row inserted, research/question lost to a
+    // mid-run crash) could never be repaired (audit finding C1, 2026-07-30).
+    // endOfDay closes before it creates, so a matching next-game row proves
+    // the close also already happened; the research/question upserts below
+    // are idempotent and heal any half-created game.
+    const [sameProposal] = await db
+      .select({ id: dailyGames.id, companyATicker: dailyGames.companyATicker, companyBTicker: dailyGames.companyBTicker, status: dailyGames.status })
+      .from(dailyGames)
+      .where(and(eq(dailyGames.gameDate, tomorrow.gameDate), inArray(dailyGames.status, ["draft", "active"])))
+      .limit(1);
+    if (
+      sameProposal &&
+      sameProposal.companyATicker === tomorrow.companyATicker &&
+      sameProposal.companyBTicker === tomorrow.companyBTicker
+    ) {
+      if (tomorrow.researchContent) {
+        const metricsArray = tomorrow.researchMetrics
+          ? Object.entries(tomorrow.researchMetrics).map(([label, value]) => ({ label, value: String(value) }))
+          : [];
+        await upsertResearchWithMetrics(sameProposal.id, tomorrow.researchContent, metricsArray, tomorrow.researchSummary);
+      }
+      if (tomorrow.validationQuestion?.questionText && tomorrow.validationQuestion?.correctAnswer) {
+        await upsertValidationQuestion(sameProposal.id, {
+          questionType: tomorrow.validationQuestion.questionType === "yn" || tomorrow.validationQuestion.questionType === "yes_no"
+            ? "yes_no"
+            : tomorrow.validationQuestion.questionType === "tf" || tomorrow.validationQuestion.questionType === "true_false"
+              ? "true_false"
+              : "multiple_choice",
+          questionText: tomorrow.validationQuestion.questionText,
+          options: tomorrow.validationQuestion.options ?? undefined,
+          correctAnswer: tomorrow.validationQuestion.correctAnswer,
+        });
+      }
+      const msg = `Payload already applied — game ${sameProposal.id} (${tomorrow.companyATicker} vs ${tomorrow.companyBTicker}, ${tomorrow.gameDate}) exists; research/question re-upserted. No-op.`;
+      console.log("[daily-curation]", msg);
+      return res.json({ ok: true, alreadyApplied: true, nextGameId: sameProposal.id, summary: msg });
     }
 
-    // ── 3. Determine active game to close ──
-    // Skip closing if the market was closed today (holiday) or no winner data provided.
-    const todayUtc = new Date().toISOString().slice(0, 10);
-    let closeGameId: number | undefined;
-    if (!marketClosed && today && today.winnerTicker) {
-      // Find the active/locked game to close — the EARLIEST-dated one, i.e. the
-      // game whose trading day has just concluded. Using desc() here would pick
-      // the latest (a future, not-yet-played) game instead if more than one
-      // active/locked game ever exists at once — which is exactly how games
-      // piled up unresolved in the past (see references/munymo-handover-v2.md).
-      // The lte(gameDate, today) guard excludes future-dated games whose session
-      // hasn't happened yet — closing one of those would record a result from
-      // the wrong trading day (2026-07-07 incident: a pre-open recovery run
-      // created tomorrow's game, and that night's cron had only that future
-      // game to "close").
-      const activeGame = await db
-        .select({ id: dailyGames.id, companyATicker: dailyGames.companyATicker, companyBTicker: dailyGames.companyBTicker })
-        .from(dailyGames)
-        .where(
-          and(
-            or(eq(dailyGames.status, "active"), eq(dailyGames.status, "locked")),
-            lte(dailyGames.gameDate, todayUtc)
-          )
+    // ── 3. Determine the concluded game to close ──
+    // The EARLIEST-dated active/locked game, i.e. the game whose trading day
+    // has just concluded. Using desc() here would pick the latest (a future,
+    // not-yet-played) game instead if more than one active/locked game ever
+    // exists at once — which is exactly how games piled up unresolved in the
+    // past (see references/munymo-handover-v2.md). The lte(gameDate, todayEt)
+    // guard excludes future-dated games whose session hasn't happened yet.
+    // Found INDEPENDENT of the payload's winner data: a concluded-but-unscored
+    // game with no usable winner must fail loudly below, not silently skip the
+    // close and orphan the game forever (audit finding C2).
+    const [concludedGame] = await db
+      .select({ id: dailyGames.id, gameDate: dailyGames.gameDate, companyATicker: dailyGames.companyATicker, companyBTicker: dailyGames.companyBTicker })
+      .from(dailyGames)
+      .where(
+        and(
+          or(eq(dailyGames.status, "active"), eq(dailyGames.status, "locked")),
+          lte(dailyGames.gameDate, todayEt)
         )
-        .orderBy(asc(dailyGames.gameDate))
-        .limit(1);
-      if (activeGame[0]) closeGameId = activeGame[0].id;
+      )
+      .orderBy(asc(dailyGames.gameDate))
+      .limit(1);
+
+    if (concludedGame && (marketClosed || !today?.winnerTicker)) {
+      // Previously this silently skipped the close, created the next game, and
+      // sent a "✅ complete" email — leaving the concluded game locked forever
+      // and wedging every subsequent night on a ticker-validation mismatch.
+      const msg =
+        `Concluded game #${concludedGame.id} (${concludedGame.companyATicker} vs ${concludedGame.companyBTicker}, ` +
+        `${concludedGame.gameDate}) is unscored, but the payload ${marketClosed ? "claims the market was closed" : "has no winnerTicker"}. ` +
+        `Refusing to proceed — the game would be orphaned. If the market genuinely didn't trade that day, cancel or re-date the game in /admin.`;
+      console.error("[daily-curation] Rejected:", msg);
+      await notifyOwner({ title: "⚠️ Curation rejected — concluded game not scored", content: msg });
+      return res.status(422).json({ error: "Concluded game not scored", detail: msg });
     }
+
+    const closeGameId = !marketClosed && today?.winnerTicker ? concludedGame?.id : undefined;
 
     // ── 3b. No-op guard ──
-    // Nothing to close AND the next game already exists → this run has no work
+    // Nothing to close AND a next game already queued → this run has no work
     // (e.g. the nightly cron fired while the only active game's trading day is
     // still in the future). Succeed quietly instead of failing with a CONFLICT
     // from endOfDay's duplicate-game guard and emailing a false alarm.
-    if (!closeGameId) {
-      const [existingNext] = await db
-        .select({ id: dailyGames.id, status: dailyGames.status, gameDate: dailyGames.gameDate })
-        .from(dailyGames)
-        .where(and(eq(dailyGames.gameDate, tomorrow.gameDate), ne(dailyGames.status, "cancelled")))
-        .limit(1);
-      // Also treat ANY queued game after today as "next already exists" — the
-      // exact-date check alone missed a queued game at a different date than
-      // the agent's proposal (same blind spot as endOfDay's old guard).
-      const queuedAhead = existingNext ?? (await getQueuedGameAfter(todayUtc));
-      if (queuedAhead) {
-        const msg = `Nothing to close and a game is already queued (id ${queuedAhead.id}, ${queuedAhead.gameDate}, ${queuedAhead.status}) — no-op.`;
-        console.log("[daily-curation]", msg);
-        return res.json({ ok: true, skipped: true, reason: msg });
+    // Queued means draft/active only — a published or locked game at the
+    // proposed date is NOT tomorrow's game (audit finding M1).
+    const queuedAhead = await getQueuedGameAfter(todayEt);
+    if (!closeGameId && queuedAhead) {
+      const msg = `Nothing to close and a game is already queued (id ${queuedAhead.id}, ${queuedAhead.gameDate}, ${queuedAhead.status}) — no-op.`;
+      console.log("[daily-curation]", msg);
+      return res.json({ ok: true, skipped: true, reason: msg });
+    }
+
+    // ── 4. Freshness validation — only when the proposal will actually be used ──
+    // A queued game ahead means endOfDay's cadence guard will keep it and
+    // discard this proposal, so rejecting the whole run (close included!) over
+    // the discarded proposal's staleness held today's scoring hostage to
+    // tomorrow's content (audit: freshness-hostage coupling). This is a final
+    // safety net — the agent pre-confirms via /api/scheduled/check-freshness.
+    if (!queuedAhead) {
+      const recentGamesForFreshness = await fetchGamesWithinMatchupWindow(db);
+      const violations = checkFreshness(recentGamesForFreshness, tomorrow.sector, tomorrow.companyATicker, tomorrow.companyBTicker);
+      if (violations.length > 0) {
+        const msg = `Freshness rule violations:\n${violations.join("\n")}`;
+        console.warn("[daily-curation] Rejected:", msg);
+        await notifyOwner({ title: "⚠️ Curation rejected — freshness violations", content: msg });
+        return res.status(422).json({ error: "Freshness rule violations", violations });
       }
     }
 
@@ -361,7 +449,22 @@ async function dailyCurationHandler(req: Request, res: Response) {
       : undefined;
 
     // ── 6. Build the endOfDay input ──
-    const lockoutAt = tomorrow.lockoutTime ?? tomorrow.lockoutAt;
+    // Lockout is ALWAYS server-computed (9:30 AM America/New_York, DST-safe) —
+    // the agent's own value is checked only to log drift (audit finding M2:
+    // a wrong LLM DST guess could lock players out early, or leave picks open
+    // into the live session; a missing value disabled lockout entirely).
+    const lockoutAt = expectedLockoutIso(tomorrow.gameDate);
+    const agentLockout = tomorrow.lockoutTime ?? tomorrow.lockoutAt;
+    if (agentLockout) {
+      try {
+        const agentIso = new Date(agentLockout).toISOString();
+        if (agentIso !== lockoutAt) {
+          console.warn(`[daily-curation] Agent lockout ${agentIso} != server-computed ${lockoutAt} — using server value`);
+        }
+      } catch {
+        console.warn(`[daily-curation] Agent lockout unparseable (${agentLockout}) — using server value ${lockoutAt}`);
+      }
+    }
     const endOfDayInput = {
       closeGameId,
       winner,
@@ -384,7 +487,7 @@ async function dailyCurationHandler(req: Request, res: Response) {
       nextSourceUrl: tomorrow.sourceUrl,
       nextSourceTitle: tomorrow.sourceTitle,
       nextSourcePublisher: tomorrow.sourcePublisher,
-      nextLockoutAt: lockoutAt ? new Date(lockoutAt).toISOString() : undefined,
+      nextLockoutAt: lockoutAt,
       nextResearchContent: tomorrow.researchContent,
       nextResearchSummary: tomorrow.researchSummary,
       nextResearchMetrics: tomorrow.researchMetrics as Record<string, string> | undefined,
@@ -447,6 +550,8 @@ async function dailyCurationHandler(req: Request, res: Response) {
       context: { elapsed },
       timestamp: new Date().toISOString(),
     });
+  } finally {
+    applyInFlight = false;
   }
 }
 
