@@ -84,16 +84,54 @@ async function startServer() {
 
   // Daily curation agent — runs at 4:15 PM America/New_York, ~15 min after
   // NASDAQ closes. IANA timezone keeps this correct across DST. Claude-powered
-  // replacement for the Manus cron.
+  // replacement for the Manus cron. finalAttempt:false → a failure here sends
+  // the calm ⚠️ auto-retry email, because the watchdog slots below still stand
+  // between a bad night and manual recovery.
   cron.schedule("15 16 * * 1-5", async () => {
     console.log("[curation-agent] Cron triggered");
     try {
       const { runDailyCuration } = await import("./curationAgent");
-      await runDailyCuration();
+      await runDailyCuration({ finalAttempt: false });
     } catch (err) {
       console.error("[curation-agent] Cron error:", err);
     }
   }, { timezone: "America/New_York" });
+
+  // Curation watchdog — hourly re-checks after the main run. Each slot is a
+  // no-op unless a concluded game is still unscored (so holidays and healthy
+  // nights cost nothing); otherwise it re-runs the full agent. Added
+  // 2026-07-30 after an Anthropic overload storm outlasted the single 16:15
+  // run's retry budget: the deadline for scoring is the next market open,
+  // hours away, so one fixed-time attempt was the real fragility. The 19:15
+  // slot is the last scheduled chance and escalates to the ❌ manual email.
+  cron.schedule("15 17,18,19 * * 1-5", async () => {
+    try {
+      const { runCurationIfOutstanding } = await import("./curationAgent");
+      const hourEt = new Intl.DateTimeFormat("en-US", {
+        timeZone: "America/New_York",
+        hour12: false,
+        hour: "2-digit",
+      }).format(new Date());
+      await runCurationIfOutstanding(`watchdog-${hourEt}15ET`, { finalAttempt: hourEt === "19" });
+    } catch (err) {
+      console.error("[curation-watchdog] Cron error:", err);
+    }
+  }, { timezone: "America/New_York" });
+
+  // Boot sweep — 3 minutes after every server start (i.e. after every Railway
+  // deploy or crash-restart), check once for concluded-but-unscored work and
+  // run the agent if any exists. Self-heals the two failure modes no cron slot
+  // can catch: a deploy that killed an in-flight run (the in-flight guard is
+  // in-memory and dies with the process), and a run whose last watchdog slot
+  // already passed. No-op on a healthy boot.
+  setTimeout(async () => {
+    try {
+      const { runCurationIfOutstanding } = await import("./curationAgent");
+      await runCurationIfOutstanding("boot-sweep", { finalAttempt: true });
+    } catch (err) {
+      console.error("[curation-watchdog] Boot sweep error:", err);
+    }
+  }, 3 * 60 * 1000);
 
   // Streak-at-risk reminder emails — 8:30 AM America/New_York, always 60 min
   // before the 9:30 ET lockout regardless of DST. The handler self-skips if

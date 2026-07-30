@@ -506,3 +506,36 @@ describe("isTransientApiError — curation-agent retry classification", () => {
     expect(isTransientApiError(new Error("authentication_error: invalid x-api-key"))).toBe(false);
   });
 });
+
+// ─── isGameSessionConcluded — watchdog outstanding-work time gate ────────────
+import { isGameSessionConcluded } from "./_core/curationAgent";
+
+describe("isGameSessionConcluded — watchdog time gate (America/New_York)", () => {
+  // July = EDT (UTC-4). A concluded session means the watchdog may score it;
+  // an open or future session must NEVER trigger the agent mid-market.
+  it("yesterday's game is always concluded", () => {
+    expect(isGameSessionConcluded("2026-07-29", new Date("2026-07-30T12:00:00Z"))).toBe(true);
+  });
+
+  it("today's game is NOT concluded while the market is open (15:00 ET)", () => {
+    expect(isGameSessionConcluded("2026-07-29", new Date("2026-07-29T19:00:00Z"))).toBe(false);
+  });
+
+  it("today's game is concluded after 16:10 ET", () => {
+    expect(isGameSessionConcluded("2026-07-29", new Date("2026-07-29T20:30:00Z"))).toBe(true);
+  });
+
+  it("late evening ET still counts as the same trading day (21:00 ET)", () => {
+    expect(isGameSessionConcluded("2026-07-29", new Date("2026-07-30T01:00:00Z"))).toBe(true);
+  });
+
+  it("tomorrow's queued game is never concluded — even past midnight UTC", () => {
+    // 01:00 UTC Jul 30 is still 21:00 ET Jul 29: the Jul 30 game hasn't run.
+    expect(isGameSessionConcluded("2026-07-30", new Date("2026-07-30T01:00:00Z"))).toBe(false);
+  });
+
+  it("handles winter time (EST, UTC-5) — 16:20 ET concluded, 16:00 ET not", () => {
+    expect(isGameSessionConcluded("2026-01-15", new Date("2026-01-15T21:20:00Z"))).toBe(true);
+    expect(isGameSessionConcluded("2026-01-15", new Date("2026-01-15T21:00:00Z"))).toBe(false);
+  });
+});

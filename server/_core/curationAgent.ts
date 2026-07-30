@@ -32,8 +32,13 @@ const MAX_SUBMIT_ATTEMPTS = 4; // freshness retry budget (safety net; should rar
 const MAX_PAUSE_TURNS = 16; // server-tool + check_freshness loop safety cap
 const MAX_OUTPUT_TOKENS = 24000; // headroom for Sonnet 5's tokenizer (~30% more tokens than Opus for the same text); streaming, so unused headroom costs nothing
 // Transient-error resilience (added after the 2026-07-20 run died on a single
-// mid-stream `overloaded_error` and Monday's game went unscored):
-const TURN_RETRY_BACKOFF_MS = [30_000, 60_000, 120_000]; // per-turn retries on transient API errors
+// mid-stream `overloaded_error` and Monday's game went unscored).
+// 2026-07-30: ladder deepened after an overload storm outlasted the old
+// [30s, 60s, 120s] budget and killed both run attempts. The run's real
+// deadline is the next market open (many hours away), so patience is cheap:
+// a turn now rides out ~18 minutes of sustained 529s before giving up, and
+// the hourly watchdog re-runs (index.ts) sit above that.
+const TURN_RETRY_BACKOFF_MS = [30_000, 60_000, 120_000, 300_000, 600_000];
 const FULL_RUN_ATTEMPTS = 2; // whole-run retry for anything else that throws
 const FULL_RUN_RETRY_DELAY_MS = 10 * 60 * 1000;
 
@@ -444,20 +449,88 @@ export function isCurationRunInFlight(): boolean {
   return runInFlight;
 }
 
-export async function runDailyCuration(): Promise<void> {
+/** How a run should report failure: watchdog re-runs are still scheduled after
+ *  a non-final attempt, so its failure email is a calm "no action needed" note
+ *  instead of the manual-recovery alarm. */
+export type CurationRunOptions = { finalAttempt?: boolean };
+
+export async function runDailyCuration(opts: CurationRunOptions = {}): Promise<void> {
   if (runInFlight) {
     console.warn("[curation-agent] Run already in flight — skipping duplicate trigger");
     return;
   }
   runInFlight = true;
   try {
-    await runDailyCurationInner();
+    await runDailyCurationInner(opts.finalAttempt ?? true);
   } finally {
     runInFlight = false;
   }
 }
 
-async function runDailyCurationInner(): Promise<void> {
+/**
+ * "The trading day's EOD work is not done yet": the earliest active/locked
+ * game has already concluded (its market session is over) but has no published
+ * result. This is exactly the state the agent's close-and-curate run fixes.
+ * A game whose session is still open (or hasn't started) is NOT outstanding —
+ * triggering the agent mid-session would have it hunting for closing prices
+ * that don't exist yet.
+ */
+export async function curationWorkOutstanding(): Promise<boolean> {
+  const { getActiveOrUpcomingGame } = await import("../db");
+  const game = await getActiveOrUpcomingGame();
+  if (!game?.gameDate) return false;
+  return isGameSessionConcluded(game.gameDate);
+}
+
+/** Pure, testable core of the outstanding check: has the US market session for
+ *  `gameDate` (YYYY-MM-DD, ET trading day) ended? True from 16:10 ET on the
+ *  game's own date, and for any earlier date. Intl handles DST. */
+export function isGameSessionConcluded(gameDate: string, now: Date = new Date()): boolean {
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  // en-CA yields "YYYY-MM-DD, HH:mm" — both halves compare lexicographically.
+  const [dateEt, timeEt] = fmt.format(now).split(", ");
+  if (gameDate < dateEt) return true;
+  if (gameDate > dateEt) return false;
+  return timeEt >= "16:10";
+}
+
+/**
+ * Watchdog entry point (hourly evening re-checks + the boot sweep in
+ * index.ts): runs the agent ONLY if concluded-but-unscored work exists, so
+ * firing it when everything is fine — or on a market holiday — is a free
+ * no-op. This is what makes the pipeline self-healing: an overload storm, a
+ * crashed run, or a deploy that killed the agent mid-run all get retried
+ * automatically until the work is done, without anyone reading email.
+ */
+export async function runCurationIfOutstanding(trigger: string, opts: CurationRunOptions = {}): Promise<void> {
+  if (runInFlight) {
+    console.log(`[curation-watchdog] (${trigger}) run already in flight — standing down`);
+    return;
+  }
+  let outstanding: boolean;
+  try {
+    outstanding = await curationWorkOutstanding();
+  } catch (err) {
+    console.error(`[curation-watchdog] (${trigger}) outstanding-check failed:`, err);
+    return;
+  }
+  if (!outstanding) {
+    console.log(`[curation-watchdog] (${trigger}) no outstanding EOD work — nothing to do`);
+    return;
+  }
+  console.log(`[curation-watchdog] (${trigger}) concluded game is unscored — starting curation run`);
+  await runDailyCuration(opts);
+}
+
+async function runDailyCurationInner(finalAttempt: boolean): Promise<void> {
   if (!ENV.anthropicApiKey) {
     console.error("[curation-agent] ANTHROPIC_API_KEY not set — skipping");
     await notifyOwner({
@@ -503,10 +576,24 @@ async function runDailyCurationInner(): Promise<void> {
   const elapsed = Math.round((Date.now() - startTime) / 1000);
   const msg = (lastError as any)?.message ?? String(lastError);
   try {
-    await notifyOwner({
-      title: "❌ Daily curation FAILED",
-      content: `Claude curation agent failed after ${elapsed}s (${FULL_RUN_ATTEMPTS} attempts): ${msg}\n\nPlease run End of Day manually before 9:00 PM Perth time.`,
-    });
+    if (finalAttempt) {
+      await notifyOwner({
+        title: "❌ Daily curation FAILED",
+        content:
+          `Claude curation agent failed after ${elapsed}s (${FULL_RUN_ATTEMPTS} attempts): ${msg}\n\n` +
+          `All automatic retries for today are exhausted. Open munymo.com/admin and click ` +
+          `"Run Curation Now" before 9:00 PM Perth time.`,
+      });
+    } else {
+      await notifyOwner({
+        title: "⚠️ Daily curation attempt failed — auto-retry scheduled",
+        content:
+          `Claude curation agent failed after ${elapsed}s (${FULL_RUN_ATTEMPTS} attempts): ${msg}\n\n` +
+          `No action needed: the watchdog re-runs curation every hour until the game is scored ` +
+          `(next checks at 17:15, 18:15, and 19:15 New York time). You'll get the usual ✅ email ` +
+          `when a retry succeeds, or a ❌ email if the final attempt also fails.`,
+      });
+    }
   } catch {
     /* notification best-effort */
   }
