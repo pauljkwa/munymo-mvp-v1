@@ -23,6 +23,7 @@ import { isCurationRunInFlight, runDailyCuration } from "./_core/curationAgent";
 import {
   computeAndStoreCommunityStats,
   createGame,
+  createOrReviveGame,
   eraseUserPersonalData,
   getAllUsers,
   getAuditLog,
@@ -493,6 +494,30 @@ async function fetchTwelveDataOHLCV(
   return { candles, meta: { currency: json.meta?.currency ?? "USD", regularMarketPrice: lastClose } };
 }
 
+// ─── Staged-game activation validation (Phase B) ──────────────────────────────
+/**
+ * Validates a game referenced by endOfDay's `activateStagedGameId` before
+ * it's flipped live in place of creating a new one: must exist, be `draft`,
+ * and be dated after the game just closed (or after today, when nothing was
+ * closed). Pure — DB access (getGameById) sits above this at the call site,
+ * so this logic is directly testable without a database. Exported for tests.
+ */
+export function validateStagedGameActivation(
+  staged: { id: number; status: string; gameDate: string } | undefined,
+  queueRefDate: string
+): { ok: true } | { ok: false; message: string } {
+  if (!staged) {
+    return { ok: false, message: "game not found." };
+  }
+  if (staged.status !== "draft") {
+    return { ok: false, message: `game #${staged.id} is '${staged.status}', not 'draft'.` };
+  }
+  if (staged.gameDate <= queueRefDate) {
+    return { ok: false, message: `game #${staged.id} is dated ${staged.gameDate}, not after ${queueRefDate}.` };
+  }
+  return { ok: true };
+}
+
 // ─── Shared close-game logic (T5) ─────────────────────────────────────────────
 /**
  * Single source of truth for closing and scoring a game.
@@ -890,13 +915,15 @@ const adminRouter = router({
         companyBEndPrice: z.number().optional(),
         resultSummary: z.string().optional(),
         hindsightSpotlight: z.string().optional(),
-        // ── Tomorrow's game ──
-        nextGameDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        // ── Tomorrow's game — via fresh creation OR activating a game Phase A
+        // already staged as a draft earlier in the afternoon ──
+        activateStagedGameId: z.number().optional(),
+        nextGameDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
         nextExchange: z.string().default("NASDAQ"),
-        nextCompanyAName: z.string().min(1),
-        nextCompanyATicker: z.string().min(1),
-        nextCompanyBName: z.string().min(1),
-        nextCompanyBTicker: z.string().min(1),
+        nextCompanyAName: z.string().min(1).optional(),
+        nextCompanyATicker: z.string().min(1).optional(),
+        nextCompanyBName: z.string().min(1).optional(),
+        nextCompanyBTicker: z.string().min(1).optional(),
         nextSector: z.string().optional(),
         nextPairingRationale: z.string().optional(),
         // The article that supplied the "buzz" signal for this matchup.
@@ -918,6 +945,21 @@ const adminRouter = router({
         message: "winner is required when closeGameId is set",
         path: ["winner"],
       })
+      // Exactly one way to get tomorrow's game: activate an already-staged
+      // draft, or supply the full next* creation fields (legacy path).
+      .refine((d) => !!d.activateStagedGameId || !!d.nextGameDate, {
+        message: "Either activateStagedGameId or nextGameDate is required",
+        path: ["nextGameDate"],
+      })
+      .refine(
+        (d) =>
+          !!d.activateStagedGameId ||
+          (!!d.nextCompanyAName && !!d.nextCompanyATicker && !!d.nextCompanyBName && !!d.nextCompanyBTicker),
+        {
+          message: "nextCompanyAName/ATicker/BName/BTicker are required unless activateStagedGameId is set",
+          path: ["nextCompanyAName"],
+        }
+      )
     )
     .mutation(async ({ ctx, input }) => {
       // ── 1. Close today's game (skipped if no closeGameId — Game 1 / first game) ──
@@ -947,90 +989,156 @@ const adminRouter = router({
         scoredPicks.push(...closed);
       }
 
-      // ── 2. Create tomorrow's game — unless a queued game already exists ──
-      // Cadence guard (canonical spec: each close publishes exactly ONE next
-      // game). The old exact-date check let a payload proposing a LATER date
-      // slip through — the agent picks "the next free trading day", so a game
-      // queued ahead pushed every new one a day further out and the schedule
-      // ran permanently ahead of the spec. Now ANY queued (draft/active) game
-      // dated after the game just closed — or after today, when nothing was
-      // closed — IS "tomorrow's game": keep it, create nothing, and the close
-      // still applies. The exact-date lookup remains as a fallback so a
-      // same-date re-submission still reuses rather than CONFLICTs.
+      // ── 2. Resolve tomorrow's game — activate a game Phase A already staged,
+      // create fresh, or keep an already-queued game (cadence guard) ──
       // "Today" in the market's timezone — UTC rolls to tomorrow at 8 PM ET,
       // right in the evening recovery window (audit finding M6).
       const queueRefDate =
         game?.gameDate ?? new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
-      const queuedNext = await getQueuedGameAfter(queueRefDate);
-      const sameDateGame = queuedNext ? undefined : await getTodayGame(input.nextGameDate);
 
-      // A played/playing game at the proposed date means the proposal is
-      // misdated (agent timezone slip) — creating would dup-key on the unique
-      // gameDate index, and silently "keeping" a finished game would leave
-      // players with no game tomorrow and nobody alerted (audit finding M1).
-      if (sameDateGame && (sameDateGame.status === "result_published" || sameDateGame.status === "locked")) {
-        throw new TRPCError({
-          code: "CONFLICT",
-          message: `Proposed next game date ${input.nextGameDate} already has a ${sameDateGame.status} game (#${sameDateGame.id}) — the proposal is misdated; no next game was created.`,
-        });
-      }
+      // Unified shape for "the game that is now tomorrow's game", regardless
+      // of which of the three paths below produced it — every downstream
+      // consumer (notifications, the response) reads from here instead of
+      // branching on input.next* vs a locally-scoped existing-game variable.
+      let resolvedNextGame: {
+        id: number;
+        gameDate: string;
+        companyAName: string;
+        companyATicker: string;
+        companyBName: string;
+        companyBTicker: string;
+        sector: string | null;
+      };
+      // Did a game just become newly visible/live this call (freshly created
+      // OR freshly activated from a staged draft)? False only when the
+      // cadence guard kept an already-live queued game untouched.
+      let nextGameCreated: boolean;
 
-      // A cancelled row still owns its unique gameDate, so createGame at the
-      // same date would throw ER_DUP_ENTRY every night until manual DB surgery
-      // (audit finding C3). Revive the row in place instead.
-      const cancelledAtDate = sameDateGame?.status === "cancelled" ? sameDateGame : undefined;
-      const existingNextGame = queuedNext ?? (cancelledAtDate ? undefined : sameDateGame);
-      const nextGameAlreadyExists = !!existingNextGame;
-      const nextGameCreated = !nextGameAlreadyExists;
-
-      let nextGameId: number;
-      if (nextGameAlreadyExists) {
-        console.warn(
-          `[endOfDay] Queued game already exists (id ${existingNextGame!.id}, ${existingNextGame!.gameDate}, ${existingNextGame!.status}) — cadence guard kept it and skipped creating the proposed ${input.nextGameDate} game; the close was still applied.`
-        );
-        nextGameId = existingNextGame!.id;
-      } else {
-        const nextGameFields = {
-          gameDate: input.nextGameDate,
-          exchange: input.nextExchange,
-          companyAName: input.nextCompanyAName,
-          companyATicker: input.nextCompanyATicker,
-          companyBName: input.nextCompanyBName,
-          companyBTicker: input.nextCompanyBTicker,
-          sector: input.nextSector,
-          pairingRationale: input.nextPairingRationale,
-          sourceUrl: input.nextSourceUrl,
-          sourceTitle: input.nextSourceTitle,
-          sourcePublisher: input.nextSourcePublisher,
-          lockoutAt: input.nextLockoutAt ? new Date(input.nextLockoutAt) : undefined,
-          createdBy: ctx.user.id,
-          status: "active" as const,
+      if (input.activateStagedGameId) {
+        // ── Phase B fast path: Phase A staged this game as a draft earlier
+        // in the afternoon — flip it live instead of creating a new row.
+        // Validation is loud (CONFLICT), not silent, because a missing or
+        // wrong-status reference means the staging split's assumptions broke. ──
+        const staged = await getGameById(input.activateStagedGameId);
+        const validation = validateStagedGameActivation(staged, queueRefDate);
+        if (!validation.ok) {
+          throw new TRPCError({ code: "CONFLICT", message: `activateStagedGameId ${input.activateStagedGameId}: ${validation.message}` });
+        }
+        // validation.ok === true guarantees `staged` is defined (see
+        // validateStagedGameActivation) — TS can't see across the two
+        // variables, so the non-null assertions below are safe by construction.
+        await updateGame(staged!.id, { status: "active" });
+        resolvedNextGame = {
+          id: staged!.id,
+          gameDate: staged!.gameDate,
+          companyAName: staged!.companyAName,
+          companyATicker: staged!.companyATicker,
+          companyBName: staged!.companyBName,
+          companyBTicker: staged!.companyBTicker,
+          sector: staged!.sector,
         };
-        if (cancelledAtDate) {
-          console.warn(`[endOfDay] Reviving cancelled game #${cancelledAtDate.id} at ${input.nextGameDate} with the new matchup (gameDate is unique — inserting would dup-key).`);
-          await updateGame(cancelledAtDate.id, { ...nextGameFields, winner: null, resultSummary: null });
-          nextGameId = cancelledAtDate.id;
-        } else {
-          nextGameId = await createGame(nextGameFields);
-        }
+        nextGameCreated = true;
+      } else {
+        // ── Legacy path: create fresh, unless a queued game already exists ──
+        // Cadence guard (canonical spec: each close publishes exactly ONE next
+        // game). The old exact-date check let a payload proposing a LATER date
+        // slip through — the agent picks "the next free trading day", so a game
+        // queued ahead pushed every new one a day further out and the schedule
+        // ran permanently ahead of the spec. Now ANY queued (draft/active) game
+        // dated after the game just closed — or after today, when nothing was
+        // closed — IS "tomorrow's game": keep it, create nothing, and the close
+        // still applies. The exact-date lookup remains as a fallback so a
+        // same-date re-submission still reuses rather than CONFLICTs.
+        const queuedNext = await getQueuedGameAfter(queueRefDate);
+        const sameDateGame = queuedNext ? undefined : await getTodayGame(input.nextGameDate!);
 
-        if (input.nextResearchContent) {
-          const metricsArray = input.nextResearchMetrics
-            ? Object.entries(input.nextResearchMetrics).map(([label, value]) => ({ label, value: String(value) }))
-            : [];
-          await upsertResearchWithMetrics(nextGameId, input.nextResearchContent, metricsArray, input.nextResearchSummary);
-        }
-        if (input.nextQuestionType && input.nextQuestionText && input.nextCorrectAnswer) {
-          await upsertValidationQuestion(nextGameId, {
-            questionType: input.nextQuestionType,
-            questionText: input.nextQuestionText,
-            options: input.nextQuestionOptions,
-            correctAnswer: input.nextCorrectAnswer,
+        // A played/playing game at the proposed date means the proposal is
+        // misdated (agent timezone slip) — creating would dup-key on the unique
+        // gameDate index, and silently "keeping" a finished game would leave
+        // players with no game tomorrow and nobody alerted (audit finding M1).
+        if (sameDateGame && (sameDateGame.status === "result_published" || sameDateGame.status === "locked")) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: `Proposed next game date ${input.nextGameDate} already has a ${sameDateGame.status} game (#${sameDateGame.id}) — the proposal is misdated; no next game was created.`,
           });
         }
+
+        // A cancelled row still owns its unique gameDate, so createGame at the
+        // same date would throw ER_DUP_ENTRY every night until manual DB surgery
+        // (audit finding C3). Revive the row in place instead.
+        const cancelledAtDate = sameDateGame?.status === "cancelled" ? sameDateGame : undefined;
+        const existingNextGame = queuedNext ?? (cancelledAtDate ? undefined : sameDateGame);
+
+        if (existingNextGame) {
+          console.warn(
+            `[endOfDay] Queued game already exists (id ${existingNextGame.id}, ${existingNextGame.gameDate}, ${existingNextGame.status}) — cadence guard kept it and skipped creating the proposed ${input.nextGameDate} game; the close was still applied.`
+          );
+          resolvedNextGame = {
+            id: existingNextGame.id,
+            gameDate: existingNextGame.gameDate,
+            companyAName: existingNextGame.companyAName,
+            companyATicker: existingNextGame.companyATicker,
+            companyBName: existingNextGame.companyBName,
+            companyBTicker: existingNextGame.companyBTicker,
+            sector: existingNextGame.sector,
+          };
+          nextGameCreated = false;
+        } else {
+          const nextGameFields = {
+            gameDate: input.nextGameDate!,
+            exchange: input.nextExchange,
+            companyAName: input.nextCompanyAName!,
+            companyATicker: input.nextCompanyATicker!,
+            companyBName: input.nextCompanyBName!,
+            companyBTicker: input.nextCompanyBTicker!,
+            sector: input.nextSector,
+            pairingRationale: input.nextPairingRationale,
+            sourceUrl: input.nextSourceUrl,
+            sourceTitle: input.nextSourceTitle,
+            sourcePublisher: input.nextSourcePublisher,
+            lockoutAt: input.nextLockoutAt ? new Date(input.nextLockoutAt) : undefined,
+            createdBy: ctx.user.id,
+            status: "active" as const,
+          };
+          if (cancelledAtDate) {
+            console.warn(`[endOfDay] Reviving cancelled game #${cancelledAtDate.id} at ${input.nextGameDate} with the new matchup (gameDate is unique — inserting would dup-key).`);
+          }
+          const nextGameId = await createOrReviveGame(nextGameFields, cancelledAtDate);
+
+          if (input.nextResearchContent) {
+            const metricsArray = input.nextResearchMetrics
+              ? Object.entries(input.nextResearchMetrics).map(([label, value]) => ({ label, value: String(value) }))
+              : [];
+            await upsertResearchWithMetrics(nextGameId, input.nextResearchContent, metricsArray, input.nextResearchSummary);
+          }
+          if (input.nextQuestionType && input.nextQuestionText && input.nextCorrectAnswer) {
+            await upsertValidationQuestion(nextGameId, {
+              questionType: input.nextQuestionType,
+              questionText: input.nextQuestionText,
+              options: input.nextQuestionOptions,
+              correctAnswer: input.nextCorrectAnswer,
+            });
+          }
+          resolvedNextGame = {
+            id: nextGameId,
+            gameDate: input.nextGameDate!,
+            companyAName: input.nextCompanyAName!,
+            companyATicker: input.nextCompanyATicker!,
+            companyBName: input.nextCompanyBName!,
+            companyBTicker: input.nextCompanyBTicker!,
+            sector: input.nextSector ?? null,
+          };
+          nextGameCreated = true;
+        }
       }
 
-      await writeAuditLog(ctx.user.id, "end_of_day", "game", input.closeGameId ?? 0, JSON.stringify({ winner: input.winner, nextGameDate: input.nextGameDate }));
+      await writeAuditLog(
+        ctx.user.id,
+        "end_of_day",
+        "game",
+        input.closeGameId ?? 0,
+        JSON.stringify({ winner: input.winner, nextGameDate: resolvedNextGame.gameDate, activatedStaged: !!input.activateStagedGameId })
+      );
 
       // ── 3–5. Notification fan-out — detached from the response (audit M5) ──
       // The per-user loop makes two Clerk calls + one Resend call sequentially;
@@ -1049,11 +1157,15 @@ const adminRouter = router({
         const allUsers = await getAllUsers();
         try {
           const scoredMap = new Map(scoredPicks.map((s) => [s.userId, s]));
-          // Build next-game teaser data — must reflect the ACTUAL next game, i.e.
-          // the pre-existing one if we skipped creation (not the discarded proposal).
-          const nextTicker = nextGameCreated
-            ? { a: input.nextCompanyATicker, b: input.nextCompanyBTicker, aName: input.nextCompanyAName, bName: input.nextCompanyBName }
-            : { a: existingNextGame!.companyATicker, b: existingNextGame!.companyBTicker, aName: existingNextGame!.companyAName, bName: existingNextGame!.companyBName };
+          // Build next-game teaser data from the resolved game — whichever of
+          // the three paths above produced it (activated staged / freshly
+          // created / kept pre-existing), never a discarded proposal.
+          const nextTicker = {
+            a: resolvedNextGame.companyATicker,
+            b: resolvedNextGame.companyBTicker,
+            aName: resolvedNextGame.companyAName,
+            bName: resolvedNextGame.companyBName,
+          };
           let emailsSent = 0;
           let emailsFailed = 0;
 
@@ -1162,12 +1274,12 @@ const adminRouter = router({
           const { sendPushToUsers } = await import("./push");
           const optedInIds = (await getAllUsers()).filter((u) => u.pushOptIn !== false).map((u) => u.id);
           await sendPushToUsers(optedInIds, {
-            title: `Today's game is live: ${input.nextCompanyATicker} vs ${input.nextCompanyBTicker}`,
-            body: input.nextSector
-              ? `${input.nextCompanyAName} vs ${input.nextCompanyBName} — ${input.nextSector}. Make your pick before lockout!`
-              : `${input.nextCompanyAName} vs ${input.nextCompanyBName}. Make your pick before lockout!`,
+            title: `Today's game is live: ${resolvedNextGame.companyATicker} vs ${resolvedNextGame.companyBTicker}`,
+            body: resolvedNextGame.sector
+              ? `${resolvedNextGame.companyAName} vs ${resolvedNextGame.companyBName} — ${resolvedNextGame.sector}. Make your pick before lockout!`
+              : `${resolvedNextGame.companyAName} vs ${resolvedNextGame.companyBName}. Make your pick before lockout!`,
             url: `/game`,
-            tag: `munymo-game-${nextGameId}`,
+            tag: `munymo-game-${resolvedNextGame.id}`,
           });
         } catch (err) {
           console.warn("[Push] New game push notification failed:", err);
@@ -1177,14 +1289,12 @@ const adminRouter = router({
 
       return {
         success: true,
-        nextGameId,
+        nextGameId: resolvedNextGame.id,
         nextGameCreated,
-        // The ACTUAL next game — the kept queued game when the guard fired,
-        // otherwise the one just created. Callers report this, not the proposal.
-        nextGameDate: nextGameCreated ? input.nextGameDate : existingNextGame!.gameDate,
-        nextGameTickers: nextGameCreated
-          ? `${input.nextCompanyATicker} vs ${input.nextCompanyBTicker}`
-          : `${existingNextGame!.companyATicker} vs ${existingNextGame!.companyBTicker}`,
+        // The ACTUAL next game — activated staged / kept queued / freshly
+        // created. Callers report this, not a discarded proposal.
+        nextGameDate: resolvedNextGame.gameDate,
+        nextGameTickers: `${resolvedNextGame.companyATicker} vs ${resolvedNextGame.companyBTicker}`,
       };
     }),
 

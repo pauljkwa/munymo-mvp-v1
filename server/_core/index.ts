@@ -82,11 +82,50 @@ async function startServer() {
     console.log(`Server running on http://localhost:${port}/`);
   });
 
+  // Afternoon staging cron (Phase A, 2026-08-01) — 14:45 America/New_York,
+  // ~75 min of retry runway before close. Researches and stages the NEXT
+  // trading day's matchup as a hidden draft ("in the trolley") so the
+  // post-close run below only has to score + activate it. If this never
+  // runs or fails outright, no draft exists and the post-close run falls
+  // back to today's proven combined behavior automatically — nothing here
+  // is on the critical path for a game going live.
+  cron.schedule("45 14 * * 1-5", async () => {
+    console.log("[curation-staging] Cron triggered");
+    try {
+      const { runStagingCuration } = await import("./curationAgent");
+      await runStagingCuration({ finalAttempt: false });
+    } catch (err) {
+      console.error("[curation-staging] Cron error:", err);
+    }
+  }, { timezone: "America/New_York" });
+
+  // Staging watchdog — 15:30 ET, re-runs Phase A ONLY if no draft/active/
+  // locked game exists yet for a date after today (stagingOutstanding).
+  // Mirrors runCurationIfOutstanding: a no-op on a healthy afternoon costs
+  // nothing. This is the LAST staging attempt (finalAttempt: true) — after
+  // this, the post-close run's legacy fallback owns recovery, not staging.
+  cron.schedule("30 15 * * 1-5", async () => {
+    try {
+      const { stagingOutstanding, runStagingCuration } = await import("./curationAgent");
+      if (await stagingOutstanding()) {
+        console.log("[curation-staging-watchdog] No staged game yet — re-running staging");
+        await runStagingCuration({ finalAttempt: true });
+      } else {
+        console.log("[curation-staging-watchdog] Staged game already exists (or window closed) — no-op");
+      }
+    } catch (err) {
+      console.error("[curation-staging-watchdog] Cron error:", err);
+    }
+  }, { timezone: "America/New_York" });
+
   // Daily curation agent — runs at 4:15 PM America/New_York, ~15 min after
   // NASDAQ closes. IANA timezone keeps this correct across DST. Claude-powered
   // replacement for the Manus cron. finalAttempt:false → a failure here sends
   // the calm ⚠️ auto-retry email, because the watchdog slots below still stand
-  // between a bad night and manual recovery.
+  // between a bad night and manual recovery. If Phase A staged a draft this
+  // afternoon, this run is the small results-only conversation (see
+  // curationAgent.ts's attemptDailyCuration pre-check); otherwise it's the
+  // original combined flow, unchanged.
   cron.schedule("15 16 * * 1-5", async () => {
     console.log("[curation-agent] Cron triggered");
     try {

@@ -560,3 +560,130 @@ describe("expectedLockoutIso — 9:30 AM America/New_York, DST-safe", () => {
     expect(expectedLockoutIso("2026-11-02")).toBe("2026-11-02T14:30:00.000Z");
   });
 });
+
+// ─── isStagingWindowOpen — afternoon staging watchdog time gate ──────────────
+// Pure time-gate half of stagingOutstanding (mirrors the isGameSessionConcluded
+// / curationWorkOutstanding split): stagingOutstanding additionally checks the
+// database for an existing draft/active/locked game, which isn't reachable
+// without one (same reason curationWorkOutstanding itself isn't unit-tested
+// directly) — this covers the "yes IF no draft" half via the pure gate.
+import { isStagingWindowOpen } from "./_core/curationAgent";
+
+describe("isStagingWindowOpen — afternoon staging watchdog time gate (America/New_York)", () => {
+  it("14:30 ET: before the window — no", () => {
+    expect(isStagingWindowOpen(new Date("2026-07-29T18:30:00Z"))).toBe(false);
+  });
+
+  it("14:45 ET: window opens (boundary inclusive) — yes-if-no-draft", () => {
+    expect(isStagingWindowOpen(new Date("2026-07-29T18:45:00Z"))).toBe(true);
+  });
+
+  it("15:00 ET: mid-window — yes-if-no-draft", () => {
+    expect(isStagingWindowOpen(new Date("2026-07-29T19:00:00Z"))).toBe(true);
+  });
+
+  it("16:00 ET: window closes (boundary inclusive) — yes-if-no-draft", () => {
+    expect(isStagingWindowOpen(new Date("2026-07-29T20:00:00Z"))).toBe(true);
+  });
+
+  it("16:01 ET: just past the window — no", () => {
+    expect(isStagingWindowOpen(new Date("2026-07-29T20:01:00Z"))).toBe(false);
+  });
+
+  it("16:30 ET: well past the window — no", () => {
+    expect(isStagingWindowOpen(new Date("2026-07-29T20:30:00Z"))).toBe(false);
+  });
+
+  it("weekend (Saturday) at 15:00 ET — no, even inside the time-of-day window", () => {
+    expect(isStagingWindowOpen(new Date("2026-08-01T19:00:00Z"))).toBe(false);
+  });
+
+  it("weekday (Monday) at 15:00 ET — yes-if-no-draft", () => {
+    expect(isStagingWindowOpen(new Date("2026-08-03T19:00:00Z"))).toBe(true);
+  });
+
+  it("handles winter time (EST, UTC-5): 15:00 ET is 20:00 UTC in January", () => {
+    expect(isStagingWindowOpen(new Date("2026-01-15T20:00:00Z"))).toBe(true);
+    // Same UTC instant would be a different (earlier) ET time in summer —
+    // confirms DST is actually accounted for, not a fixed UTC offset.
+    expect(isStagingWindowOpen(new Date("2026-01-15T18:30:00Z"))).toBe(false); // 13:30 ET in EST
+  });
+});
+
+// ─── validateStagedGameActivation — Phase B endOfDay activation guard ────────
+import { validateStagedGameActivation } from "./routers";
+
+describe("validateStagedGameActivation — endOfDay's activateStagedGameId validation", () => {
+  it("CONFLICTs when the staged game is missing", () => {
+    const r = validateStagedGameActivation(undefined, "2026-07-29");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.message).toMatch(/not found/i);
+  });
+
+  it("CONFLICTs when the staged game is not a draft", () => {
+    const r = validateStagedGameActivation({ id: 5, status: "active", gameDate: "2026-07-31" }, "2026-07-29");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.message).toMatch(/not 'draft'/);
+  });
+
+  it("CONFLICTs when the staged game is dated on or before the reference date", () => {
+    const sameDate = validateStagedGameActivation({ id: 5, status: "draft", gameDate: "2026-07-29" }, "2026-07-29");
+    expect(sameDate.ok).toBe(false);
+    const earlier = validateStagedGameActivation({ id: 5, status: "draft", gameDate: "2026-07-28" }, "2026-07-29");
+    expect(earlier.ok).toBe(false);
+  });
+
+  it("activates (ok:true) a draft dated strictly after the reference date", () => {
+    const r = validateStagedGameActivation({ id: 5, status: "draft", gameDate: "2026-07-31" }, "2026-07-29");
+    expect(r).toEqual({ ok: true });
+  });
+});
+
+describe("admin.endOfDay — activateStagedGameId (createCaller pattern)", () => {
+  /**
+   * No database in the test environment (see dashboard.deleteAccount above),
+   * so getGameById always returns undefined — this exercises the SAME "missing
+   * staged game" CONFLICT path validateStagedGameActivation covers in
+   * isolation above, but end-to-end through the real tRPC procedure.
+   */
+  it("CONFLICTs when activateStagedGameId references a game that can't be found", async () => {
+    const { ctx } = createAuthContext2();
+    const adminCtx: TrpcContext = { ...ctx, user: { ...ctx.user!, role: "admin" } };
+    const caller = appRouter.createCaller(adminCtx);
+
+    await expect(
+      caller.admin.endOfDay({
+        activateStagedGameId: 999,
+      } as Parameters<typeof caller.admin.endOfDay>[0])
+    ).rejects.toThrow(/not found/i);
+  });
+
+  it("rejects when neither activateStagedGameId nor nextGameDate is provided", async () => {
+    const { ctx } = createAuthContext2();
+    const adminCtx: TrpcContext = { ...ctx, user: { ...ctx.user!, role: "admin" } };
+    const caller = appRouter.createCaller(adminCtx);
+
+    // @ts-expect-error — intentionally omitting both required-one-of fields
+    await expect(caller.admin.endOfDay({})).rejects.toThrow();
+  });
+});
+
+// ─── classifyCurationPayload — Phase B payload routing ───────────────────────
+import { classifyCurationPayload } from "./_core/scheduledCuration";
+
+describe("classifyCurationPayload — results-only payload skips freshness; legacy payload unaffected", () => {
+  it("routes a results-only payload (stagedGameId set) to 'results-only', regardless of tomorrow", () => {
+    expect(classifyCurationPayload({ stagedGameId: 42 })).toBe("results-only");
+    // stagedGameId takes priority even if a stray tomorrow block is present —
+    // results-only never runs the freshness/tomorrow machinery either way.
+    expect(classifyCurationPayload({ stagedGameId: 42, tomorrow: { gameDate: "2026-07-31" } })).toBe("results-only");
+  });
+
+  it("routes a legacy payload (tomorrow set, no stagedGameId) to 'legacy' — unaffected by the split", () => {
+    expect(classifyCurationPayload({ tomorrow: { gameDate: "2026-07-31" } })).toBe("legacy");
+  });
+
+  it("routes a payload with neither field to 'invalid'", () => {
+    expect(classifyCurationPayload({})).toBe("invalid");
+  });
+});

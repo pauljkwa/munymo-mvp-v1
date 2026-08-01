@@ -2,8 +2,11 @@
  * Scheduled curation endpoints — called by the AGENT cron each trading day.
  *
  * GET  /api/scheduled/recent-games   → returns last 30 days of games for freshness checks
- * POST /api/scheduled/daily-curation → accepts the full curation JSON, validates freshness rules,
- *                                       runs End of Day logic (close today + create tomorrow)
+ * POST /api/scheduled/stage-game     → Phase A (afternoon): stages tomorrow's game as a hidden draft
+ * POST /api/scheduled/daily-curation → Phase B (post-close): accepts the full curation JSON (legacy)
+ *                                       OR a results-only payload (stagedGameId set), validates
+ *                                       freshness rules where applicable, runs End of Day logic
+ *                                       (close today + create/activate tomorrow)
  */
 import type { Express, Request, Response } from "express";
 import { notifyOwner } from "./notification";
@@ -270,7 +273,196 @@ export function expectedLockoutIso(gameDate: string): string {
 // two close-and-score passes at once — double streak increments, duplicate-key
 // noise (audit finding M3). One application at a time; the loser gets a 409
 // and the agent's retry layer treats the eventual success email as truth.
+// Shared with stageGameHandler (Phase A) too — a staging run and a full
+// daily-curation run must never apply concurrently.
 let applyInFlight = false;
+
+/**
+ * C1 idempotency guard, shared by daily-curation and stage-game: if a game
+ * already exists at the proposed date with the SAME tickers, this exact
+ * submission (or a retried equivalent) was already applied — the caller
+ * should re-upsert research/question (heals a half-created row) and return
+ * early instead of treating the retry as a fresh proposal or a freshness
+ * violation (audit finding C1, 2026-07-30).
+ */
+async function findMatchingProposal(
+  db: any,
+  gameDate: string,
+  companyATicker: string,
+  companyBTicker: string,
+  statuses: Array<"draft" | "active" | "locked">
+): Promise<{ id: number; companyATicker: string; companyBTicker: string; status: string } | undefined> {
+  const { dailyGames } = await import("../../drizzle/schema.js");
+  const { and, eq, inArray } = await import("drizzle-orm");
+  const [row] = await db
+    .select({ id: dailyGames.id, companyATicker: dailyGames.companyATicker, companyBTicker: dailyGames.companyBTicker, status: dailyGames.status })
+    .from(dailyGames)
+    .where(and(eq(dailyGames.gameDate, gameDate), inArray(dailyGames.status, statuses)))
+    .limit(1);
+  if (row && row.companyATicker === companyATicker && row.companyBTicker === companyBTicker) return row;
+  return undefined;
+}
+
+function mapQuestionType(qt: string): "multiple_choice" | "yes_no" | "true_false" {
+  return qt === "yn" || qt === "yes_no" ? "yes_no" : qt === "tf" || qt === "true_false" ? "true_false" : "multiple_choice";
+}
+
+/**
+ * Routing decision for dailyCurationHandler: a results-only payload
+ * (stagedGameId set, Phase B fast path) skips the tomorrow/freshness/C1
+ * machinery entirely, since none of it applies to "nothing new is being
+ * proposed"; a legacy payload (tomorrow set) gets the full combined
+ * treatment unchanged; anything else is a malformed request. Pure and
+ * exported for tests — the routing decision itself doesn't touch the DB.
+ */
+export function classifyCurationPayload(body: { stagedGameId?: number; tomorrow?: unknown }): "results-only" | "legacy" | "invalid" {
+  if (body.stagedGameId) return "results-only";
+  if (body.tomorrow) return "legacy";
+  return "invalid";
+}
+
+/** Upserts a game's research + validation question from a `tomorrow` block.
+ *  Idempotent — safe to call again on a retried submission (used by both the
+ *  C1 guard's re-upsert and the initial creation path). */
+async function upsertProposalContent(gameId: number, tomorrow: CurationTomorrow): Promise<void> {
+  const { upsertResearchWithMetrics, upsertValidationQuestion } = await import("../db");
+  if (tomorrow.researchContent) {
+    const metricsArray = tomorrow.researchMetrics
+      ? Object.entries(tomorrow.researchMetrics).map(([label, value]) => ({ label, value: String(value) }))
+      : [];
+    await upsertResearchWithMetrics(gameId, tomorrow.researchContent, metricsArray, tomorrow.researchSummary);
+  }
+  if (tomorrow.validationQuestion?.questionText && tomorrow.validationQuestion?.correctAnswer) {
+    await upsertValidationQuestion(gameId, {
+      questionType: mapQuestionType(tomorrow.validationQuestion.questionType),
+      questionText: tomorrow.validationQuestion.questionText,
+      options: tomorrow.validationQuestion.options ?? undefined,
+      correctAnswer: tomorrow.validationQuestion.correctAnswer,
+    });
+  }
+}
+
+/**
+ * Phase B results-only branch of dailyCurationHandler: `stagedGameId`
+ * references a game Phase A already staged as a draft, so there is nothing
+ * new to propose here — freshness and the C1/cadence "queued game" guards
+ * exist to protect a NEW matchup proposal and don't apply. This mirrors the
+ * legacy path's concluded-game lookup and T3 winner validation exactly (same
+ * queries, same rejection messages) and then calls endOfDay with
+ * `activateStagedGameId` instead of the `next*` creation fields.
+ */
+async function applyResultsOnlyCuration(
+  body: CurationPayload,
+  todayEt: string,
+  req: Request,
+  res: Response,
+  startTime: number
+): Promise<Response> {
+  const { today, marketClosed, stagedGameId } = body;
+  const { getDb, getGameById } = await import("../db");
+  const { dailyGames } = await import("../../drizzle/schema.js");
+  const { lte, or, eq, and, asc } = await import("drizzle-orm");
+  const db = await getDb();
+  if (!db) return res.status(500).json({ error: "Database unavailable" });
+
+  const stagedGame = await getGameById(stagedGameId!);
+  if (!stagedGame) {
+    return res.status(400).json({ error: `stagedGameId ${stagedGameId} not found` });
+  }
+  // Idempotency: a retried submission after a prior (possibly
+  // network-severed) attempt already flipped the staged draft live.
+  if (stagedGame.status !== "draft") {
+    const msg = `stagedGameId ${stagedGameId} is already '${stagedGame.status}' — already applied. No-op.`;
+    console.log("[daily-curation]", msg);
+    return res.json({ ok: true, alreadyApplied: true, nextGameId: stagedGame.id, summary: msg });
+  }
+
+  // ── Determine the concluded game to close — identical query/logic to the
+  // legacy path's step 3 (see its comment for the "earliest, not latest" rationale). ──
+  const [concludedGame] = await db
+    .select({ id: dailyGames.id, gameDate: dailyGames.gameDate, companyATicker: dailyGames.companyATicker, companyBTicker: dailyGames.companyBTicker })
+    .from(dailyGames)
+    .where(and(or(eq(dailyGames.status, "active"), eq(dailyGames.status, "locked")), lte(dailyGames.gameDate, todayEt)))
+    .orderBy(asc(dailyGames.gameDate))
+    .limit(1);
+
+  if (concludedGame && (marketClosed || !today?.winnerTicker)) {
+    const msg =
+      `Concluded game #${concludedGame.id} (${concludedGame.companyATicker} vs ${concludedGame.companyBTicker}, ` +
+      `${concludedGame.gameDate}) is unscored, but the payload ${marketClosed ? "claims the market was closed" : "has no winnerTicker"}. ` +
+      `Refusing to proceed — the game would be orphaned. If the market genuinely didn't trade that day, cancel or re-date the game in /admin.`;
+    console.error("[daily-curation] Rejected:", msg);
+    await notifyOwner({ title: "⚠️ Curation rejected — concluded game not scored", content: msg });
+    return res.status(422).json({ error: "Concluded game not scored", detail: msg });
+  }
+
+  const closeGameId = !marketClosed && today?.winnerTicker ? concludedGame?.id : undefined;
+
+  // Nothing to close (holiday, or nothing newly concluded) → leave the
+  // staged draft untouched for a future run. Activation only ever happens
+  // together with a close (the cadence invariant), so there's no partial
+  // "activate without closing" here — exactly what the equivalent legacy
+  // no-op guard (step 3b) would also do, since the staged draft IS the
+  // "already queued" game that guard checks for.
+  if (!closeGameId) {
+    const msg = `Nothing to close (${marketClosed ? "market closed" : "no concluded game"}) — staged game #${stagedGame.id} left as draft for a future run.`;
+    console.log("[daily-curation]", msg);
+    return res.json({ ok: true, skipped: true, reason: msg });
+  }
+
+  // ── Determine winner — identical logic to the legacy path's step 4 ──
+  let winner: "A" | "B" | undefined;
+  const closingGameRows = await db.select().from(dailyGames).where(eq(dailyGames.id, closeGameId)).limit(1);
+  if (closingGameRows[0]) {
+    const resolved = resolveWinner(
+      closingGameRows[0].companyATicker,
+      closingGameRows[0].companyBTicker,
+      today!.winnerTicker!,
+      today!.companyAPerf,
+      today!.companyBPerf
+    );
+    if ("error" in resolved) {
+      console.error("[daily-curation] T3 winner validation failed:", resolved.error);
+      await notifyOwner({ title: "⚠️ Curation rejected — winner validation failed", content: resolved.error });
+      return res.status(422).json({ error: "Winner validation failed", detail: resolved.error });
+    }
+    winner = resolved.winner;
+  }
+
+  const endOfDayInput = {
+    closeGameId,
+    winner,
+    companyAPerf: today?.companyAPerf,
+    companyBPerf: today?.companyBPerf,
+    companyAStartPrice: today?.companyAStartPrice,
+    companyAEndPrice: today?.companyAEndPrice,
+    companyBStartPrice: today?.companyBStartPrice,
+    companyBEndPrice: today?.companyBEndPrice,
+    resultSummary: today?.resultSummary,
+    hindsightSpotlight: today?.hindsightSpotlight,
+    activateStagedGameId: stagedGame.id,
+  };
+
+  const { appRouter } = await import("../routers");
+  // Build a minimal admin context for the cron caller — identical convention
+  // to the legacy path below.
+  const caller = appRouter.createCaller({
+    user: { id: 1, role: "admin" as const, clerkId: null, openId: null, email: null, name: "Cron", loginMethod: null, createdAt: new Date(), updatedAt: new Date(), displayName: null, awayStatus: false, awayStatusUntil: null, deactivated: false, tier: "free" as const, lastSignedIn: new Date(), emailOptIn: true, pushOptIn: true },
+    req: req as any,
+    res: res as any,
+  });
+
+  const result = await caller.admin.endOfDay(endOfDayInput);
+
+  const elapsed = Date.now() - startTime;
+  const summary = `Results-only curation completed in ${elapsed}ms. Closed game #${closeGameId} (winner: ${winner}). Activated staged game #${result.nextGameId} (${result.nextGameTickers}).`;
+  console.log("[daily-curation]", summary);
+  await notifyOwner({
+    title: `✅ Daily curation complete — activated staged game (${result.nextGameTickers})`,
+    content: summary,
+  });
+  return res.json({ ok: true, nextGameId: result.nextGameId, summary });
+}
 
 async function dailyCurationHandler(req: Request, res: Response) {
   const startTime = Date.now();
@@ -287,7 +479,20 @@ async function dailyCurationHandler(req: Request, res: Response) {
     const body = req.body as CurationPayload;
     const { today, tomorrow, marketClosed } = body;
 
-    if (!tomorrow) {
+    // ── Payload routing (results-only vs legacy) ──
+    // A results-only payload (stagedGameId set) skips the tomorrow/freshness/
+    // C1-idempotency machinery below entirely — none of it applies, since
+    // those guards exist to protect a NEW matchup proposal and this payload
+    // isn't proposing one.
+    const payloadKind = classifyCurationPayload(body);
+    if (payloadKind === "results-only") {
+      return await applyResultsOnlyCuration(body, todayInET(), req, res, startTime);
+    }
+    if (payloadKind === "invalid" || !tomorrow) {
+      // The `!tomorrow` half is unreachable given classifyCurationPayload
+      // above (payloadKind is only "legacy" when tomorrow is set) — it's
+      // here purely so TypeScript narrows `tomorrow` to defined for the rest
+      // of this function, since it can't see across the two variables.
       return res.status(400).json({ error: "Missing 'tomorrow' block in payload" });
     }
 
@@ -298,9 +503,9 @@ async function dailyCurationHandler(req: Request, res: Response) {
       console.log("[daily-curation] Market closed today — skipping result scoring, creating next game only.");
     }
 
-    const { getDb, getQueuedGameAfter, upsertResearchWithMetrics, upsertValidationQuestion } = await import("../db");
+    const { getDb, getQueuedGameAfter } = await import("../db");
     const { dailyGames } = await import("../../drizzle/schema.js");
-    const { lte, or, eq, and, asc, inArray } = await import("drizzle-orm");
+    const { lte, or, eq, and, asc } = await import("drizzle-orm");
     const db = await getDb();
     if (!db) return res.status(500).json({ error: "Database unavailable" });
 
@@ -316,34 +521,9 @@ async function dailyCurationHandler(req: Request, res: Response) {
     // endOfDay closes before it creates, so a matching next-game row proves
     // the close also already happened; the research/question upserts below
     // are idempotent and heal any half-created game.
-    const [sameProposal] = await db
-      .select({ id: dailyGames.id, companyATicker: dailyGames.companyATicker, companyBTicker: dailyGames.companyBTicker, status: dailyGames.status })
-      .from(dailyGames)
-      .where(and(eq(dailyGames.gameDate, tomorrow.gameDate), inArray(dailyGames.status, ["draft", "active"])))
-      .limit(1);
-    if (
-      sameProposal &&
-      sameProposal.companyATicker === tomorrow.companyATicker &&
-      sameProposal.companyBTicker === tomorrow.companyBTicker
-    ) {
-      if (tomorrow.researchContent) {
-        const metricsArray = tomorrow.researchMetrics
-          ? Object.entries(tomorrow.researchMetrics).map(([label, value]) => ({ label, value: String(value) }))
-          : [];
-        await upsertResearchWithMetrics(sameProposal.id, tomorrow.researchContent, metricsArray, tomorrow.researchSummary);
-      }
-      if (tomorrow.validationQuestion?.questionText && tomorrow.validationQuestion?.correctAnswer) {
-        await upsertValidationQuestion(sameProposal.id, {
-          questionType: tomorrow.validationQuestion.questionType === "yn" || tomorrow.validationQuestion.questionType === "yes_no"
-            ? "yes_no"
-            : tomorrow.validationQuestion.questionType === "tf" || tomorrow.validationQuestion.questionType === "true_false"
-              ? "true_false"
-              : "multiple_choice",
-          questionText: tomorrow.validationQuestion.questionText,
-          options: tomorrow.validationQuestion.options ?? undefined,
-          correctAnswer: tomorrow.validationQuestion.correctAnswer,
-        });
-      }
+    const sameProposal = await findMatchingProposal(db, tomorrow.gameDate, tomorrow.companyATicker, tomorrow.companyBTicker, ["draft", "active"]);
+    if (sameProposal) {
+      await upsertProposalContent(sameProposal.id, tomorrow);
       const msg = `Payload already applied — game ${sameProposal.id} (${tomorrow.companyATicker} vs ${tomorrow.companyBTicker}, ${tomorrow.gameDate}) exists; research/question re-upserted. No-op.`;
       console.log("[daily-curation]", msg);
       return res.json({ ok: true, alreadyApplied: true, nextGameId: sameProposal.id, summary: msg });
@@ -556,6 +736,36 @@ async function dailyCurationHandler(req: Request, res: Response) {
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+/** Shape of the `tomorrow` block — shared by the full daily-curation payload
+ *  and the Phase A stage-game payload, since staging proposes exactly the
+ *  same "next game" content, just delivered earlier and to a different
+ *  endpoint. */
+interface CurationTomorrow {
+  exchange?: string;
+  gameDate: string;
+  sector?: string;
+  companyAName: string;
+  companyATicker: string;
+  companyBName: string;
+  companyBTicker: string;
+  pairingRationale?: string;
+  /** The news article that supplied the "buzz" signal for this matchup. */
+  sourceUrl?: string;
+  sourceTitle?: string;
+  sourcePublisher?: string;
+  lockoutTime?: string;
+  lockoutAt?: string;
+  researchContent?: string;
+  researchSummary?: string;
+  researchMetrics?: Record<string, string>;
+  validationQuestion?: {
+    questionType: string;
+    questionText: string;
+    options?: string[] | null;
+    correctAnswer: string;
+  };
+}
+
 interface CurationPayload {
   /** Set to true by the agent when the market was closed today (holiday). */
   marketClosed?: boolean;
@@ -575,31 +785,145 @@ interface CurationPayload {
     hindsightSpotlight?: string;
     resultSourceNote?: string;
   };
-  tomorrow: {
-    exchange?: string;
-    gameDate: string;
-    sector?: string;
-    companyAName: string;
-    companyATicker: string;
-    companyBName: string;
-    companyBTicker: string;
-    pairingRationale?: string;
-    /** The news article that supplied the "buzz" signal for this matchup. */
-    sourceUrl?: string;
-    sourceTitle?: string;
-    sourcePublisher?: string;
-    lockoutTime?: string;
-    lockoutAt?: string;
-    researchContent?: string;
-    researchSummary?: string;
-    researchMetrics?: Record<string, string>;
-    validationQuestion?: {
-      questionType: string;
-      questionText: string;
-      options?: string[] | null;
-      correctAnswer: string;
+  /** Phase B results-only payload: references the game Phase A already
+   *  staged as a draft instead of proposing a new `tomorrow`. */
+  stagedGameId?: number;
+  /** Required for the legacy combined payload; absent for a results-only
+   *  payload (stagedGameId is set instead — nothing new is being proposed). */
+  tomorrow?: CurationTomorrow;
+}
+
+/** Phase A payload — stages tomorrow's game as a hidden draft ahead of close. */
+interface StageGamePayload {
+  tomorrow: CurationTomorrow;
+}
+
+// ─── POST /api/scheduled/stage-game ──────────────────────────────────────────
+/**
+ * Phase A (afternoon staging): creates tomorrow's game as a hidden `draft`
+ * ("in the trolley") hours before close, so the failure-prone research work
+ * gets the afternoon's retry runway instead of racing the post-close
+ * deadline. Mirrors dailyCurationHandler's guards (C1 idempotency via
+ * findMatchingProposal, the SAME applyInFlight mutex, the cadence "queued
+ * game" no-op, freshness) but never closes/scores anything — that stays
+ * exclusively daily-curation's job. See
+ * references/afternoon-curation-split-spec.md.
+ *
+ * Golden safety property: if this handler never runs, or fails outright, no
+ * draft gets created and runDailyCuration's Phase B pre-check falls back to
+ * today's proven combined behavior automatically — nothing here is on the
+ * critical path for a game going live.
+ */
+async function stageGameHandler(req: Request, res: Response) {
+  const startTime = Date.now();
+  // ── 1. Auth + in-flight mutex — the SAME lock as daily-curation, so a
+  // staging run and a full post-close run can never apply concurrently. ──
+  if (applyInFlight) {
+    return res.status(409).json({ error: "A curation payload is already being applied", alreadyRunning: true });
+  }
+  applyInFlight = true;
+  try {
+    if (!isAuthorisedCron(req)) {
+      return res.status(403).json({ error: "cron-only endpoint" });
+    }
+
+    const body = req.body as StageGamePayload;
+    const { tomorrow } = body;
+    if (!tomorrow) {
+      return res.status(400).json({ error: "Missing 'tomorrow' block in payload" });
+    }
+
+    const { getDb, getQueuedGameAfter, getTodayGame, createOrReviveGame } = await import("../db");
+    const db = await getDb();
+    if (!db) return res.status(500).json({ error: "Database unavailable" });
+
+    const todayEt = todayInET();
+
+    // ── 2. Idempotency (C1 mirror) — a draft/active/locked game already at
+    // tomorrow.gameDate with the SAME tickers means this exact staging
+    // proposal (or a retried equivalent) was already applied. ──
+    const sameProposal = await findMatchingProposal(db, tomorrow.gameDate, tomorrow.companyATicker, tomorrow.companyBTicker, ["draft", "active", "locked"]);
+    if (sameProposal) {
+      await upsertProposalContent(sameProposal.id, tomorrow);
+      const msg = `Staging payload already applied — game ${sameProposal.id} (${tomorrow.companyATicker} vs ${tomorrow.companyBTicker}, ${tomorrow.gameDate}) exists; research/question re-upserted. No-op.`;
+      console.log("[stage-game]", msg);
+      return res.json({ ok: true, alreadyApplied: true, stagedGameId: sameProposal.id, summary: msg });
+    }
+
+    // ── 3. Cadence — never two queued games. If ANY draft/active game
+    // already exists after today, this proposal is discarded quietly; the
+    // pre-existing one wins, same call the daily-curation cadence guard makes. ──
+    const queuedAhead = await getQueuedGameAfter(todayEt);
+    if (queuedAhead) {
+      const msg = `A game is already queued (id ${queuedAhead.id}, ${queuedAhead.gameDate}, ${queuedAhead.status}) — no-op, proposed ${tomorrow.companyATicker} vs ${tomorrow.companyBTicker} for ${tomorrow.gameDate} discarded.`;
+      console.log("[stage-game]", msg);
+      return res.json({ ok: true, skipped: true, reason: msg });
+    }
+
+    // ── 4. Freshness validation ──
+    const recentGamesForFreshness = await fetchGamesWithinMatchupWindow(db);
+    const violations = checkFreshness(recentGamesForFreshness, tomorrow.sector, tomorrow.companyATicker, tomorrow.companyBTicker);
+    if (violations.length > 0) {
+      const msg = `Freshness rule violations:\n${violations.join("\n")}`;
+      console.warn("[stage-game] Rejected:", msg);
+      return res.status(422).json({ error: "Freshness rule violations", violations });
+    }
+
+    // ── 5. Create as a hidden draft ("in the trolley") — lockoutAt is ALWAYS
+    // server-computed, same as daily-curation (audit finding M2). A cancelled
+    // row at this date is revived in place (C3 mirror) rather than dup-keying. ──
+    const lockoutAt = expectedLockoutIso(tomorrow.gameDate);
+    const existingAtDate = await getTodayGame(tomorrow.gameDate);
+    const cancelledAtDate = existingAtDate?.status === "cancelled" ? existingAtDate : undefined;
+    const nextGameFields = {
+      gameDate: tomorrow.gameDate,
+      exchange: tomorrow.exchange ?? "NASDAQ",
+      companyAName: tomorrow.companyAName,
+      companyATicker: tomorrow.companyATicker,
+      companyBName: tomorrow.companyBName,
+      companyBTicker: tomorrow.companyBTicker,
+      sector: tomorrow.sector,
+      pairingRationale: tomorrow.pairingRationale,
+      sourceUrl: tomorrow.sourceUrl,
+      sourceTitle: tomorrow.sourceTitle,
+      sourcePublisher: tomorrow.sourcePublisher,
+      lockoutAt: new Date(lockoutAt),
+      // Cron-triggered — no admin session; id 1 ("Cron") is the same
+      // convention dailyCurationHandler uses for its admin.endOfDay caller context.
+      createdBy: 1,
+      status: "draft" as const,
     };
-  };
+    if (cancelledAtDate) {
+      console.warn(`[stage-game] Reviving cancelled game #${cancelledAtDate.id} at ${tomorrow.gameDate} as a staged draft (gameDate is unique — inserting would dup-key).`);
+    }
+    const stagedGameId = await createOrReviveGame(nextGameFields, cancelledAtDate);
+    await upsertProposalContent(stagedGameId, tomorrow);
+
+    const elapsed = Date.now() - startTime;
+    const summary = `Staged ${tomorrow.companyATicker} vs ${tomorrow.companyBTicker} for ${tomorrow.gameDate} as draft #${stagedGameId} in ${elapsed}ms.`;
+    console.log("[stage-game]", summary);
+    await notifyOwner({
+      title: `✅ Afternoon staging complete — ${tomorrow.companyATicker} vs ${tomorrow.companyBTicker}`,
+      content: summary,
+    });
+    return res.json({ ok: true, stagedGameId, summary });
+
+  } catch (err: any) {
+    const elapsed = Date.now() - startTime;
+    const errMsg = err?.message ?? String(err);
+    console.error("[stage-game] Error:", errMsg);
+    // No email here — this is one HTTP call inside the agent's whole-run
+    // retry loop, and the ONLY staging email is the calm ⚠️ final-failure
+    // note runStagingCuration sends after every retry is exhausted (spec:
+    // never the ❌ manual-action email for Phase A). Emailing per-attempt
+    // here would just be noise on top of that.
+    return res.status(500).json({
+      error: errMsg,
+      timestamp: new Date().toISOString(),
+    });
+  } finally {
+    applyInFlight = false;
+  }
 }
 
 // ─── POST /api/scheduled/streak-at-risk ──────────────────────────────────────
@@ -696,5 +1020,6 @@ export function registerScheduledCuration(app: Express) {
   app.get("/api/scheduled/recent-games", recentGamesHandler);
   app.post("/api/scheduled/check-freshness", checkFreshnessHandler);
   app.post("/api/scheduled/daily-curation", dailyCurationHandler);
+  app.post("/api/scheduled/stage-game", stageGameHandler);
   app.post("/api/scheduled/streak-at-risk", streakAtRiskHandler);
 }

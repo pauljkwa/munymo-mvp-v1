@@ -1,12 +1,22 @@
 /**
  * Daily Curation Agent — Claude-powered replacement for the Manus scheduled task.
  *
- * Runs once per US trading day (Mon–Fri) at ~20:15 UTC (4:15 AM Perth), just
- * after NASDAQ closes. Driven by an internal node-cron in `index.ts` (same
- * pattern as the tester agent); also exposed as a manually-triggerable HTTP
- * endpoint for testing.
+ * Split into two phases (2026-08-01, references/afternoon-curation-split-spec.md)
+ * so the failure-prone research work happens in the US afternoon (hours of
+ * retry runway) instead of racing the post-close deadline:
  *
- * Flow (mirrors references/daily-curation-agent-prompt.md):
+ *   Phase A — afternoon staging, runStagingCuration(): ~14:45 ET, researches
+ *     and stages tomorrow's matchup as a hidden `draft` ("in the trolley").
+ *     If it never runs or fails outright, no draft exists and Phase B falls
+ *     back to today's proven combined behavior automatically (golden safety
+ *     property — nothing here is on the critical path for a game going live).
+ *   Phase B — post-close, runDailyCuration(): ~16:15 ET, just after NASDAQ
+ *     closes. If a staged draft exists for the next trading day, this is a
+ *     small (~2-4 turn) results-only conversation: score today and activate
+ *     the staged draft. Otherwise it's the original combined flow below.
+ *
+ * Original (still the Phase B fallback) flow (mirrors
+ * references/daily-curation-agent-prompt.md):
  *   1. GET /api/scheduled/recent-games              → banned sectors/tickers/pairs + freshness context
  *   2. Claude scans news, discards ineligible-sector leads immediately, and calls the
  *      check_freshness tool to confirm a candidate sector + pair BEFORE researching or
@@ -243,6 +253,103 @@ Your FINAL message must contain ONLY the JSON object below — no markdown fence
 
 Note: "options" must be a real JSON array of 4 strings when questionType is "multiple_choice", and JSON null for "true_false" or "yes_no". Do not write literal "or null" into the output — that placeholder is only for this instruction.`;
 
+// ─── Derived prompts (Phase A staging, Phase B results-only) ────────────────
+// Both variants are built by SLICING SYSTEM_PROMPT at its section headings —
+// never hand-copied — so every shared section (identity, the web_search tool
+// paragraph, freshness pre-qualification + banned lists, "Select tomorrow's
+// matchup" through "Dates" incl. the market-calendar rule, "Determine today's
+// winner", and the `today`/`tomorrow` output field lists) can only ever say
+// one thing across all three prompts: edit SYSTEM_PROMPT once and every
+// derived prompt picks it up. SYSTEM_PROMPT itself is never touched by this —
+// the full combined run's prompt is byte-identical to before this split.
+
+/** Returns the substring from the first `{` at or after `fromIndex` through
+ *  its matching `}`, counting nesting depth. Used to lift the `today`/`tomorrow`
+ *  output-field blocks out of SYSTEM_PROMPT's JSON template intact. */
+function extractBalancedBlock(text: string, fromIndex: number): string {
+  const start = text.indexOf("{", fromIndex);
+  if (start === -1) throw new Error("extractBalancedBlock: no opening brace found");
+  let depth = 0;
+  for (let i = start; i < text.length; i++) {
+    if (text[i] === "{") depth++;
+    else if (text[i] === "}") {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+  throw new Error("extractBalancedBlock: unbalanced braces");
+}
+
+/** Finds `needle` in `text` or throws — fails loudly at module load if
+ *  SYSTEM_PROMPT's structure ever changes out from under these slice points,
+ *  instead of silently deriving a broken staging/results-only prompt. */
+function requireIndex(text: string, needle: string): number {
+  const idx = text.indexOf(needle);
+  if (idx === -1) throw new Error(`Prompt anchor not found: ${JSON.stringify(needle)} — SYSTEM_PROMPT structure changed`);
+  return idx;
+}
+
+const jobOverviewIdx = requireIndex(SYSTEM_PROMPT, "Your job runs once per US trading day");
+const webSearchIdx = requireIndex(SYSTEM_PROMPT, "You have a web_search tool");
+const freshnessRulesIdx = requireIndex(SYSTEM_PROMPT, "## Freshness rules");
+const determineWinnerIdx = requireIndex(SYSTEM_PROMPT, "## Determine today's winner");
+const selectTomorrowIdx = requireIndex(SYSTEM_PROMPT, "## Select tomorrow's matchup");
+const outputFormatIdx = requireIndex(SYSTEM_PROMPT, "## Output format — CRITICAL");
+
+const IDENTITY = SYSTEM_PROMPT.slice(0, jobOverviewIdx);
+const WEB_SEARCH_PARAGRAPH = SYSTEM_PROMPT.slice(webSearchIdx, freshnessRulesIdx);
+const FRESHNESS_AND_BANNED_LISTS_SECTION = SYSTEM_PROMPT.slice(freshnessRulesIdx, determineWinnerIdx);
+const DETERMINE_WINNER_SECTION = SYSTEM_PROMPT.slice(determineWinnerIdx, selectTomorrowIdx);
+const SELECT_TOMORROW_THROUGH_DATES_SECTION = SYSTEM_PROMPT.slice(selectTomorrowIdx, outputFormatIdx);
+
+const fullOutputFormat = SYSTEM_PROMPT.slice(outputFormatIdx);
+const OUTPUT_FORMAT_HEADING_AND_INTRO = fullOutputFormat.slice(0, requireIndex(fullOutputFormat, "{"));
+const TODAY_OUTPUT_BLOCK = extractBalancedBlock(fullOutputFormat, requireIndex(fullOutputFormat, '"today": {'));
+const TOMORROW_OUTPUT_BLOCK = extractBalancedBlock(fullOutputFormat, requireIndex(fullOutputFormat, '"tomorrow": {'));
+
+/**
+ * Phase A: research-only. Removes "Determine today's winner" (there's no
+ * close to score mid-afternoon — today's game is still in play) and reduces
+ * the output to the `tomorrow` block alone. Everything else — freshness
+ * pre-qualification, banned lists, content rules, US-English, the full Dates
+ * section incl. the market-calendar rule — is reused verbatim via the slices
+ * above, per the build spec.
+ */
+const STAGING_SYSTEM_PROMPT =
+  IDENTITY +
+  `Your job runs once per US trading day, in the afternoon while that trading day's session is still open — this ` +
+  `is the RESEARCH-ONLY half of curation. You must:\n` +
+  `1. Select a timely matchup for the next trading day that obeys strict freshness rules.\n` +
+  `2. Research both companies and write all player-facing content.\n` +
+  `3. Output ONE complete JSON object (the "CurationPayload") — nothing else.\n\n` +
+  WEB_SEARCH_PARAGRAPH +
+  FRESHNESS_AND_BANNED_LISTS_SECTION +
+  SELECT_TOMORROW_THROUGH_DATES_SECTION +
+  OUTPUT_FORMAT_HEADING_AND_INTRO +
+  `{\n  "tomorrow": ${TOMORROW_OUTPUT_BLOCK}\n}\n\n` +
+  `Note: "options" must be a real JSON array of 4 strings when questionType is "multiple_choice", and JSON null for "true_false" or "yes_no". Do not write literal "or null" into the output — that placeholder is only for this instruction.`;
+
+/**
+ * Phase B fast path: a draft already exists for the next trading day (Phase A
+ * staged it), so this run only scores today — no new matchup, no freshness.
+ * Keeps "Determine today's winner" verbatim (the content rules the build spec
+ * asks to preserve) and reduces the output to the `today` block plus the
+ * `stagedGameId` the run is told to echo back.
+ */
+const RESULTS_ONLY_SYSTEM_PROMPT =
+  IDENTITY +
+  `Your job runs just after NASDAQ closes. Tomorrow's game has already been staged in advance — this is the ` +
+  `RESULTS-ONLY half of curation. You must:\n` +
+  `1. Determine today's winner from real closing prices.\n` +
+  `2. Output ONE complete JSON object (the "CurationPayload") — nothing else.\n\n` +
+  WEB_SEARCH_PARAGRAPH +
+  DETERMINE_WINNER_SECTION +
+  OUTPUT_FORMAT_HEADING_AND_INTRO +
+  `The user message tells you the ID of the already-staged next game as "stagedGameId" — echo that exact number ` +
+  `back unchanged; do not invent or look up a different one.\n\n` +
+  `{\n  "marketClosed": false,\n  "stagedGameId": <the exact number given to you in the user message>,\n  "today": ${TODAY_OUTPUT_BLOCK}\n}\n\n` +
+  `If today was a US market holiday, or the earliest active/locked game's session hasn't concluded yet, set "marketClosed": true and "today": null instead — never invent a result.`;
+
 // ─── Recent games (freshness context) ────────────────────────────────────────
 async function fetchRecentGames(): Promise<string> {
   const url = `${ENV.curationBaseUrl}/api/scheduled/recent-games`;
@@ -318,7 +425,11 @@ async function runTurnWithRetry(
   client: Anthropic,
   messages: Anthropic.MessageParam[],
   tools: Anthropic.ToolUnion[],
-  containerRef: { id: string | undefined }
+  containerRef: { id: string | undefined },
+  // Parametrized (2026-08-01) so the SAME retry ladder + model failover serves
+  // all three conversation types (full combined, Phase A staging, Phase B
+  // results-only) — only the system prompt text differs per caller.
+  systemPrompt: string
 ): Promise<Anthropic.Message> {
   for (let retry = 0; ; retry++) {
     // Model failover: retries 0-1 stay on the primary (blips resolve in
@@ -335,7 +446,7 @@ async function runTurnWithRetry(
         max_tokens: MAX_OUTPUT_TOKENS,
         thinking: { type: "adaptive" },
         cache_control: { type: "ephemeral", ttl: "1h" },
-        system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral", ttl: "1h" } }],
+        system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral", ttl: "1h" } }],
         tools,
         messages,
         ...(containerRef.id ? { container: containerRef.id } : {}),
@@ -377,7 +488,12 @@ async function research(
   // call — messages (the conversation history) persists across retries, and the
   // container id has to keep pace with it or the API 400s on the retry's first
   // request. See containerRef comment at the call site for the full story.
-  containerRef: { id: string | undefined }
+  containerRef: { id: string | undefined },
+  // Which of the three conversation types this run is (full combined,
+  // Phase A staging, Phase B results-only) — everything else about the
+  // research loop (tools, retry/failover, pause_turn/tool_use handling) is
+  // identical across all three.
+  systemPrompt: string
 ): Promise<Anthropic.Message> {
   const tools = [
     { type: "web_search_20260209", name: "web_search", max_uses: 15 } as unknown as Anthropic.ToolUnion,
@@ -385,7 +501,7 @@ async function research(
   ];
 
   for (let i = 0; i < MAX_PAUSE_TURNS; i++) {
-    const response = await runTurnWithRetry(client, messages, tools, containerRef);
+    const response = await runTurnWithRetry(client, messages, tools, containerRef, systemPrompt);
     // Cache verification: cache_read should be large (and input small) on every
     // turn after the first. All-zero cache fields across a run = a silent
     // invalidator crept into the prefix.
@@ -460,10 +576,77 @@ async function submitCuration(payload: unknown): Promise<{ status: number; body:
   return { status: res.status, body };
 }
 
+// ─── POST to the stage-game endpoint (Phase A) ───────────────────────────────
+async function submitStaging(payload: unknown): Promise<{ status: number; body: any }> {
+  const url = `${ENV.curationBaseUrl}/api/scheduled/stage-game`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-curation-secret": ENV.curationAgentSecret,
+    },
+    body: JSON.stringify(payload),
+  });
+  const body = await res.json().catch(() => ({}));
+  return { status: res.status, body };
+}
+
+/**
+ * Shared freshness-retry submission loop for the two NEW conversation types
+ * (Phase A staging, Phase B results-only): research → parse → submit → on a
+ * 422 freshness rejection, feed the violations back and retry with a
+ * different matchup, up to MAX_SUBMIT_ATTEMPTS times. Mirrors the loop
+ * inside attemptDailyCuration's legacy path exactly (same shape, same
+ * retry semantics) without a third hand-duplicated copy, since both new
+ * paths share it verbatim — only the system prompt, opening message, and
+ * submit endpoint differ per caller.
+ */
+async function researchAndSubmitWithRetry(
+  client: Anthropic,
+  messages: Anthropic.MessageParam[],
+  systemPrompt: string,
+  submit: (payload: unknown) => Promise<{ status: number; body: any }>,
+  logPrefix: string
+): Promise<{ status: number; body: any; attempt: number }> {
+  const containerRef: { id: string | undefined } = { id: undefined };
+  for (let attempt = 1; attempt <= MAX_SUBMIT_ATTEMPTS; attempt++) {
+    const finalMessage = await research(client, messages, containerRef, systemPrompt);
+    const text = extractText(finalMessage);
+    const payload = parsePayload(text);
+
+    if (!payload) {
+      throw new Error(`Could not parse CurationPayload JSON from Claude's response (attempt ${attempt}).`);
+    }
+
+    const { status, body } = await submit(payload);
+
+    if (status === 200) return { status, body, attempt };
+
+    if (status === 422) {
+      const violations = body?.violations ?? body?.detail ?? body?.error ?? "unknown";
+      console.warn(`${logPrefix} Attempt ${attempt} rejected (422):`, violations);
+      messages.push({
+        role: "user",
+        content:
+          `The submission was REJECTED with HTTP 422. Reason: ${JSON.stringify(violations)}.\n` +
+          `Choose a DIFFERENT matchup that satisfies all freshness rules (re-check the recent games list), ` +
+          `and output the full corrected CurationPayload JSON again — only JSON.`,
+      });
+      continue; // retry
+    }
+
+    // Any other status is a hard failure.
+    throw new Error(`${logPrefix} endpoint returned HTTP ${status}: ${JSON.stringify(body)}`);
+  }
+
+  throw new Error(`Exhausted ${MAX_SUBMIT_ATTEMPTS} attempts without a 200 response (freshness).`);
+}
+
 // ─── Main entry point ────────────────────────────────────────────────────────
 // One run at a time: the nightly cron, the /api/scheduled/run-curation
-// endpoint, and the admin "Run Curation Now" button all funnel through here,
-// and two concurrent agents would race to close/create the same games.
+// endpoint, the admin "Run Curation Now" button, AND the afternoon staging
+// run all funnel through this ONE flag — a staging run and a full post-close
+// run must never overlap (they'd race to read/write the same staged draft).
 let runInFlight = false;
 export function isCurationRunInFlight(): boolean {
   return runInFlight;
@@ -474,17 +657,30 @@ export function isCurationRunInFlight(): boolean {
  *  instead of the manual-recovery alarm. */
 export type CurationRunOptions = { finalAttempt?: boolean };
 
-export async function runDailyCuration(opts: CurationRunOptions = {}): Promise<void> {
+/** Shared in-flight guard for runDailyCuration/runStagingCuration — both
+ *  check/set the SAME module-level runInFlight flag above. */
+async function withCurationLock(label: string, fn: () => Promise<void>): Promise<void> {
   if (runInFlight) {
-    console.warn("[curation-agent] Run already in flight — skipping duplicate trigger");
+    console.warn(`[${label}] Run already in flight — skipping duplicate trigger`);
     return;
   }
   runInFlight = true;
   try {
-    await runDailyCurationInner(opts.finalAttempt ?? true);
+    await fn();
   } finally {
     runInFlight = false;
   }
+}
+
+export async function runDailyCuration(opts: CurationRunOptions = {}): Promise<void> {
+  await withCurationLock("curation-agent", () => runDailyCurationInner(opts.finalAttempt ?? true));
+}
+
+/** Phase A entry point — the 14:45 ET cron and the 15:30 ET staging watchdog
+ *  both funnel through here. Shares runDailyCuration's in-flight guard,
+ *  retry ladder, and model failover; see runStagingCurationInner. */
+export async function runStagingCuration(opts: CurationRunOptions = {}): Promise<void> {
+  await withCurationLock("curation-staging", () => runStagingCurationInner(opts.finalAttempt ?? true));
 }
 
 /**
@@ -548,6 +744,45 @@ export async function runCurationIfOutstanding(trigger: string, opts: CurationRu
   }
   console.log(`[curation-watchdog] (${trigger}) concluded game is unscored — starting curation run`);
   await runDailyCuration(opts);
+}
+
+/** Pure time-gate for the 15:30 ET staging watchdog: true only during the
+ *  afternoon staging window (14:45–16:00 ET) on a weekday, mirroring
+ *  isGameSessionConcluded's pure/testable shape. A stray invocation outside
+ *  that window is a safe no-op rather than staging a game at the wrong time.
+ *  Does NOT check the database — see stagingOutstanding below, which
+ *  combines this with a DB lookup (mirrors the isGameSessionConcluded /
+ *  curationWorkOutstanding split). */
+export function isStagingWindowOpen(now: Date = new Date()): boolean {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour12: false,
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).formatToParts(now);
+  const weekday = parts.find((p) => p.type === "weekday")?.value ?? "";
+  const hour = parts.find((p) => p.type === "hour")?.value ?? "00";
+  const minute = parts.find((p) => p.type === "minute")?.value ?? "00";
+  if (weekday === "Sat" || weekday === "Sun") return false;
+  const timeEt = `${hour}:${minute}`;
+  return timeEt >= "14:45" && timeEt <= "16:00";
+}
+
+/**
+ * Staging watchdog entry point (the 15:30 ET cron in index.ts): true only
+ * when the afternoon window is open AND no draft/active/locked game exists
+ * yet for a date after today(ET) — i.e. Phase A hasn't staged anything (or
+ * failed) and there's still time to. Deliberately NOT wired into the boot
+ * sweep or evening watchdogs (spec Section 5): after close, the Phase B
+ * legacy fallback owns recovery, not staging.
+ */
+export async function stagingOutstanding(): Promise<boolean> {
+  if (!isStagingWindowOpen()) return false;
+  const { getAnyGameAfter } = await import("../db");
+  const todayEt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
+  const existing = await getAnyGameAfter(todayEt);
+  return !existing;
 }
 
 async function runDailyCurationInner(finalAttempt: boolean): Promise<void> {
@@ -629,6 +864,19 @@ async function attemptDailyCuration(client: Anthropic, startTime: number): Promi
   // and skipped Thursday entirely (caught within the hour; game re-dated).
   const todayEt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
 
+  // ── Phase B pre-check: has Phase A already staged tomorrow's game? ──
+  // If so, this run only needs to score today and activate it — a small
+  // (~2-4 turn) results-only conversation instead of full matchup research.
+  // No staged draft (staging never ran, failed outright, or this is a
+  // recovery run with nothing staged) → fall through to today's proven
+  // combined behavior below, unchanged (golden safety property).
+  const { getStagedDraftGameAfter } = await import("../db");
+  const stagedDraft = await getStagedDraftGameAfter(todayEt);
+  if (stagedDraft) {
+    await attemptResultsOnlyCuration(client, startTime, recentGames, todayEt, stagedDraft);
+    return;
+  }
+
   const messages: Anthropic.MessageParam[] = [
     {
       role: "user",
@@ -649,7 +897,7 @@ async function attemptDailyCuration(client: Anthropic, startTime: number): Promi
   const containerRef: { id: string | undefined } = { id: undefined };
 
   for (let attempt = 1; attempt <= MAX_SUBMIT_ATTEMPTS; attempt++) {
-    const finalMessage = await research(client, messages, containerRef);
+    const finalMessage = await research(client, messages, containerRef, SYSTEM_PROMPT);
     const text = extractText(finalMessage);
     const payload = parsePayload(text);
 
@@ -684,6 +932,139 @@ async function attemptDailyCuration(client: Anthropic, startTime: number): Promi
   }
 
   throw new Error(`Exhausted ${MAX_SUBMIT_ATTEMPTS} attempts without a 200 response (freshness).`);
+}
+
+/**
+ * Phase B fast path: a draft already exists for the next trading day, so
+ * this run only scores today — no new matchup, no freshness (the SAME
+ * research()/retry/failover machinery attemptDailyCuration's legacy path
+ * uses, via the shared researchAndSubmitWithRetry loop, just with the
+ * results-only system prompt and a smaller opening message).
+ */
+async function attemptResultsOnlyCuration(
+  client: Anthropic,
+  startTime: number,
+  recentGames: string,
+  todayEt: string,
+  stagedDraft: { id: number; companyATicker: string; companyBTicker: string; gameDate: string }
+): Promise<void> {
+  const messages: Anthropic.MessageParam[] = [
+    {
+      role: "user",
+      content:
+        `Today's date (US Eastern — the market's trading date) is ${todayEt}. Tomorrow's game was already staged ` +
+        `this afternoon, so run the RESULTS-ONLY half of curation: score today's result only, then activate the ` +
+        `already-staged game — do not research or propose a new matchup.\n\n` +
+        `Staged game: stagedGameId=${stagedDraft.id} (${stagedDraft.companyATicker} vs ${stagedDraft.companyBTicker}, ` +
+        `${stagedDraft.gameDate}). Echo this exact stagedGameId back in your output.\n\n` +
+        `Recent games, for finding the concluded game to score, from /api/scheduled/recent-games:\n${recentGames}\n\n` +
+        `Determine today's winner using web_search for real closing prices, then output the single CurationPayload ` +
+        `JSON object as your final message.`,
+    },
+  ];
+
+  const { attempt, body } = await researchAndSubmitWithRetry(
+    client,
+    messages,
+    RESULTS_ONLY_SYSTEM_PROMPT,
+    submitCuration,
+    "[curation-agent-results-only]"
+  );
+  const elapsed = Math.round((Date.now() - startTime) / 1000);
+  console.log(`[curation-agent] Results-only success in ${elapsed}s (attempt ${attempt}). stagedGameId=${stagedDraft.id}, nextGameId=${body?.nextGameId}`);
+  // The endpoint already sends a success notification; nothing more to do.
+}
+
+// ─── Phase A: afternoon staging run ──────────────────────────────────────────
+async function runStagingCurationInner(finalAttempt: boolean): Promise<void> {
+  if (!ENV.anthropicApiKey || !ENV.curationAgentSecret) {
+    const reason = !ENV.anthropicApiKey ? "ANTHROPIC_API_KEY not set" : "CURATION_AGENT_SECRET not set";
+    console.error(`[curation-staging] ${reason} — skipping`);
+    await notifyOwner({
+      title: "⚠️ Afternoon staging skipped",
+      content: `${reason}, so the afternoon staging run could not authenticate. No action needed — the post-close run will fall back to today's combined curation.`,
+    });
+    return;
+  }
+
+  const startTime = Date.now();
+  const client = new Anthropic({ apiKey: ENV.anthropicApiKey, timeout: 25 * 60 * 1000 });
+
+  // Same whole-run retry ladder as runDailyCurationInner (FULL_RUN_ATTEMPTS,
+  // FULL_RUN_RETRY_DELAY_MS) — transient errors inside a research turn are
+  // already retried in place (runTurnWithRetry); this catches anything else
+  // that throws (recent-games fetch failure, unparseable payload, ...).
+  let lastError: unknown;
+  for (let runAttempt = 1; runAttempt <= FULL_RUN_ATTEMPTS; runAttempt++) {
+    try {
+      await attemptStagingCuration(client, startTime);
+      return;
+    } catch (err) {
+      lastError = err;
+      const msg = (err as any)?.message ?? String(err);
+      console.error(`[curation-staging] Run attempt ${runAttempt}/${FULL_RUN_ATTEMPTS} failed:`, msg);
+      if (runAttempt < FULL_RUN_ATTEMPTS) {
+        console.log(`[curation-staging] Retrying full run in ${FULL_RUN_RETRY_DELAY_MS / 60000} min…`);
+        await sleep(FULL_RUN_RETRY_DELAY_MS);
+      }
+    }
+  }
+
+  const elapsed = Math.round((Date.now() - startTime) / 1000);
+  const msg = (lastError as any)?.message ?? String(lastError);
+  // Staging failures are NEVER the alarming ❌ email — the post-close run's
+  // proven legacy path is the fallback (golden safety property), so this is
+  // always the calm ⚠️ note, whether or not the 15:30 watchdog will retry.
+  try {
+    await notifyOwner({
+      title: finalAttempt
+        ? "⚠️ Afternoon staging failed — post-close run will fall back to combined curation"
+        : "⚠️ Afternoon staging attempt failed — retry scheduled",
+      content:
+        `Afternoon staging failed after ${elapsed}s (${FULL_RUN_ATTEMPTS} attempts): ${msg}\n\n` +
+        (finalAttempt
+          ? `Staging failed — the post-close run will fall back to combined curation; no action needed.`
+          : `No action needed: the 15:30 ET staging watchdog will retry. If it also fails, the post-close run still falls back to combined curation automatically.`),
+    });
+  } catch {
+    /* notification best-effort */
+  }
+}
+
+/** One full staging attempt: fetch context → research tomorrow's matchup only → submit (with freshness retries). Throws on failure. */
+async function attemptStagingCuration(client: Anthropic, startTime: number): Promise<void> {
+  const recentGames = await fetchRecentGames();
+  const todayEt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
+
+  const messages: Anthropic.MessageParam[] = [
+    {
+      role: "user",
+      content:
+        `Today's date (US Eastern — the market's trading date) is ${todayEt}. It is the afternoon and the market ` +
+        `is still open — run the afternoon STAGING half of curation: research and stage the NEXT trading day's ` +
+        `matchup only. Do not attempt to determine a winner for today; today's game is still in play.\n\n` +
+        `Your system prompt's "Dates" section says gameDate is "the next valid trading day strictly after the ` +
+        `trading day you just scored" — for this staging run, read that as the next valid US trading day strictly ` +
+        `after today (${todayEt}); you are not scoring anything this run. Never propose today itself.\n\n` +
+        `Recent games, freshness rules, and pre-computed exclusion lists (bannedSectors, bannedTickers, bannedPairs) ` +
+        `from /api/scheduled/recent-games:\n${recentGames}\n\n` +
+        `Follow the freshness pre-qualification sequence from your system prompt: scan news, abandon any thread whose ` +
+        `sector/companies are banned immediately, then call check_freshness to confirm your candidate BEFORE researching ` +
+        `prices or writing content. Once confirmed, research the matchup using web_search, then output the single ` +
+        `CurationPayload JSON object (the "tomorrow" block only) as your final message.`,
+    },
+  ];
+
+  const { attempt, body } = await researchAndSubmitWithRetry(
+    client,
+    messages,
+    STAGING_SYSTEM_PROMPT,
+    submitStaging,
+    "[curation-staging]"
+  );
+  const elapsed = Math.round((Date.now() - startTime) / 1000);
+  console.log(`[curation-staging] Success in ${elapsed}s (attempt ${attempt}). stagedGameId=${body?.stagedGameId}`);
+  // The endpoint already sends a success notification; nothing more to do.
 }
 
 // ─── HTTP trigger (manual) ───────────────────────────────────────────────────

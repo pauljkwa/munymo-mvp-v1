@@ -232,6 +232,50 @@ export async function getQueuedGameAfter(afterDate: string) {
 }
 
 /**
+ * Earliest STAGED (draft-only) game strictly after `afterDate` — the game
+ * Phase A (afternoon staging) created ahead of close, still hidden from
+ * players. Narrower than getQueuedGameAfter (which also matches "active"):
+ * an "active" game ahead is the current cadence's already-live queued game,
+ * not something staged waiting to be activated. Used by runDailyCuration's
+ * Phase B pre-check to decide between the results-only and legacy conversation.
+ */
+export async function getStagedDraftGameAfter(afterDate: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db
+    .select()
+    .from(dailyGames)
+    .where(and(eq(dailyGames.status, "draft"), gt(dailyGames.gameDate, afterDate)))
+    .orderBy(asc(dailyGames.gameDate))
+    .limit(1);
+  return result[0];
+}
+
+/**
+ * Any draft/active/locked game dated after `afterDate` — broader than
+ * getQueuedGameAfter, which deliberately excludes "locked" (queued means
+ * "not yet played" for the cadence guard's purposes). The staging watchdog
+ * needs the wider check: a game of ANY in-play status already existing for a
+ * future date means there is nothing left for Phase A to stage.
+ */
+export async function getAnyGameAfter(afterDate: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db
+    .select()
+    .from(dailyGames)
+    .where(
+      and(
+        or(eq(dailyGames.status, "draft"), eq(dailyGames.status, "active"), eq(dailyGames.status, "locked")),
+        gt(dailyGames.gameDate, afterDate)
+      )
+    )
+    .orderBy(asc(dailyGames.gameDate))
+    .limit(1);
+  return result[0];
+}
+
+/**
  * Returns the current playable game:
  * - Any active/locked game whose gameDate is today OR in the future (up to next trading day)
  * - This allows a game to become visible the afternoon before its trading date
@@ -297,6 +341,25 @@ export async function updateGame(id: number, data: Partial<typeof dailyGames.$in
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(dailyGames).set(data).where(eq(dailyGames.id, id));
+}
+
+/**
+ * Creates a new game row, or — if a CANCELLED game already occupies that
+ * date — revives it in place instead. gameDate is UNIQUE, so a plain
+ * createGame() at a cancelled row's date would throw ER_DUP_ENTRY forever
+ * (audit finding C3). Shared by admin.endOfDay (creating tomorrow's game the
+ * legacy way) and the Phase A staging handler (creating a draft), so both
+ * "create tomorrow's game" paths revive a cancelled row the same way.
+ */
+export async function createOrReviveGame(
+  fields: Omit<typeof dailyGames.$inferInsert, "id" | "createdAt" | "updatedAt">,
+  cancelledRow?: { id: number }
+): Promise<number> {
+  if (cancelledRow) {
+    await updateGame(cancelledRow.id, { ...fields, winner: null, resultSummary: null });
+    return cancelledRow.id;
+  }
+  return createGame(fields);
 }
 
 // ─── Game Research ─────────────────────────────────────────────────────────────
