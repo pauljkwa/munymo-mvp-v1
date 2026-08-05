@@ -5,6 +5,7 @@ import { nanoid } from "nanoid";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import viteConfig from "../../vite.config";
+import { injectPageMeta, resolvePageMeta } from "./seo";
 
 export async function setupVite(app: Express, server: Server) {
   const serverOptions = {
@@ -39,7 +40,13 @@ export async function setupVite(app: Express, server: Server) {
         `src="/src/main.tsx?v=${nanoid()}"`
       );
       const page = await vite.transformIndexHtml(url, template);
-      res.status(200).set({ "Content-Type": "text/html" }).end(page);
+      // Same per-route title/canonical/status the production server sends, so
+      // SEO output is inspectable in dev. resolvePageMeta never throws.
+      const meta = await resolvePageMeta(url);
+      res
+        .status(meta.status)
+        .set({ "Content-Type": "text/html" })
+        .end(injectPageMeta(page, meta));
     } catch (e) {
       vite.ssrFixStacktrace(e as Error);
       next(e);
@@ -88,9 +95,26 @@ export function serveStatic(app: Express) {
     res.status(404).end();
   });
 
-  // fall through to index.html if the file doesn't exist (client-side routing)
-  app.use("*", (_req, res) => {
+  // fall through to index.html if the file doesn't exist (client-side routing),
+  // with per-route title/description/canonical injected server-side and a real
+  // 404 status for unknown URLs — crawlers never execute the JS that sets
+  // these client-side, so this html IS the page as far as Google is concerned.
+  app.use("*", async (req, res) => {
+    const indexPath = path.resolve(distPath, "index.html");
     res.set("Cache-Control", "no-cache");
-    res.sendFile(path.resolve(distPath, "index.html"));
+    try {
+      // req.originalUrl, not req.path: inside app.use("*") Express rewrites
+      // req.path relative to the matched mount.
+      const meta = await resolvePageMeta(req.originalUrl);
+      const html = await fs.promises.readFile(indexPath, "utf-8");
+      res
+        .status(meta.status)
+        .set("Content-Type", "text/html; charset=utf-8")
+        .send(injectPageMeta(html, meta));
+    } catch (err) {
+      // Never let SEO decoration take the site down — serve the plain shell.
+      console.error("[seo] falling back to plain index.html:", err);
+      res.sendFile(indexPath);
+    }
   });
 }
