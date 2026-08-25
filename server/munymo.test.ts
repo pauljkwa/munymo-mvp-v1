@@ -333,8 +333,60 @@ describe("Leaderboard qualification — 20-game threshold (production constants)
 // ─── Public Player Name ───────────────────────────────────────────────────────
 // The leaderboard used to select users.name directly, so players saw each
 // other's real full name from Clerk instead of the handle they chose on
-// /profile. Both leaderboard queries now map through publicPlayerName.
-import { publicPlayerName } from "./db";
+// /profile. Both leaderboard queries now map through publicPlayerName, which
+// falls back to an abbreviated "Paul K" rather than the full name.
+import { publicPlayerName, abbreviatePlayerName } from "./db";
+
+describe("abbreviatePlayerName — first name + last initial", () => {
+  it("abbreviates a normal two-part name", () => {
+    expect(abbreviatePlayerName("Paul Kennedy")).toBe("Paul K");
+  });
+
+  it("takes the initial from the surname, not the middle name", () => {
+    expect(abbreviatePlayerName("Jane Quinn Smith")).toBe("Jane S");
+  });
+
+  it("leaves a single-token name alone", () => {
+    expect(abbreviatePlayerName("Prince")).toBe("Prince");
+  });
+
+  it("uppercases a lowercase surname initial", () => {
+    expect(abbreviatePlayerName("paul kennedy")).toBe("Paul K");
+  });
+
+  it("keeps a hyphenated first name intact", () => {
+    expect(abbreviatePlayerName("Mary-Jane Watson")).toBe("Mary-Jane W");
+  });
+
+  it("preserves internal capitals rather than title-casing", () => {
+    expect(abbreviatePlayerName("McDonald Smith")).toBe("McDonald S");
+    expect(abbreviatePlayerName("de Souza Silva")).toBe("De S");
+  });
+
+  it("ignores a generational suffix", () => {
+    expect(abbreviatePlayerName("Paul Kennedy Jr")).toBe("Paul K");
+    expect(abbreviatePlayerName("Paul Kennedy Jr.")).toBe("Paul K");
+    expect(abbreviatePlayerName("Paul Kennedy III")).toBe("Paul K");
+  });
+
+  it("ignores a professional suffix", () => {
+    expect(abbreviatePlayerName("Jane Smith MD")).toBe("Jane S");
+  });
+
+  it("collapses stray whitespace", () => {
+    expect(abbreviatePlayerName("  Paul   Kennedy  ")).toBe("Paul K");
+  });
+
+  it("returns null for a null, empty, or whitespace-only name", () => {
+    expect(abbreviatePlayerName(null)).toBeNull();
+    expect(abbreviatePlayerName("")).toBeNull();
+    expect(abbreviatePlayerName("   ")).toBeNull();
+  });
+
+  it("never returns the full surname", () => {
+    expect(abbreviatePlayerName("Paul Kennedy")).not.toContain("Kennedy");
+  });
+});
 
 describe("publicPlayerName — leaderboard shows the chosen display name", () => {
   it("prefers the chosen display name over the real name", () => {
@@ -343,8 +395,14 @@ describe("publicPlayerName — leaderboard shows the chosen display name", () =>
     );
   });
 
-  it("falls back to the real name when no display name is set", () => {
-    expect(publicPlayerName({ displayName: null, name: "Jane Q. Smith" })).toBe("Jane Q. Smith");
+  it("uses the display name verbatim, never abbreviating a chosen handle", () => {
+    expect(publicPlayerName({ displayName: "Market Maven", name: "Jane Smith" })).toBe(
+      "Market Maven"
+    );
+  });
+
+  it("falls back to an abbreviated real name when no display name is set", () => {
+    expect(publicPlayerName({ displayName: null, name: "Jane Quinn Smith" })).toBe("Jane S");
   });
 
   it("returns null for an erased account so the client renders Anonymous", () => {
@@ -353,6 +411,12 @@ describe("publicPlayerName — leaderboard shows the chosen display name", () =>
 
   it("never leaks the real name once a display name exists", () => {
     const row = { displayName: "Anon42", name: "Paul Kennedy" };
+    expect(publicPlayerName(row)).not.toContain("Kennedy");
+  });
+
+  it("never leaks the full surname when falling back to the real name", () => {
+    const row = { displayName: null, name: "Paul Kennedy" };
+    expect(publicPlayerName(row)).toBe("Paul K");
     expect(publicPlayerName(row)).not.toContain("Kennedy");
   });
 });

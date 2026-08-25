@@ -561,16 +561,69 @@ export async function getPlayerScoreHistory(userId: number) {
 // ─── Leaderboard Stats ────────────────────────────────────────────────────────
 
 /**
+ * Trailing tokens that are honorifics or generational suffixes rather than a
+ * surname. Without this, "Paul Kennedy Jr" would abbreviate to "Paul J".
+ * Compared lowercased and stripped of punctuation, so "Jr." and "Ph.D." match.
+ */
+const NAME_SUFFIXES = new Set(["jr", "sr", "ii", "iii", "iv", "md", "phd", "esq"]);
+
+/**
+ * Shortens a real name to a first name plus last initial — "Paul Kennedy"
+ * becomes "Paul K".
+ *
+ * Used only when a player never chose a display name, so the public
+ * leaderboard identifies them without publishing their full legal name.
+ *
+ * The leading character is capitalized so a name typed in lowercase at sign-up
+ * doesn't read as sloppy in the rankings; the rest is left exactly as entered.
+ *
+ * A name with nothing to shorten keeps its remaining token: single-token names (many
+ * cultures use one, and Clerk accepts one) have no surname to reduce, so
+ * "Prince" stays "Prince" rather than becoming something meaningless.
+ * Returns null for a name that is absent or only whitespace, which the client
+ * renders as "Anonymous".
+ */
+export function abbreviatePlayerName(name: string | null): string | null {
+  if (!name) return null;
+
+  const tokens = name.trim().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return null;
+
+  // Drop trailing suffixes so the last remaining token is the real surname.
+  while (
+    tokens.length > 1 &&
+    NAME_SUFFIXES.has(tokens[tokens.length - 1].replace(/[.,]/g, "").toLowerCase())
+  ) {
+    tokens.pop();
+  }
+
+  // Only ever uppercases the leading character, so internal capitals survive
+  // ("McDonald" stays "McDonald", not "Mcdonald").
+  const first = tokens[0][0].toUpperCase() + tokens[0].slice(1);
+  if (tokens.length === 1) return first;
+
+  // Middle names are skipped entirely: the initial comes from the surname.
+  const surname = tokens[tokens.length - 1];
+  const initial = surname[0].toUpperCase();
+
+  return `${first} ${initial}`;
+}
+
+/**
  * The name a player is shown under in public rankings.
  *
  * `users.name` comes from Clerk and is the player's real full name;
  * `users.displayName` is the handle they chose on /profile. Public surfaces
- * must prefer the chosen handle and only fall back to the real name when the
- * player never set one. `null` (both cleared) means an erased account and the
- * client renders "Anonymous" — see ERASED_USER_FIELDS.
+ * prefer the chosen handle, and otherwise fall back to an ABBREVIATED form of
+ * the real name ("Paul K") — never the full name, which the leaderboard used
+ * to publish. `null` (both cleared) means an erased account and the client
+ * renders "Anonymous" — see ERASED_USER_FIELDS.
+ *
+ * This is for public surfaces only. A player's own name shown back to them
+ * (the header, /dashboard, /profile) is deliberately NOT abbreviated.
  */
 export function publicPlayerName(row: { displayName: string | null; name: string | null }) {
-  return row.displayName ?? row.name;
+  return row.displayName ?? abbreviatePlayerName(row.name);
 }
 
 export async function getLeaderboard() {
