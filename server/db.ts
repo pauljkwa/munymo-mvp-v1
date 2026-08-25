@@ -560,13 +560,27 @@ export async function getPlayerScoreHistory(userId: number) {
 
 // ─── Leaderboard Stats ────────────────────────────────────────────────────────
 
+/**
+ * The name a player is shown under in public rankings.
+ *
+ * `users.name` comes from Clerk and is the player's real full name;
+ * `users.displayName` is the handle they chose on /profile. Public surfaces
+ * must prefer the chosen handle and only fall back to the real name when the
+ * player never set one. `null` (both cleared) means an erased account and the
+ * client renders "Anonymous" — see ERASED_USER_FIELDS.
+ */
+export function publicPlayerName(row: { displayName: string | null; name: string | null }) {
+  return row.displayName ?? row.name;
+}
+
 export async function getLeaderboard() {
   const db = await getDb();
   if (!db) return [];
-  return db
+  const rows = await db
     .select({
       userId: leaderboardStats.userId,
-      userName: users.name,
+      displayName: users.displayName,
+      name: users.name,
       gamesPlayed: leaderboardStats.gamesPlayed,
       averageDailyScore: leaderboardStats.averageDailyScore,
       qualificationStatus: leaderboardStats.qualificationStatus,
@@ -575,15 +589,21 @@ export async function getLeaderboard() {
     .innerJoin(users, eq(leaderboardStats.userId, users.id))
     .where(eq(leaderboardStats.qualificationStatus, "qualified"))
     .orderBy(desc(leaderboardStats.averageDailyScore));
+
+  return rows.map(({ displayName, name, ...rest }) => ({
+    ...rest,
+    userName: publicPlayerName({ displayName, name }),
+  }));
 }
 
 export async function getProvisionalLeaderboard() {
   const db = await getDb();
   if (!db) return [];
-  return db
+  const rows = await db
     .select({
       userId: leaderboardStats.userId,
-      userName: users.name,
+      displayName: users.displayName,
+      name: users.name,
       gamesPlayed: leaderboardStats.gamesPlayed,
       averageDailyScore: leaderboardStats.averageDailyScore,
     })
@@ -592,6 +612,11 @@ export async function getProvisionalLeaderboard() {
     .where(eq(leaderboardStats.qualificationStatus, "pending"))
     .orderBy(desc(leaderboardStats.averageDailyScore))
     .limit(20);
+
+  return rows.map(({ displayName, name, ...rest }) => ({
+    ...rest,
+    userName: publicPlayerName({ displayName, name }),
+  }));
 }
 
 export async function getLeaderboardStatForUser(userId: number) {

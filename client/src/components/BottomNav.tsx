@@ -31,9 +31,12 @@ const BAR_HEIGHT = "calc(56px + env(safe-area-inset-bottom))";
 
 export default function BottomNav() {
   const [location] = useLocation();
-  const { isAuthenticated } = useAuth();
+  // Same reason as Home.tsx's CTAs: waiting for the full auth.me round-trip
+  // meant the tab bar was absent for the first seconds of a cold PWA launch
+  // and then popped in, shifting the page under the player's thumb.
+  const { likelyAuthenticated } = useAuth();
 
-  if (!isAuthenticated) return null;
+  if (!likelyAuthenticated) return null;
 
   return (
     <>

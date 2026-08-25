@@ -330,6 +330,33 @@ describe("Leaderboard qualification — 20-game threshold (production constants)
   });
 });
 
+// ─── Public Player Name ───────────────────────────────────────────────────────
+// The leaderboard used to select users.name directly, so players saw each
+// other's real full name from Clerk instead of the handle they chose on
+// /profile. Both leaderboard queries now map through publicPlayerName.
+import { publicPlayerName } from "./db";
+
+describe("publicPlayerName — leaderboard shows the chosen display name", () => {
+  it("prefers the chosen display name over the real name", () => {
+    expect(publicPlayerName({ displayName: "MarketMaven", name: "Jane Q. Smith" })).toBe(
+      "MarketMaven"
+    );
+  });
+
+  it("falls back to the real name when no display name is set", () => {
+    expect(publicPlayerName({ displayName: null, name: "Jane Q. Smith" })).toBe("Jane Q. Smith");
+  });
+
+  it("returns null for an erased account so the client renders Anonymous", () => {
+    expect(publicPlayerName({ displayName: null, name: null })).toBeNull();
+  });
+
+  it("never leaks the real name once a display name exists", () => {
+    const row = { displayName: "Anon42", name: "Paul Kennedy" };
+    expect(publicPlayerName(row)).not.toContain("Kennedy");
+  });
+});
+
 // ─── Auth Logout ──────────────────────────────────────────────────────────────
 // Since switching to Clerk, logout is handled client-side by Clerk's signOut().
 // The server procedure is a no-op stub for API compatibility.

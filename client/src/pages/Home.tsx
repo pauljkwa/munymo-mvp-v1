@@ -223,7 +223,12 @@ const MUNYIQ_CARDS = [
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function Home() {
   usePageMeta(); // landing page uses the site-wide default title/description
-  const { isAuthenticated, user } = useAuth();
+  // `likelyAuthenticated` (not `isAuthenticated`) drives every signed-in/
+  // signed-out CTA below. `isAuthenticated` additionally waits on the auth.me
+  // round-trip, which on a cold PWA launch left the hero showing the sign-up
+  // CTA for seconds after launch — long enough to tap it by mistake. Admin
+  // gating still reads `user`, which genuinely needs the DB record.
+  const { likelyAuthenticated, user } = useAuth();
   const isAdmin = user?.role === "admin";
   const { data: todayGame, isLoading: todayGameLoading } = trpc.games.getToday.useQuery();
   const [activeCard, setActiveCard] = useState(0);
@@ -290,7 +295,7 @@ export default function Home() {
           </span>
           <span className="hidden sm:inline" style={{ color: "oklch(0.92 0.04 155)" }}>We're recruiting founding beta testers — play free, shape the product, earn founding member status.</span>
           <span className="sm:hidden" style={{ color: "oklch(0.92 0.04 155)" }}>Beta testers wanted.</span>
-          {!isAuthenticated && (
+          {!likelyAuthenticated && (
             <SignUpButton mode="modal">
               <button
                 className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold flex-shrink-0 transition-all duration-150 hover:opacity-90 active:scale-95"
@@ -394,7 +399,7 @@ export default function Home() {
                 className="flex flex-col sm:flex-row gap-3 animate-fade-up"
                 style={{ animationDelay: "200ms" }}
               >
-                {isAuthenticated ? (
+                {likelyAuthenticated ? (
                   <Link href="/game" className="btn-gold text-sm px-7 py-3">
                     Play Today's Game
                     <ArrowRight size={16} />
@@ -1010,7 +1015,7 @@ export default function Home() {
 
               {/* CTA */}
               <div className="text-center">
-                {isAuthenticated ? (
+                {likelyAuthenticated ? (
                   <Link href="/game">
                     <button className="btn-gold text-sm px-8 py-3.5 mb-4">
                       Play Today's Game
@@ -1100,7 +1105,7 @@ export default function Home() {
       {/* ══════════════════════════════════════════════════════════════════════
           SECTION 7 — FINAL CTA
       ══════════════════════════════════════════════════════════════════════ */}
-      {!isAuthenticated && (
+      {!likelyAuthenticated && (
         <section className="py-24">
           <div className="container">
             <div
