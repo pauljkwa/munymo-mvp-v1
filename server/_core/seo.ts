@@ -42,33 +42,68 @@ function xmlEscape(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+export interface ArchiveGame {
+  id: number;
+  gameDate: string;
+  companyATicker: string;
+  companyBTicker: string;
+}
+
+// The published-game list backs both the sitemap and the crawlable link list,
+// and the link list is built on every shell request. Cache it so a burst of
+// page views can't turn into a burst of identical queries; the archive only
+// changes once per trading day, so a stale minute costs nothing.
+const ARCHIVE_TTL_MS = 15 * 60 * 1000;
+let archiveCache: { at: number; games: ArchiveGame[] } | null = null;
+
+async function getPublishedGames(): Promise<ArchiveGame[]> {
+  if (archiveCache && Date.now() - archiveCache.at < ARCHIVE_TTL_MS) {
+    return archiveCache.games;
+  }
+  try {
+    const { getDb } = await import("../db");
+    const { dailyGames } = await import("../../drizzle/schema.js");
+    const { eq, desc } = await import("drizzle-orm");
+    const db = await getDb();
+    if (!db) return archiveCache?.games ?? [];
+
+    const rows = await db
+      .select({
+        id: dailyGames.id,
+        gameDate: dailyGames.gameDate,
+        companyATicker: dailyGames.companyATicker,
+        companyBTicker: dailyGames.companyBTicker,
+      })
+      .from(dailyGames)
+      .where(eq(dailyGames.status, "result_published"))
+      .orderBy(desc(dailyGames.gameDate))
+      .limit(5000);
+
+    archiveCache = { at: Date.now(), games: rows };
+    return rows;
+  } catch (err) {
+    // DB hiccup → serve the last good list if we have one, else nothing. Never
+    // fail the request: a crawl with no archive links beats a 500.
+    console.error("[seo] Could not load archive games:", err);
+    return archiveCache?.games ?? [];
+  }
+}
+
 async function sitemapHandler(_req: Request, res: Response) {
   try {
-    let gameUrls: { loc: string; lastmod: string }[] = [];
-    try {
-      const { getDb } = await import("../db");
-      const { dailyGames } = await import("../../drizzle/schema.js");
-      const { eq, desc } = await import("drizzle-orm");
-      const db = await getDb();
-      if (db) {
-        const rows = await db
-          .select({ id: dailyGames.id, gameDate: dailyGames.gameDate })
-          .from(dailyGames)
-          .where(eq(dailyGames.status, "result_published"))
-          .orderBy(desc(dailyGames.gameDate))
-          .limit(5000);
-        gameUrls = rows.map((r) => ({
-          loc: `${BASE_URL}/research/${r.id}`,
-          lastmod: r.gameDate,
-        }));
-      }
-    } catch (err) {
-      // DB hiccup → still serve the static routes rather than failing the crawl.
-      console.error("[sitemap] Could not load archive games:", err);
-    }
+    const games = await getPublishedGames();
+    const gameUrls = games.map((g) => ({
+      loc: `${BASE_URL}/research/${g.id}`,
+      lastmod: g.gameDate,
+    }));
 
     const entries = [
       ...STATIC_PATHS.map((p) => `  <url><loc>${xmlEscape(`${BASE_URL}${p}`)}</loc></url>`),
+      // Individual lessons were missing from the sitemap entirely: /learn was
+      // listed but none of the lesson pages beneath it.
+      ...ALL_LESSONS.map(
+        (l) => `  <url><loc>${xmlEscape(`${BASE_URL}/learn/${l.id}`)}</loc></url>`
+      ),
       ...gameUrls.map(
         (u) => `  <url><loc>${xmlEscape(u.loc)}</loc><lastmod>${u.lastmod}</lastmod></url>`
       ),
@@ -244,6 +279,111 @@ function htmlEscape(s: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+// ---------------------------------------------------------------------------
+// Crawlable link list
+// ---------------------------------------------------------------------------
+
+/**
+ * Server-rendered <a> links placed inside the SPA shell.
+ *
+ * WHY: the app renders every link client-side, so the html Google actually
+ * receives for /research contained ZERO anchor tags. The archive pages were
+ * therefore reachable only via the sitemap, with no internal-link signal at
+ * all — Search Console showed them stuck at "Discovered - currently not
+ * indexed", meaning Google knew the URLs existed but never spent crawl budget
+ * fetching them. Google does render JS on a second pass, but that pass is
+ * lower priority and unreliable for a site with little authority.
+ *
+ * This is NOT cloaking: the links are real, lead to real pages, and point at
+ * the same destinations the React app renders. They also make the site usable
+ * with JS disabled. main.tsx uses createRoot (not hydrateRoot), so React
+ * replaces this markup wholesale on mount — there is no hydration mismatch
+ * and a normal visitor never sees it.
+ */
+const MAX_ARCHIVE_LINKS = 300;
+const MAX_HOME_GAME_LINKS = 12;
+
+function linkList(links: { href: string; text: string }[]): string {
+  return links
+    .map(
+      (l) => `<li><a href="${htmlEscape(l.href)}">${htmlEscape(l.text)}</a></li>`
+    )
+    .join("");
+}
+
+function gameLink(g: ArchiveGame): { href: string; text: string } {
+  return {
+    href: `/research/${g.id}`,
+    // Ticker-pair anchor text, not "read more" — it is the phrase these pages
+    // should rank for and the only anchor text Google gets for them.
+    text: `${g.companyATicker} vs ${g.companyBTicker} — ${g.gameDate}`,
+  };
+}
+
+/** Links appropriate to one route, or "" for routes that need none. */
+export async function buildCrawlLinks(path: string): Promise<string> {
+  try {
+    let p = path.split("?")[0].split("#")[0];
+    if (p.length > 1) p = p.replace(/\/+$/, "");
+
+    if (p === "/research") {
+      const games = await getPublishedGames();
+      if (!games.length) return "";
+      return (
+        `<nav aria-label="Matchup archive"><h2>Matchup archive</h2><ul>` +
+        linkList(games.slice(0, MAX_ARCHIVE_LINKS).map(gameLink)) +
+        `</ul></nav>`
+      );
+    }
+
+    if (p === "/learn") {
+      if (!ALL_LESSONS.length) return "";
+      return (
+        `<nav aria-label="Lessons"><h2>Lessons</h2><ul>` +
+        linkList(ALL_LESSONS.map((l) => ({ href: `/learn/${l.id}`, text: l.title }))) +
+        `</ul></nav>`
+      );
+    }
+
+    if (p === "/") {
+      // The homepage carries the most authority, so give it crawl paths into
+      // both hubs and the newest archive pages.
+      const games = await getPublishedGames();
+      const hubs = [
+        { href: "/demo", text: "How Munymo works" },
+        { href: "/research", text: "Matchup archive" },
+        { href: "/learn", text: "Learning hub" },
+        { href: "/leaderboard", text: "Leaderboard" },
+      ];
+      return (
+        `<nav aria-label="Munymo"><h2>Munymo</h2><ul>` +
+        linkList([
+          ...hubs,
+          ...games.slice(0, MAX_HOME_GAME_LINKS).map(gameLink),
+        ]) +
+        `</ul></nav>`
+      );
+    }
+
+    return "";
+  } catch (err) {
+    console.error("[seo] buildCrawlLinks failed:", err);
+    return "";
+  }
+}
+
+/**
+ * Place the link list inside the empty <div id="root">. React clears it on
+ * mount. Returns html untouched when there are no links or the mount point
+ * isn't found, so a markup change upstream can't break the page.
+ */
+export function injectCrawlLinks(html: string, linksHtml: string): string {
+  if (!linksHtml) return html;
+  const rootDiv = '<div id="root"></div>';
+  if (!html.includes(rootDiv)) return html;
+  return html.replace(rootDiv, `<div id="root">${linksHtml}</div>`);
 }
 
 /**

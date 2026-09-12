@@ -15,7 +15,13 @@ import fs from "fs";
 import path from "path";
 import { describe, expect, it } from "vitest";
 import { ALL_LEVELS } from "@/content/lessons";
-import { injectPageMeta, resolvePageMeta, type PageMeta } from "./_core/seo";
+import {
+  buildCrawlLinks,
+  injectCrawlLinks,
+  injectPageMeta,
+  resolvePageMeta,
+  type PageMeta,
+} from "./_core/seo";
 
 const DEFAULT_TITLE = "Munymo — Free Daily Stock Market Prediction Game";
 
@@ -134,5 +140,66 @@ describe("injectPageMeta — against the real client/index.html", () => {
     });
     expect(out).toContain('<meta name="robots" content="noindex" />');
     expect(out).not.toContain('rel="canonical"');
+  });
+});
+
+// ─── Crawlable link list ──────────────────────────────────────────────────────
+// The served html for /research contained zero <a> tags, so the archive pages
+// were reachable only via the sitemap and sat at "Discovered - currently not
+// indexed" in Search Console. These guard the links actually being present.
+describe("buildCrawlLinks — server-rendered internal links", () => {
+  it("emits a lesson link for every lesson on /learn", async () => {
+    const html = await buildCrawlLinks("/learn");
+    const lessons = ALL_LEVELS.flatMap((l) => l.lessons);
+    expect(lessons.length).toBeGreaterThan(0);
+    for (const lesson of lessons) {
+      expect(html).toContain(`href="/learn/${lesson.id}"`);
+    }
+  });
+
+  it("uses the lesson title as anchor text, not a bare url", async () => {
+    const html = await buildCrawlLinks("/learn");
+    const first = ALL_LEVELS[0].lessons[0];
+    expect(html).toContain(`>${first.title}<`);
+  });
+
+  it("links both hubs from the homepage", async () => {
+    const html = await buildCrawlLinks("/");
+    expect(html).toContain('href="/research"');
+    expect(html).toContain('href="/learn"');
+  });
+
+  it("ignores query strings and trailing slashes", async () => {
+    const withCruft = await buildCrawlLinks("/learn/?utm_source=x");
+    expect(withCruft).toContain('href="/learn/');
+  });
+
+  it("returns nothing for routes that need no link list", async () => {
+    expect(await buildCrawlLinks("/privacy")).toBe("");
+    expect(await buildCrawlLinks("/game")).toBe("");
+  });
+});
+
+describe("injectCrawlLinks — placement in the shell", () => {
+  const shell = '<body><div id="root"></div><script></script></body>';
+
+  it("puts the links inside the react mount point", () => {
+    const out = injectCrawlLinks(shell, "<nav><a href=\"/x\">X</a></nav>");
+    expect(out).toContain('<div id="root"><nav><a href="/x">X</a></nav></div>');
+  });
+
+  it("leaves the html untouched when there are no links", () => {
+    expect(injectCrawlLinks(shell, "")).toBe(shell);
+  });
+
+  it("leaves the html untouched when the mount point is missing", () => {
+    const odd = "<body><div id=\"app\"></div></body>";
+    expect(injectCrawlLinks(odd, "<nav></nav>")).toBe(odd);
+  });
+
+  it("does not disturb the head that injectPageMeta wrote", () => {
+    const withHead = "<head><title>T</title></head>" + shell;
+    const out = injectCrawlLinks(withHead, "<nav></nav>");
+    expect(out).toContain("<title>T</title>");
   });
 });
