@@ -150,7 +150,34 @@ function vitePluginManusDebugCollector(): Plugin {
   };
 }
 
-const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector()];
+/**
+ * Both of these are development aids that were shipping to production.
+ *
+ * `vitePluginManusRuntime` injects the Manus platform runtime as a 366KB
+ * INLINE script into every page's html — visible on the live site as the block
+ * beginning `window.__MANUS_HOST_DEV__ = false;`. Munymo migrated off Manus, so
+ * it does nothing in production but bloat every response. It also made every
+ * archive page 99.2% byte-identical boilerplate, which is the opposite of what
+ * you want when Google is deciding whether those pages are duplicates of each
+ * other — it had already collapsed the whole archive onto one canonical URL.
+ *
+ * `jsxLocPlugin` stamps `data-loc` source-location attributes onto JSX for
+ * click-to-source tooling; 2,219 of them were in the production bundle, which
+ * is both dead weight and a needless disclosure of the source tree layout.
+ *
+ * Kept in dev, where they're harmless and the tooling is occasionally useful.
+ * `vite build` sets NODE_ENV=production itself — verified by the debug
+ * collector below, which uses this same gate and correctly emits nothing in
+ * production.
+ */
+const isProduction = process.env.NODE_ENV === "production";
+
+const plugins = [
+  react(),
+  tailwindcss(),
+  ...(isProduction ? [] : [jsxLocPlugin(), vitePluginManusRuntime()]),
+  vitePluginManusDebugCollector(),
+];
 
 export default defineConfig({
   plugins,
