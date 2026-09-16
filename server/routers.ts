@@ -1,6 +1,12 @@
 import { TRPCError } from "@trpc/server";
 import type Anthropic from "@anthropic-ai/sdk";
-import { calculateScore, checkLockout, computeNewStreak, isQualified } from "./scoring";
+import {
+  calculateScore,
+  checkLockout,
+  computeNewStreak,
+  isQualified,
+  shuffleOptionsForGame,
+} from "./scoring";
 import { hashEndpoint } from "./push";
 import {
   broadcastEmail,
@@ -13,6 +19,7 @@ import {
 } from "./email";
 import { z } from "zod";
 import { COOKIE_NAME } from "@shared/const";
+import { createMagicLink as createMagicLinkShared } from "./_core/magicLink";
 import { ENV } from "./_core/env";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { getClerkClient } from "./_core/context";
@@ -160,7 +167,13 @@ const gamesRouter = router({
         id: q.id,
         questionType: q.questionType,
         questionText: q.questionText,
-        options: q.options,
+        // Shuffled per game: the agent reliably writes the correct answer
+        // first, which let a player score the validation component without
+        // reading anything. Scoring compares text, not index, so reordering is
+        // safe; the seed is the game id so the order never changes mid-answer.
+        options: Array.isArray(q.options)
+          ? shuffleOptionsForGame(q.options, input.gameId)
+          : q.options,
         // Only reveal correct answer after result is published
         correctAnswer: isPublished ? q.correctAnswer : undefined,
       };
@@ -1170,23 +1183,11 @@ const adminRouter = router({
           let emailsSent = 0;
           let emailsFailed = 0;
 
-          // Helper: generate a Clerk sign-in token and return a /api/magic wrapper URL.
-          // The wrapper checks token validity server-side before forwarding to Clerk,
-          // so expired/used tokens show our custom fallback instead of Clerk's error screen.
-          const createMagicLink = async (clerkId: string | null, destination: string): Promise<string | null> => {
-            if (!clerkId || !ENV.clerkSecretKey) return null;
-            try {
-              const res = await fetch("https://api.clerk.com/v1/sign_in_tokens", {
-                method: "POST",
-                headers: { "Authorization": `Bearer ${ENV.clerkSecretKey}`, "Content-Type": "application/json" },
-                body: JSON.stringify({ user_id: clerkId, expires_in_seconds: 86400 }),
-              });
-              const data = await res.json() as { id?: string; url?: string };
-              if (!data.id) return null;
-              // Wrap in our own redirect endpoint — token ID + destination, not the raw Clerk URL
-              return `https://munymo.com/api/magic?token=${encodeURIComponent(data.id)}&to=${encodeURIComponent(destination)}`;
-            } catch { return null; }
-          };
+          // Shared with the streak/reminder emails — see server/_core/magicLink.ts.
+          // It keeps Clerk's sign-in `url` (only returned at creation) rather
+          // than the token id, which is what made every link report "expired".
+          const createMagicLink = (clerkId: string | null, destination: string) =>
+            createMagicLinkShared(clerkId, destination, ENV.clerkSecretKey);
 
           for (const user of allUsers) {
             if (!user.email) continue;

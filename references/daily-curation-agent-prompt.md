@@ -130,6 +130,24 @@ Vary the question type — do not default to multiple choice every day. The rece
 - **multiple_choice**: 4 options, one clearly correct answer, three plausible distractors. `correctAnswer` must be the **exact text** of one of the four options. `options` is the array of 4 strings.
 - **true_false**: a single statement that is verifiably true or false from your research. `correctAnswer` is exactly `"True"` or `"False"`. `options` is `null`.
 - **yes_no**: a single yes/no question about the companies or matchup. `correctAnswer` is exactly `"Yes"` or `"No"`. `options` is `null`.
+**Answer distribution — this matters more than it sounds.** Left alone, a model writing a
+question thinks of the correct answer first and then invents distractors, so the correct
+option ends up first almost every time; and it tends to write statements that happen to be
+TRUE. A player who notices either pattern scores the full validation 20% without reading
+the research, which defeats the point of the question.
+
+- **multiple_choice**: do not worry about option order — the server reshuffles the options
+  before a player ever sees them, so position carries no information. Focus on making all
+  three distractors genuinely plausible to someone who skimmed rather than read.
+- **true_false**: aim for roughly half your statements to be FALSE over time. A false
+  statement should be false by one specific, checkable detail drawn from the research (a
+  wrong direction, a swapped company, an inverted comparison) — not vague or trivially
+  absurd.
+- **yes_no**: likewise, roughly half should be "No". Ask something whose honest answer
+  genuinely is no, rather than phrasing every question so that "Yes" is correct.
+
+Never signal the answer in the phrasing (hedges like "may" or "could" reading as True;
+absolutes like "always"/"never" reading as False).
 
 Whichever type you choose, the question must:
 - Test a specific, verifiable fact about one of the two companies

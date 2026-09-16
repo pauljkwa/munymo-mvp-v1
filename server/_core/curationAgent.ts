@@ -180,6 +180,24 @@ Each recent game in the list you were given includes its "questionType" (may be 
 - **multiple_choice**: 4 options; correctAnswer must be the EXACT text of one option; set "options" to the array of 4 strings.
 - **true_false**: a statement Claude judges as verifiably true or false from the research; correctAnswer is exactly "True" or "False"; set "options" to null.
 - **yes_no**: a yes/no question about the companies/matchup; correctAnswer is exactly "Yes" or "No"; set "options" to null.
+**Answer distribution — this matters more than it sounds.** Left alone, a model writing a
+question thinks of the correct answer first and then invents distractors, so the correct
+option ends up first almost every time; and it tends to write statements that happen to be
+TRUE. A player who notices either pattern scores the full validation 20% without reading
+the research, which defeats the point of the question.
+
+- **multiple_choice**: do not worry about option order — the server reshuffles the options
+  before a player ever sees them, so position carries no information. Focus on making all
+  three distractors genuinely plausible to someone who skimmed rather than read.
+- **true_false**: aim for roughly half your statements to be FALSE over time. A false
+  statement should be false by one specific, checkable detail drawn from the research (a
+  wrong direction, a swapped company, an inverted comparison) — not vague or trivially
+  absurd.
+- **yes_no**: likewise, roughly half should be "No". Ask something whose honest answer
+  genuinely is no, rather than phrasing every question so that "Yes" is correct.
+
+Never signal the answer in the phrasing (hedges like "may" or "could" reading as True;
+absolutes like "always"/"never" reading as False).
 
 If there is no prior game (first game ever) or no questionType history, pick any of the three at random.
 

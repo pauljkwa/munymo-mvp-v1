@@ -1,61 +1,59 @@
 /**
  * Magic Link Redirect Handler
  *
- * Wraps Clerk sign-in tokens in our own endpoint so we can intercept
- * expired/already-used tokens and show our custom fallback page instead
- * of Clerk's generic error screen.
- *
- * Email links point to:
- *   https://munymo.com/api/magic?token=<clerk_token_id>&to=/game/1/result
+ * Email and push links point at:
+ *   https://munymo.com/api/magic?u=<base64url clerk url>&exp=<unix>&to=/game
  *
  * Flow:
- *   1. Check if token is still valid via Clerk API
- *   2. If valid → redirect to the Clerk token URL (signs user in, then lands on /email-landing?to=...)
- *   3. If expired/used/invalid → redirect to /email-landing?to=... directly (shows friendly fallback)
+ *   1. Past our own expiry stamp → friendly fallback page, no Clerk call
+ *   2. Target missing or not an allowed host → friendly fallback
+ *   3. Otherwise → forward to Clerk's sign-in url, which signs the user in and
+ *      then lands them on /email-landing?to=...
+ *
+ * Clerk remains the authority on whether a token is actually still good: it is
+ * single-use by design and enforces its own expiry. Our `exp` stamp only saves
+ * a round trip for the common too-late case — see magicLink.ts for why this no
+ * longer pre-checks the token against Clerk (that check could never succeed).
  */
 
 import type { Express } from "express";
-import { ENV } from "./env";
+import { decodeTarget, isAllowedMagicTarget } from "./magicLink";
 
 const BASE_URL = "https://munymo.com";
-const CLERK_API = "https://api.clerk.com/v1";
 
 export function registerMagicLinkRedirect(app: Express) {
   app.get("/api/magic", async (req, res) => {
-    const token = req.query.token as string | undefined;
-    const to    = (req.query.to as string | undefined) || "/game";
+    const to = (req.query.to as string | undefined) || "/game";
+    // Only ever redirect internally to a path, never to a caller-supplied host.
+    const safeTo = to.startsWith("/") && !to.startsWith("//") ? to : "/game";
+    const landingUrl = `${BASE_URL}/email-landing?to=${encodeURIComponent(safeTo)}`;
 
-    const landingUrl = `${BASE_URL}/email-landing?to=${encodeURIComponent(to)}`;
+    const encoded = req.query.u as string | undefined;
+    const exp = Number(req.query.exp);
 
-    if (!token) {
+    // Links from before the 2026-09-16 rewrite carry `token=<id>` and cannot be
+    // honoured — the id alone is not enough to build a sign-in url. Send those
+    // to the fallback, which is what they already did in practice.
+    if (!encoded) {
+      return res.redirect(landingUrl);
+    }
+
+    if (Number.isFinite(exp) && exp > 0 && Date.now() / 1000 > exp) {
+      return res.redirect(landingUrl);
+    }
+
+    const target = decodeTarget(encoded);
+    if (!target || !isAllowedMagicTarget(target)) {
+      console.warn("[MagicLink] Rejected redirect target");
       return res.redirect(landingUrl);
     }
 
     try {
-      // Check the token status via Clerk Backend API
-      const clerkRes = await fetch(`${CLERK_API}/sign_in_tokens/${token}`, {
-        headers: { Authorization: `Bearer ${ENV.clerkSecretKey}` },
-      });
-
-      if (!clerkRes.ok) {
-        // Token not found or already revoked → send to friendly fallback
-        return res.redirect(landingUrl);
-      }
-
-      const data = await clerkRes.json() as { status?: string; url?: string };
-
-      if (data.status !== "pending" || !data.url) {
-        // Already used (status = "accepted") or invalid → friendly fallback
-        return res.redirect(landingUrl);
-      }
-
-      // Token is still valid — redirect to Clerk's sign-in URL
-      // After sign-in Clerk will forward to our /email-landing?to=... page
-      const clerkUrl = `${data.url}&redirect_url=${encodeURIComponent(landingUrl)}`;
-      return res.redirect(clerkUrl);
-
-    } catch (err) {
-      console.warn("[MagicLink] Error checking token:", err);
+      const url = new URL(target);
+      // Clerk sends the user here once the ticket is accepted.
+      url.searchParams.set("redirect_url", landingUrl);
+      return res.redirect(url.toString());
+    } catch {
       return res.redirect(landingUrl);
     }
   });

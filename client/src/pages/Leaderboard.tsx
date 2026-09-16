@@ -37,6 +37,15 @@ export default function Leaderboard() {
           <p className="text-sm" style={{ color: "var(--color-muted)" }}>
             Ranked by Average Daily Score. Qualification requires {QUALIFY_GAMES} completed games.
           </p>
+          {/* The threshold reads as an arbitrary gamified gate unless the
+              reasoning is visible. It is a sample-size rule and it protects
+              the player as much as the board, so say so plainly. */}
+          <p className="text-xs mt-2" style={{ color: "var(--color-subtle)" }}>
+            Why {QUALIFY_GAMES}? An average over one or two games is mostly luck — a single
+            lucky call would outrank someone with a long, consistent record. {QUALIFY_GAMES} games
+            is enough for your average to reflect how you actually play, so the ranking
+            means something for everyone on it.
+          </p>
         </div>
 
         {/* My stat card (if authenticated and not yet qualified) */}

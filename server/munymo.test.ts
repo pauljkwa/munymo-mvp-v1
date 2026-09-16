@@ -11,6 +11,7 @@ import {
   computeValidationScore,
   resolveWinner,
   isQualified,
+  shuffleOptionsForGame,
   computeAverageDailyScore,
   LEADERBOARD_QUALIFICATION_THRESHOLD,
 } from "./scoring";
@@ -456,6 +457,56 @@ describe("setAwayStatus — keeps users.awayStatus in sync", () => {
     expect(mirror("away")).toBe(true);
     expect(mirror("active")).toBe(false);
     expect(mirror("missing")).toBe(false);
+  });
+});
+
+// ─── Validation Question Answer Position ──────────────────────────────────────
+// The curation agent reliably writes the correct answer first, so a player
+// could take the full 20% validation score without reading the research.
+// Shuffling server-side removes the signal whatever the agent produces; it is
+// safe because scoring compares answer TEXT, never index.
+describe("shuffleOptionsForGame", () => {
+  const opts = ["correct answer", "distractor 1", "distractor 2", "distractor 3"];
+
+  it("keeps exactly the same options, just reordered", () => {
+    const out = shuffleOptionsForGame(opts, 1770001);
+    expect(out).toHaveLength(opts.length);
+    expect([...out].sort()).toEqual([...opts].sort());
+  });
+
+  it("is stable for a game — a reload must not move options mid-answer", () => {
+    const a = shuffleOptionsForGame(opts, 1770001);
+    const b = shuffleOptionsForGame(opts, 1770001);
+    expect(a).toEqual(b);
+  });
+
+  it("orders differently across games, so position carries no signal", () => {
+    const orders = new Set(
+      [1, 2, 3, 30001, 150001, 870001, 1770001].map((id) =>
+        shuffleOptionsForGame(opts, id).join("|")
+      )
+    );
+    expect(orders.size).toBeGreaterThan(1);
+  });
+
+  it("does not leave the correct answer pinned to position 0 across games", () => {
+    const ids = Array.from({ length: 60 }, (_, i) => (i + 1) * 30001);
+    const firstIsCorrect = ids.filter(
+      (id) => shuffleOptionsForGame(opts, id)[0] === "correct answer"
+    ).length;
+    // Would be 60 without the shuffle. Allow generous slack for chance.
+    expect(firstIsCorrect).toBeLessThan(35);
+  });
+
+  it("does not mutate the array it was given", () => {
+    const original = [...opts];
+    shuffleOptionsForGame(opts, 42);
+    expect(opts).toEqual(original);
+  });
+
+  it("handles 0 and 1 option without throwing", () => {
+    expect(shuffleOptionsForGame([], 1)).toEqual([]);
+    expect(shuffleOptionsForGame(["only"], 1)).toEqual(["only"]);
   });
 });
 

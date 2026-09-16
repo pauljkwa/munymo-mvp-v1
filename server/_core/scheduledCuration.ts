@@ -988,19 +988,10 @@ async function streakAtRiskHandler(req: Request, res: Response) {
       // engaged at all would just be daily spam, so they're still skipped.
       if (!hasStreak && !pick?.gutSelection) { skipped++; continue; }
 
-      // Generate magic link if Clerk is configured
-      let magicLink: string | null = null;
-      if (u.clerkId && ENV.clerkSecretKey) {
-        try {
-          const res2 = await fetch("https://api.clerk.com/v1/sign_in_tokens", {
-            method: "POST",
-            headers: { "Authorization": `Bearer ${ENV.clerkSecretKey}`, "Content-Type": "application/json" },
-            body: JSON.stringify({ user_id: u.clerkId, expires_in_seconds: 7200 }),
-          });
-          const data = await res2.json() as { id?: string };
-          if (data.id) magicLink = `https://munymo.com/api/magic?token=${encodeURIComponent(data.id)}&to=${encodeURIComponent("/game")}`;
-        } catch { /* non-fatal */ }
-      }
+      // Shared helper: 24h TTL like every other magic link (this path used to
+      // use 2h) and it keeps Clerk's sign-in url rather than the token id.
+      const { createMagicLink } = await import("./magicLink");
+      const magicLink = await createMagicLink(u.clerkId, "/game", ENV.clerkSecretKey);
 
       const { subject, html } = hasStreak
         ? buildStreakAtRiskEmail({

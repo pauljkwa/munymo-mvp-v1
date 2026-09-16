@@ -194,3 +194,49 @@ export function computeAverageDailyScore(totalScore: number, gamesPlayed: number
   if (gamesPlayed === 0) return 0;
   return Math.round((totalScore / gamesPlayed) * 100) / 100;
 }
+
+// ─── Validation Question Answer Position ──────────────────────────────────────
+
+/**
+ * Deterministically shuffles multiple-choice options for one game.
+ *
+ * The curation agent reliably puts the correct answer FIRST. That is not
+ * carelessness in the prompt — a model writing a question thinks of the answer
+ * and then invents distractors, so the answer lands in position one. Whatever
+ * the prompt says, that tendency reasserts itself, and a player who notices can
+ * score the 20% validation component without reading the research at all.
+ *
+ * Shuffling server-side removes the signal regardless of what the agent
+ * produces. It is safe because scoring compares answer TEXT, never index
+ * (see calculateScore), so reordering cannot change what counts as correct.
+ *
+ * The order must be STABLE for a given game: the question is timed, and a
+ * reshuffle on reload would move options under the player's finger mid-answer.
+ * Seeding from the game id gives the same order every time for that game while
+ * differing between games.
+ *
+ * true_false and yes_no have no position to shuffle — their bias is that the
+ * answer itself is usually "True"/"Yes", which can only be fixed where the
+ * question is written.
+ */
+export function shuffleOptionsForGame<T>(options: T[], gameId: number): T[] {
+  if (options.length < 2) return [...options];
+
+  // Fisher-Yates driven by a small deterministic PRNG (mulberry32). Seeded per
+  // game, so the order is fixed for that game and unrelated between games.
+  let seed = (gameId * 2654435761) >>> 0;
+  const next = () => {
+    seed = (seed + 0x6d2b79f5) >>> 0;
+    let t = seed;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+
+  const out = [...options];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(next() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
