@@ -180,6 +180,10 @@ const STATIC_META: Record<string, { title: string; description?: string }> = {
 // also tell crawlers not to index the signed-out shell they'd see.
 const PRIVATE_META: Record<string, string> = {
   "/game": "Today's Game | Munymo",
+  // Auth-gated, and deliberately kept out of the sitemap: practice pages carry
+  // no unique public content and a crawler would only ever see the signed-out
+  // shell.
+  "/practice": "Practice | Munymo",
   "/dashboard": "My Dashboard | Munymo",
   "/profile": "Profile | Munymo",
   "/email-landing": DEFAULT_TITLE,
@@ -218,7 +222,12 @@ export async function resolvePageMeta(rawPath: string): Promise<PageMeta> {
       });
     }
 
-    if (PRIVATE_META[p] || p.startsWith("/admin") || /^\/game\/\d+\/result$/.test(p)) {
+    if (
+      PRIVATE_META[p] ||
+      p.startsWith("/admin") ||
+      /^\/practice\/\d+$/.test(p) ||
+      /^\/game\/\d+\/result$/.test(p)
+    ) {
       return defaults({ title: PRIVATE_META[p] ?? DEFAULT_TITLE, noindex: true });
     }
 

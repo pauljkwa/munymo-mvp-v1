@@ -11,6 +11,8 @@ import Home from "./pages/Home";
 import DailyGame from "./pages/DailyGame";
 import GameResult from "./pages/GameResult";
 import Leaderboard from "./pages/Leaderboard";
+import Practice from "@/pages/Practice";
+import PracticeGame from "@/pages/PracticeGame";
 import ResearchHub from "./pages/ResearchHub";
 import LearningHub from "./pages/LearningHub";
 import LessonPage from "./pages/LessonPage";
@@ -48,6 +50,8 @@ function Router() {
       <Route path="/game" component={DailyGame} />
       <Route path="/game/:id/result" component={GameResult} />
       <Route path="/leaderboard" component={Leaderboard} />
+      <Route path="/practice" component={Practice} />
+      <Route path="/practice/:id" component={PracticeGame} />
       <Route path="/research" component={ResearchHub} />
       <Route path="/research/:id" component={ArchiveGame} />
       <Route path="/learn" component={LearningHub} />
