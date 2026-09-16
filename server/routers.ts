@@ -26,6 +26,7 @@ import {
   createOrReviveGame,
   eraseUserPersonalData,
   getAllUsers,
+  getPlayersForAdmin,
   getAuditLog,
   getCommunityStats,
   getGameById,
@@ -1299,7 +1300,10 @@ const adminRouter = router({
     }),
 
   listPlayers: adminProcedure.query(async () => {
-    return getAllUsers();
+    // getPlayersForAdmin, not getAllUsers: the admin table needs the canonical
+    // away status from streak_records plus real push-device counts, neither of
+    // which lives on the users row.
+    return getPlayersForAdmin();
   }),
 
   resetPlayerPick: adminProcedure

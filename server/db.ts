@@ -776,6 +776,65 @@ export async function setAwayStatus(
     .update(streakRecords)
     .set({ awayStatus: status, awayStatusSetAt: new Date(), awayStatusSetBy: adminId })
     .where(eq(streakRecords.userId, userId));
+
+  // Mirror to users.awayStatus, exactly as the player's own /profile toggle
+  // does. Without this the admin path set only the canonical streak field and
+  // the two drifted: the streak engine treated the player as away while their
+  // own profile page — which reads this mirror — still showed "Active".
+  await db
+    .update(users)
+    .set({ awayStatus: status === "away" })
+    .where(eq(users.id, userId));
+}
+
+/**
+ * Players for the admin table, with the fields an admin actually needs to see
+ * before acting: the CANONICAL away status (streak_records, not the users
+ * mirror), the current streak, and how many push devices are registered.
+ *
+ * Push device count matters because users.pushOptIn defaults to true at
+ * signup, so it says nothing about reachability — only a registered
+ * subscription means a notification can actually be delivered.
+ */
+export async function getPlayersForAdmin() {
+  const db = await getDb();
+  if (!db) return [];
+
+  const rows = await db
+    .select({
+      id: users.id,
+      name: users.name,
+      displayName: users.displayName,
+      email: users.email,
+      role: users.role,
+      tier: users.tier,
+      deactivated: users.deactivated,
+      emailOptIn: users.emailOptIn,
+      pushOptIn: users.pushOptIn,
+      createdAt: users.createdAt,
+      lastSignedIn: users.lastSignedIn,
+      awayStatus: streakRecords.awayStatus,
+      currentStreak: streakRecords.currentStreak,
+    })
+    .from(users)
+    .leftJoin(streakRecords, eq(streakRecords.userId, users.id))
+    .orderBy(users.name);
+
+  // Counted in one pass rather than per-player: the table is small and this
+  // avoids N queries for N players.
+  const subs = await db.select({ userId: pushSubscriptions.userId }).from(pushSubscriptions);
+  const deviceCounts = new Map<number, number>();
+  for (const s of subs) {
+    deviceCounts.set(s.userId, (deviceCounts.get(s.userId) ?? 0) + 1);
+  }
+
+  return rows.map((r) => ({
+    ...r,
+    // A player with no streak row yet has never been made away.
+    awayStatus: r.awayStatus ?? ("active" as const),
+    currentStreak: r.currentStreak ?? 0,
+    pushDevices: deviceCounts.get(r.id) ?? 0,
+  }));
 }
 
 /**

@@ -421,6 +421,39 @@ describe("publicPlayerName — leaderboard shows the chosen display name", () =>
   });
 });
 
+// ─── Admin away-status mirror ─────────────────────────────────────────────────
+// streak_records.awayStatus is canonical (the streak engine reads it) and
+// users.awayStatus is a display mirror that /profile reads. The player's own
+// toggle wrote both; the ADMIN toggle wrote only the canonical field, so an
+// admin-set "away" left the player's own profile still showing "Active".
+// setAwayStatus now mirrors, matching the player path.
+import { readFileSync } from "fs";
+
+describe("setAwayStatus — keeps users.awayStatus in sync", () => {
+  const dbSource = readFileSync(new URL("./db.ts", import.meta.url), "utf-8");
+  const fn = dbSource.slice(
+    dbSource.indexOf("export async function setAwayStatus("),
+    dbSource.indexOf("export async function getPlayersForAdmin(")
+  );
+
+  it("writes the canonical streak_records field", () => {
+    expect(fn).toContain("update(streakRecords)");
+    expect(fn).toContain("awayStatus: status");
+  });
+
+  it("also mirrors to users.awayStatus", () => {
+    expect(fn).toContain("update(users)");
+    expect(fn).toContain('awayStatus: status === "away"');
+  });
+
+  it("maps only 'away' to true — 'active' and 'missing' both clear the mirror", () => {
+    const mirror = (status: string) => status === "away";
+    expect(mirror("away")).toBe(true);
+    expect(mirror("active")).toBe(false);
+    expect(mirror("missing")).toBe(false);
+  });
+});
+
 // ─── Auth Logout ──────────────────────────────────────────────────────────────
 // Since switching to Clerk, logout is handled client-side by Clerk's signOut().
 // The server procedure is a no-op stub for API compatibility.
