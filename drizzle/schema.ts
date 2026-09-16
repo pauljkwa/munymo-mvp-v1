@@ -120,6 +120,25 @@ export type InsertDailyGame = typeof dailyGames.$inferInsert;
  */
 export type ResearchMetric = { label: string; value: string };
 
+/** One OHLC bar. `time` is a unix timestamp in SECONDS (lightweight-charts). */
+export type Candle = {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume?: number;
+};
+
+export type ChartSnapshot = {
+  /** When the snapshot was taken. */
+  capturedAt: string;
+  /** Date of the last candle (YYYY-MM-DD) — the trading day before the game. */
+  asOf: string;
+  /** Daily candles keyed by ticker. */
+  series: Record<string, Candle[]>;
+};
+
 export const gameResearch = mysqlTable("game_research", {
   id: int("id").autoincrement().primaryKey(),
   gameId: int("gameId").notNull().unique(),
@@ -127,6 +146,19 @@ export const gameResearch = mysqlTable("game_research", {
   researchSummary: text("researchSummary"), // plain-English beginner summary — default view for ALL tiers; full analysis is one tap away (research is fully free per tiers decision 2026-07-11)
   researchMetrics: json("researchMetrics").$type<ResearchMetric[]>(), // flexible key-value metrics
   researchSnapshot: text("researchSnapshot"), // immutable copy taken at publish
+  /**
+   * Frozen OHLC price history for both tickers, captured at publish time so an
+   * archived game can be practised with the chart a live player would have
+   * seen. Shape: { capturedAt, asOf, series: { [ticker]: Candle[] } }.
+   *
+   * Deliberately DAILY candles ending the day BEFORE the game date. The live
+   * chart also offers 1d (5-minute) and 5d (hourly) ranges, and both are
+   * unusable here: an intraday chart of the game day IS the result, and the
+   * 5-day window contains it. Storing only daily candles up to the prior close
+   * makes leaking the outcome impossible by construction rather than by a UI
+   * rule someone could later loosen.
+   */
+  chartSnapshot: json("chartSnapshot").$type<ChartSnapshot | null>(),
   metricsSnapshot: json("metricsSnapshot").$type<ResearchMetric[]>(), // immutable metrics copy
   snapshotTakenAt: timestamp("snapshotTakenAt"),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

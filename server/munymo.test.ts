@@ -544,6 +544,82 @@ describe("computeProjectedRank", () => {
   });
 });
 
+// ─── Chart Snapshot Truncation ────────────────────────────────────────────────
+// THE safety property of archived charts: a candle dated on the game day IS
+// the result — its open versus close is exactly what the player is being asked
+// to predict. Nothing at or after the game date may ever reach a practice
+// player, so this is enforced in a pure, tested function rather than by a UI
+// rule someone could later loosen.
+import { truncateCandlesBeforeGameDate, candlesAsOf } from "./db";
+
+const day = (d: string) => Math.floor(Date.parse(`${d}T00:00:00Z`) / 1000);
+const bar = (d: string) => ({ time: day(d), open: 1, high: 2, low: 0.5, close: 1.5 });
+
+describe("truncateCandlesBeforeGameDate", () => {
+  const gameDate = "2026-09-11";
+
+  it("drops the game day itself — that candle is the answer", () => {
+    const out = truncateCandlesBeforeGameDate(
+      [bar("2026-09-09"), bar("2026-09-10"), bar("2026-09-11")],
+      gameDate
+    );
+    expect(out.map((c) => c.time)).toEqual([day("2026-09-09"), day("2026-09-10")]);
+  });
+
+  it("drops anything AFTER the game day too", () => {
+    const out = truncateCandlesBeforeGameDate(
+      [bar("2026-09-10"), bar("2026-09-11"), bar("2026-09-12"), bar("2026-10-01")],
+      gameDate
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0].time).toBe(day("2026-09-10"));
+  });
+
+  it("keeps history before the game day", () => {
+    const out = truncateCandlesBeforeGameDate(
+      [bar("2026-06-01"), bar("2026-07-01"), bar("2026-08-01")],
+      gameDate
+    );
+    expect(out).toHaveLength(3);
+  });
+
+  it("returns ascending order regardless of input order", () => {
+    const out = truncateCandlesBeforeGameDate(
+      [bar("2026-09-10"), bar("2026-08-01"), bar("2026-09-01")],
+      gameDate
+    );
+    expect(out.map((c) => c.time)).toEqual([day("2026-08-01"), day("2026-09-01"), day("2026-09-10")]);
+  });
+
+  it("caps history length, keeping the most recent", () => {
+    const many = Array.from({ length: 50 }, (_, i) =>
+      bar(`2026-0${1 + Math.floor(i / 28)}-${String((i % 28) + 1).padStart(2, "0")}`)
+    );
+    const out = truncateCandlesBeforeGameDate(many, gameDate, 10);
+    expect(out).toHaveLength(10);
+    // The kept window must be the latest ones.
+    expect(out[out.length - 1].time).toBe(Math.max(...many.map((c) => c.time)));
+  });
+
+  it("returns empty when every candle is on or after the game date", () => {
+    expect(truncateCandlesBeforeGameDate([bar("2026-09-11"), bar("2026-09-12")], gameDate)).toEqual([]);
+  });
+
+  it("returns empty rather than throwing on a malformed game date", () => {
+    expect(truncateCandlesBeforeGameDate([bar("2026-09-01")], "not-a-date")).toEqual([]);
+  });
+});
+
+describe("candlesAsOf", () => {
+  it("reports the date of the last candle", () => {
+    expect(candlesAsOf([bar("2026-09-01"), bar("2026-09-10")])).toBe("2026-09-10");
+  });
+
+  it("returns null for no candles", () => {
+    expect(candlesAsOf([])).toBeNull();
+  });
+});
+
 // ─── Auth Logout ──────────────────────────────────────────────────────────────
 // Since switching to Clerk, logout is handled client-side by Clerk's signOut().
 // The server procedure is a no-op stub for API compatibility.

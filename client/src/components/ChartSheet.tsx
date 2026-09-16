@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
-import { CandlestickChart } from "@/components/CandlestickChart";
+import { CandlestickChart, type Candle } from "@/components/CandlestickChart";
 
 interface ChartSheetProps {
   ticker: string;
   companyName: string;
   accentColor?: string;
   onClose: () => void;
+  /** Archived candles for practice — see CandlestickChart.archivedCandles. */
+  archivedCandles?: Candle[];
 }
 
 /**
@@ -18,7 +20,7 @@ interface ChartSheetProps {
  *   reliably on iOS when navigation interrupts the React unmount cycle.
  * - Swipe down (or tap ✕) to dismiss with a slide-down animation.
  */
-export function ChartSheet({ ticker, companyName, accentColor = "#009050", onClose }: ChartSheetProps) {
+export function ChartSheet({ ticker, companyName, accentColor = "#009050", onClose, archivedCandles }: ChartSheetProps) {
   const [visible, setVisible] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
   const savedScrollY = useRef(0);
@@ -134,7 +136,7 @@ export function ChartSheet({ ticker, companyName, accentColor = "#009050", onClo
 
         {/* Chart — fills remaining space, scrollable within the sheet */}
         <div className="flex-1 overflow-auto p-3" style={{ overscrollBehavior: "contain" }}>
-          <CandlestickChart ticker={ticker} companyName={companyName} accentColor={accentColor} />
+          <CandlestickChart ticker={ticker} companyName={companyName} accentColor={accentColor} archivedCandles={archivedCandles} />
         </div>
       </div>
     </div>

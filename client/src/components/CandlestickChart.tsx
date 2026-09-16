@@ -25,16 +25,78 @@ interface CandlestickChartProps {
   ticker: string;
   companyName: string;
   accentColor?: string;
+  /**
+   * Archived daily candles. When supplied the live query is skipped entirely
+   * and these are rendered instead — used by practice, where fetching live
+   * prices would show today's market rather than the game's, and would reveal
+   * the outcome the player is being asked to predict.
+   */
+  archivedCandles?: Candle[];
 }
 
-export function CandlestickChart({ ticker, companyName, accentColor = "#009050" }: CandlestickChartProps) {
+export type Candle = {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume?: number | null;
+};
+
+/**
+ * Intraday ranges are unavailable for archived data: the stored series is
+ * daily, and a 5-minute or hourly view of the game day would BE the result.
+ */
+const ARCHIVED_RANGES: Range[] = ["1mo", "3mo", "6mo", "1y"];
+
+/** Approximate trading days per range, for slicing one stored daily series. */
+const RANGE_DAYS: Record<Range, number> = {
+  "1d": 1,
+  "5d": 5,
+  "1mo": 22,
+  "3mo": 65,
+  "6mo": 130,
+  "1y": 260,
+};
+
+export function CandlestickChart({
+  ticker,
+  companyName,
+  accentColor = "#009050",
+  archivedCandles,
+}: CandlestickChartProps) {
+  const isArchived = Array.isArray(archivedCandles);
   const [range, setRange] = useState<Range>("1mo");
   const chartContainerRef = useRef<HTMLDivElement>(null);
 
-  const { data, isLoading, error } = trpc.streaks.getStockChart.useQuery(
+  const live = trpc.streaks.getStockChart.useQuery(
     { ticker, range },
-    { staleTime: 5 * 60 * 1000 } // cache for 5 minutes
+    { staleTime: 5 * 60 * 1000, enabled: !isArchived } // cache 5 min; skipped for archived
   );
+
+  // Slice the stored daily series to the selected range rather than refetching.
+  const archivedSlice = isArchived
+    ? archivedCandles!.slice(-(RANGE_DAYS[range] ?? 22))
+    : [];
+  const data = isArchived
+    ? {
+        candles: archivedSlice,
+        // The last archived close is the PRIOR day's close — what a live player
+        // saw when picking. Not a leak: it predates the game day entirely.
+        meta: archivedSlice.length
+          ? {
+              currency: "USD",
+              regularMarketPrice: archivedSlice[archivedSlice.length - 1].close,
+            }
+          : undefined,
+      }
+    : live.data;
+  const isLoading = isArchived ? false : live.isLoading;
+  const error = isArchived ? null : live.error;
+
+  const rangeOptions = isArchived
+    ? RANGES.filter((r) => ARCHIVED_RANGES.includes(r.value))
+    : RANGES;
 
   useEffect(() => {
     if (!chartContainerRef.current || !data?.candles?.length) return;
@@ -138,7 +200,7 @@ export function CandlestickChart({ ticker, companyName, accentColor = "#009050" 
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {RANGES.map((r) => (
+            {rangeOptions.map((r) => (
               <SelectItem key={r.value} value={r.value} className="text-xs">
                 {r.label}
               </SelectItem>

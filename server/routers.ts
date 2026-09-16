@@ -20,6 +20,7 @@ import {
 } from "./email";
 import { z } from "zod";
 import { COOKIE_NAME } from "@shared/const";
+import type { Candle } from "../drizzle/schema";
 import { createMagicLink as createMagicLinkShared } from "./_core/magicLink";
 import { ENV } from "./_core/env";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -64,6 +65,10 @@ import {
   lockPicksForGame,
   setAwayStatus,
   snapshotResearch,
+  saveChartSnapshot,
+  getChartSnapshot,
+  truncateCandlesBeforeGameDate,
+  candlesAsOf,
   submitValidationAnswer,
   updateGame,
   updateStreak,
@@ -399,6 +404,12 @@ const practiceRouter = router({
         researchSummary: research?.researchSummary ?? null,
         researchContent: research?.researchSnapshot ?? research?.content ?? null,
         researchMetrics: research?.metricsSnapshot ?? research?.researchMetrics ?? null,
+        // Frozen daily candles ending the day BEFORE the game — see
+        // truncateCandlesBeforeGameDate. Null for games published before chart
+        // snapshotting existed, or where capture failed; the UI hides the chart
+        // buttons rather than falling back to LIVE prices, which would show
+        // today's market and give away the result.
+        chartSnapshot: research?.chartSnapshot ?? null,
 
         // Withheld until finished — each of these gives away the result, and
         // the date makes it searchable.
@@ -706,6 +717,65 @@ async function fetchTwelveDataOHLCV(
   return { candles, meta: { currency: json.meta?.currency ?? "USD", regularMarketPrice: lastClose } };
 }
 
+/**
+ * Fetches ~1 year of DAILY candles for both tickers and stores them against the
+ * game, truncated to end before the game date.
+ *
+ * Daily only, and never including the game day itself — see
+ * truncateCandlesBeforeGameDate. A 5-minute chart of the game day would show
+ * the player the answer.
+ */
+export async function captureChartSnapshot(gameId: number): Promise<{
+  ok: boolean;
+  reason?: string;
+  counts?: Record<string, number>;
+}> {
+  const game = await getGameById(gameId);
+  if (!game) return { ok: false, reason: "game not found" };
+
+  const tickers = [game.companyATicker, game.companyBTicker].filter(Boolean) as string[];
+  const series: Record<string, Candle[]> = {};
+  const counts: Record<string, number> = {};
+
+  for (const ticker of tickers) {
+    // "1y" + "1d" gives roughly 250 trading days — enough to back every range
+    // the practice chart offers (1mo/3mo/6mo/1y) from a single stored series.
+    const data = await fetchYahooOHLCV(ticker, "1y", "1d");
+    // Yahoo returns nulls for gaps (halts, missing bars). A candle missing any
+    // of OHLC can't be drawn, so drop it rather than storing an unusable point.
+    const clean: Candle[] = data.candles
+      .filter(
+        (c): c is typeof c & { open: number; high: number; low: number; close: number } =>
+          Number.isFinite(c.open) &&
+          Number.isFinite(c.high) &&
+          Number.isFinite(c.low) &&
+          Number.isFinite(c.close)
+      )
+      .map((c) => ({
+        time: c.time,
+        open: c.open,
+        high: c.high,
+        low: c.low,
+        close: c.close,
+        ...(c.volume != null && Number.isFinite(c.volume) ? { volume: c.volume } : {}),
+      }));
+    const truncated = truncateCandlesBeforeGameDate(clean, game.gameDate);
+    series[ticker] = truncated;
+    counts[ticker] = truncated.length;
+  }
+
+  const allCandles = Object.values(series).flat();
+  const asOf = candlesAsOf(allCandles.sort((a, b) => a.time - b.time));
+  if (!asOf) return { ok: false, reason: "no candles before game date" };
+
+  await saveChartSnapshot(gameId, {
+    capturedAt: new Date().toISOString(),
+    asOf,
+    series,
+  });
+  return { ok: true, counts };
+}
+
 // ─── Staged-game activation validation (Phase B) ──────────────────────────────
 /**
  * Validates a game referenced by endOfDay's `activateStagedGameId` before
@@ -781,6 +851,16 @@ async function closeAndScoreGame(
 
   // 3. Snapshot research
   await snapshotResearch(gameId);
+
+  // 3b. Snapshot the price charts so this game can later be practised with the
+  //     chart a live player would have seen. Deliberately NON-FATAL: an
+  //     external market-data API must never be able to block scoring, which is
+  //     the thing players are actually waiting on.
+  try {
+    await captureChartSnapshot(gameId);
+  } catch (err) {
+    console.error(`[chartSnapshot] capture failed for game ${gameId}:`, err);
+  }
 
   // 4. Score all participants
   const question = await getValidationQuestion(gameId);

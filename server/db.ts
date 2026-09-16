@@ -19,6 +19,7 @@ import {
   validationQuestions,
   type InsertOutboundClick,
   type InsertPracticePick,
+  type ChartSnapshot,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -1204,4 +1205,58 @@ export async function countPublishedGames(): Promise<number> {
     .from(dailyGames)
     .where(eq(dailyGames.status, "result_published"));
   return rows.length;
+}
+
+// ─── Chart Snapshots ──────────────────────────────────────────────────────────
+
+/**
+ * Truncates daily candles to end at the last trading day STRICTLY BEFORE
+ * `gameDate`, and caps the history length.
+ *
+ * This is the safety property of the whole feature, so it lives in a pure
+ * function with tests rather than inside the fetch path. A candle dated on the
+ * game day is the result — its close versus its open is exactly what the player
+ * is being asked to predict. Anything at or after `gameDate` must never reach a
+ * practice player.
+ *
+ * Exported for testing.
+ */
+export function truncateCandlesBeforeGameDate<T extends { time: number }>(
+  candles: T[],
+  gameDate: string,
+  maxCandles = 400
+): T[] {
+  // Midnight UTC on the game date; candle times are unix seconds.
+  const cutoff = Math.floor(Date.parse(`${gameDate}T00:00:00Z`) / 1000);
+  if (!Number.isFinite(cutoff)) return [];
+  const kept = candles
+    .filter((c) => Number.isFinite(c.time) && c.time < cutoff)
+    .sort((a, b) => a.time - b.time);
+  return kept.slice(-maxCandles);
+}
+
+/** YYYY-MM-DD of the last candle, or null when there are none. */
+export function candlesAsOf(candles: { time: number }[]): string | null {
+  if (candles.length === 0) return null;
+  return new Date(candles[candles.length - 1].time * 1000).toISOString().slice(0, 10);
+}
+
+export async function saveChartSnapshot(gameId: number, snapshot: ChartSnapshot) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(gameResearch)
+    .set({ chartSnapshot: snapshot })
+    .where(eq(gameResearch.gameId, gameId));
+}
+
+export async function getChartSnapshot(gameId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select({ chartSnapshot: gameResearch.chartSnapshot })
+    .from(gameResearch)
+    .where(eq(gameResearch.gameId, gameId))
+    .limit(1);
+  return rows[0]?.chartSnapshot ?? null;
 }

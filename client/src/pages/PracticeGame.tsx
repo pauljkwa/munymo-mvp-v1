@@ -6,6 +6,8 @@ import PublicLayout from "@/components/PublicLayout";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { toast } from "sonner";
 import ResearchMetricsPanel from "@/components/ResearchMetricsPanel";
+import { ChartSheet } from "@/components/ChartSheet";
+import { BarChart2 } from "lucide-react";
 import {
   Brain,
   BookOpen,
@@ -54,6 +56,7 @@ export default function PracticeGame() {
   const [finalChoice, setFinalChoice] = useState<"A" | "B" | null>(null);
   const [answer, setAnswer] = useState<string>("");
   const [showFullResearch, setShowFullResearch] = useState(false);
+  const [chartTicker, setChartTicker] = useState<string | null>(null);
   const [result, setResult] = useState<null | {
     predictionScore: number;
     validationScore: number;
@@ -145,6 +148,16 @@ export default function PracticeGame() {
   const metrics: [string, string][] = (Array.isArray(rawMetrics) ? rawMetrics : [])
     .filter((m) => m && typeof m.label === "string")
     .map((m) => [m.label, m.value] as [string, string]);
+
+  // Archived candles, if this game was published after chart snapshotting
+  // existed. No live fallback by design: live prices would show today's market
+  // and reveal the outcome.
+  const snapshot = (game.chartSnapshot ?? null) as {
+    asOf?: string;
+    series?: Record<string, { time: number; open: number; high: number; low: number; close: number }[]>;
+  } | null;
+  const seriesFor = (ticker: string) => snapshot?.series?.[ticker] ?? null;
+  const hasCharts = Boolean(seriesFor(game.companyATicker) || seriesFor(game.companyBTicker));
 
   const options: string[] =
     question?.questionType === "multiple_choice"
@@ -300,6 +313,41 @@ export default function PracticeGame() {
               companyBName={game.companyBName}
             />
 
+            {/* Charts from the archived snapshot only. Games published before
+                snapshotting existed simply don't show these. */}
+            {hasCharts && (
+              <div className="grid grid-cols-2 gap-2 mt-3 mb-4">
+                {[
+                  { ticker: game.companyATicker, color: "#009050" },
+                  { ticker: game.companyBTicker, color: "#1d4ed8" },
+                ].map((co) =>
+                  seriesFor(co.ticker) ? (
+                    <button
+                      key={co.ticker}
+                      onClick={() => setChartTicker(co.ticker)}
+                      className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold transition-all active:scale-95"
+                      style={{
+                        background: co.color + "18",
+                        color: co.color,
+                        border: `1px solid ${co.color}40`,
+                      }}
+                    >
+                      <BarChart2 size={13} />
+                      {co.ticker} Chart
+                    </button>
+                  ) : (
+                    <div key={co.ticker} />
+                  )
+                )}
+              </div>
+            )}
+            {snapshot?.asOf && hasCharts && (
+              <p className="text-[0.625rem] mb-4 text-center" style={{ color: "var(--color-subtle)" }}>
+                Prices up to {snapshot.asOf} — the day before this matchup, exactly what a
+                live player could see.
+              </p>
+            )}
+
             <div className="card-glass p-6">
               <h2 className="mb-4" style={{ color: "var(--color-foreground)" }}>
                 Final Selection
@@ -445,6 +493,18 @@ export default function PracticeGame() {
           </div>
         )}
       </div>
+
+      {chartTicker && (
+        <ChartSheet
+          ticker={chartTicker}
+          companyName={
+            chartTicker === game.companyATicker ? game.companyAName : game.companyBName
+          }
+          accentColor={chartTicker === game.companyATicker ? "#009050" : "#1d4ed8"}
+          archivedCandles={seriesFor(chartTicker) ?? []}
+          onClose={() => setChartTicker(null)}
+        />
+      )}
     </PublicLayout>
   );
 }
