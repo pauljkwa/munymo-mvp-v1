@@ -602,7 +602,9 @@ const BROWSER_UA =
 async function fetchYahooOHLCV(
   ticker: string,
   range: string, // "1d" | "5d" | "1mo" | "3mo" | "6mo" | "1y"
-  interval: string // "5m" | "1h" | "1d" | "1wk"
+  interval: string, // "5m" | "1h" | "1d" | "1wk"
+  /** Passed to the Twelve Data fallback; Yahoo derives its own bar count. */
+  barsOverride?: number
 ) {
   const hosts = ["query1.finance.yahoo.com", "query2.finance.yahoo.com"];
   let res: Response | null = null;
@@ -624,7 +626,7 @@ async function fetchYahooOHLCV(
   }
   if (!res) {
     try {
-      return await fetchTwelveDataOHLCV(ticker, range, interval);
+      return await fetchTwelveDataOHLCV(ticker, range, interval, barsOverride);
     } catch (tdErr) {
       const yahooMsg = lastErr instanceof Error ? lastErr.message : String(lastErr);
       const tdMsg = tdErr instanceof Error ? tdErr.message : String(tdErr);
@@ -671,7 +673,16 @@ async function fetchYahooOHLCV(
 async function fetchTwelveDataOHLCV(
   ticker: string,
   range: string, // "1d" | "5d" | "1mo" | "3mo" | "6mo" | "1y"
-  interval: string // "5m" | "1h" | "1d" | "1wk"
+  interval: string, // "5m" | "1h" | "1d" | "1wk"
+  /**
+   * Explicit bar count, overriding the range→size table below.
+   *
+   * That table assumes each range implies its usual interval — "1y" means 53
+   * WEEKLY bars. The chart snapshot needs a year of DAILY bars instead, and
+   * without this it silently received 53 daily bars (~2.5 months), leaving the
+   * 6M and 1Y views with nothing to draw.
+   */
+  barsOverride?: number
 ) {
   if (!ENV.twelveDataApiKey) {
     throw new Error("TWELVE_DATA_SECRET_KEY not configured");
@@ -681,7 +692,7 @@ async function fetchTwelveDataOHLCV(
   // bars; 5d ≈ 35 hourly; the rest are daily/weekly counts + 1 for headroom)
   const sizeMap: Record<string, number> = { "1d": 78, "5d": 35, "1mo": 23, "3mo": 66, "6mo": 27, "1y": 53 };
   const tdInterval = intervalMap[interval] ?? "1day";
-  const outputsize = sizeMap[range] ?? 66;
+  const outputsize = barsOverride ?? sizeMap[range] ?? 66;
   const url =
     `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(ticker)}` +
     `&interval=${tdInterval}&outputsize=${outputsize}&timezone=UTC&order=ASC` +
@@ -740,7 +751,10 @@ export async function captureChartSnapshot(gameId: number): Promise<{
   for (const ticker of tickers) {
     // "1y" + "1d" gives roughly 250 trading days — enough to back every range
     // the practice chart offers (1mo/3mo/6mo/1y) from a single stored series.
-    const data = await fetchYahooOHLCV(ticker, "1y", "1d");
+    // ~260 trading days. Explicit, because the range→size table would give 53
+    // daily bars for "1y" (it assumes 1y means weekly), which is ~2.5 months
+    // and leaves the 6M/1Y practice views empty.
+    const data = await fetchYahooOHLCV(ticker, "1y", "1d", 260);
     // Yahoo returns nulls for gaps (halts, missing bars). A candle missing any
     // of OHLC can't be drawn, so drop it rather than storing an unusable point.
     const clean: Candle[] = data.candles
