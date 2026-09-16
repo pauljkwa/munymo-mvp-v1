@@ -19,6 +19,11 @@
  *   npx tsx scripts/backfill-chart-snapshots.ts            # dry run
  *   npx tsx scripts/backfill-chart-snapshots.ts --apply
  *   npx tsx scripts/backfill-chart-snapshots.ts --apply --limit 5
+ *   npx tsx scripts/backfill-chart-snapshots.ts --apply --delay 3   # paid plan
+ *
+ * Requires TWELVE_DATA_SECRET_KEY in the environment: Yahoo is the primary
+ * source but rate-limits aggressively and blocks datacenter IPs, so in practice
+ * the keyed fallback does the work.
  */
 import "dotenv/config";
 import { desc, eq } from "drizzle-orm";
@@ -31,9 +36,22 @@ const FORCE = process.argv.includes("--force");
 const limitArg = process.argv.indexOf("--limit");
 const LIMIT = limitArg >= 0 ? parseInt(process.argv[limitArg + 1], 10) : Infinity;
 
-/** Free market-data tiers rate-limit aggressively; be a good citizen. */
-const DELAY_MS = 2000;
+/**
+ * Free market-data tiers rate-limit hard — Twelve Data's free plan allows
+ * roughly 8 requests/minute, and each game costs TWO (one per ticker). A 2s
+ * gap tripped it immediately on the first pilot run, so the default is paced
+ * for the free tier: ~8s between games ≈ 15 requests/minute across two calls.
+ * Override with --delay <seconds> on a paid plan.
+ */
+const delayArg = process.argv.indexOf("--delay");
+const DELAY_MS = delayArg >= 0 ? parseInt(process.argv[delayArg + 1], 10) * 1000 : 8000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** True for the errors worth waiting out rather than giving up on. */
+function isRateLimited(err: unknown): boolean {
+  const s = String(err);
+  return s.includes("429") || /rate ?limit/i.test(s) || s.includes("too many requests");
+}
 
 async function main() {
   const db = await getDb();
@@ -58,6 +76,15 @@ async function main() {
     if (todo.length >= LIMIT) break;
   }
 
+  if (!process.env.TWELVE_DATA_SECRET_KEY && !process.env.TWELVE_DATA_API_KEY) {
+    console.log(
+      "WARNING: no Twelve Data key in this environment.\n" +
+        "  Yahoo is the primary source but rate-limits (429) and blocks datacenter IPs,\n" +
+        "  so without the fallback this run will likely fail. Add TWELVE_DATA_SECRET_KEY\n" +
+        "  to .env (copy it from Railway → Variables) before using --apply.\n"
+    );
+  }
+
   console.log(`Published games: ${games.length}`);
   console.log(`Needing a snapshot: ${todo.length}${FORCE ? " (--force: including existing)" : ""}\n`);
 
@@ -72,8 +99,10 @@ async function main() {
 
   if (!APPLY) {
     console.log(`\nDRY RUN — nothing written. Re-run with --apply.`);
-    console.log(`At ~${DELAY_MS / 1000}s between games this will take about ` +
-      `${Math.ceil((todo.length * DELAY_MS) / 60000)} min.`);
+    console.log(
+      `At ~${DELAY_MS / 1000}s between games this will take about ` +
+        `${Math.ceil((todo.length * DELAY_MS) / 60000)} min.`
+    );
     process.exit(0);
   }
 
@@ -81,7 +110,17 @@ async function main() {
   let failed = 0;
   for (const g of todo) {
     try {
-      const res = await captureChartSnapshot(g.id);
+      // One patient retry: a 429 mid-run would otherwise leave the archive
+      // half-filled, and the whole point of this script is a complete set.
+      let res;
+      try {
+        res = await captureChartSnapshot(g.id);
+      } catch (err) {
+        if (!isRateLimited(err)) throw err;
+        console.log(`    rate limited — waiting 60s before retrying ${g.a}/${g.b}`);
+        await sleep(60_000);
+        res = await captureChartSnapshot(g.id);
+      }
       if (res.ok) {
         ok++;
         const counts = Object.entries(res.counts ?? {})
