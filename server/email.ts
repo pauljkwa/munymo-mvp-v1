@@ -86,6 +86,26 @@ export type StreakAtRiskData = {
   magicLink?: string | null;
 };
 
+/**
+ * For a player who made a Gut Selection but hasn't submitted a Final Selection.
+ *
+ * The streak-at-risk email can't serve this: it requires currentStreak > 0, and
+ * a streak is only written at scoring time — hours AFTER lockout. So on a
+ * player's first game their streak is still 0 when the reminder job runs, and
+ * nothing reaches them. That is exactly how the first real signup was lost:
+ * gut pick at 02:54, lockout at 13:30, no push device, no streak, no contact.
+ */
+export type FinishYourPickData = {
+  playerName: string | null;
+  gutSelection: "A" | "B";
+  companyAName: string;
+  companyATicker: string;
+  companyBName: string;
+  companyBTicker: string;
+  lockoutAt: Date;
+  magicLink?: string | null;
+};
+
 // ─── Shared Styles ────────────────────────────────────────────────────────────
 
 const BASE_URL = "https://munymo.com";
@@ -380,6 +400,61 @@ export function buildStreakAtRiskEmail(data: StreakAtRiskData): { subject: strin
     </p>
     <div style="text-align:center;">
       ${greenButton(ctaUrl, "Play Now — Keep Your Streak →")}
+    </div>
+  `);
+
+  return { subject, html };
+}
+
+// ─── Template: Finish Your Pick (no streak yet) ───────────────────────────────
+
+export function buildFinishYourPickEmail(data: FinishYourPickData): {
+  subject: string;
+  html: string;
+} {
+  const greeting = data.playerName ? `Hi ${data.playerName},` : "Hi,";
+  const lockoutStr = data.lockoutAt.toUTCString();
+  const ctaUrl = data.magicLink ?? `${BASE_URL}/game`;
+  const gutName = data.gutSelection === "A" ? data.companyAName : data.companyBName;
+  const gutTicker = data.gutSelection === "A" ? data.companyATicker : data.companyBTicker;
+  const subject = `Your Munymo pick closes soon — ${data.companyATicker} vs ${data.companyBTicker}`;
+
+  // Deliberately says nothing about streaks: this player doesn't have one yet,
+  // and leading with a thing they haven't earned reads as noise. The hook is
+  // the pick they already made and the half of the game they haven't seen.
+  const html = emailWrapper(`
+    <p style="margin:0 0 20px 0;font-size:15px;color:${TEXT_MAIN};">${greeting}</p>
+    <h1 style="margin:0 0 6px 0;font-size:24px;font-weight:700;color:${DEEP_GREEN};">
+      You've made your gut pick — now finish the game
+    </h1>
+    <p style="margin:0 0 28px 0;font-size:15px;color:${TEXT_MUTED};line-height:1.6;">
+      You picked <strong style="color:${TEXT_MAIN};">${gutTicker}</strong> on instinct.
+      The other half is the interesting part: read today's research, then lock in your
+      Final Selection — you can change your mind. There's a quick question at the end too.
+    </p>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color:${BG_SUBTLE};border:1px solid ${BORDER};border-radius:8px;margin:0 0 24px 0;">
+      <tr>
+        <td width="45%" style="padding:20px;text-align:center;border-right:1px solid ${BORDER};">
+          ${tickerBadge(data.companyATicker, data.companyAName)}
+        </td>
+        <td width="10%" style="text-align:center;vertical-align:middle;">
+          <span style="font-size:14px;color:${TEXT_LABEL};font-weight:700;">VS</span>
+        </td>
+        <td width="45%" style="padding:20px;text-align:center;">
+          ${tickerBadge(data.companyBTicker, data.companyBName)}
+        </td>
+      </tr>
+    </table>
+
+    <p style="margin:0 0 8px 0;font-size:13px;color:${TEXT_LABEL};text-align:center;">
+      Your gut pick: <strong style="color:${TEXT_MUTED};">${gutName}</strong>
+    </p>
+    <p style="margin:0 0 24px 0;font-size:13px;color:${TEXT_LABEL};text-align:center;">
+      Closes: <strong style="color:${TEXT_MUTED};">${lockoutStr}</strong>
+    </p>
+    <div style="text-align:center;">
+      ${greenButton(ctaUrl, "Read the Research →")}
     </div>
   `);
 

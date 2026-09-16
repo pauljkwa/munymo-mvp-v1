@@ -12,6 +12,7 @@ import { metricGroupInfo } from "@/lib/metricGroups";
 import { selectLessonOfTheDay } from "@/lib/lessonOfTheDay";
 import { ALL_LEVELS } from "@/content/lessons";
 import { toast } from "sonner";
+import ResultReminderPrompt from "@/components/ResultReminderPrompt";
 import {
   Brain,
   BookOpen,
@@ -665,6 +666,10 @@ export default function DailyGame() {
         {/* ── Step: Research ── */}
         {step === "research" && (
           <div className="animate-scale-in">
+            {/* Asked here, right after the gut pick, because that is when the
+                player has something riding on the result and is most likely to
+                say yes — not on a settings page they may never open. */}
+            <ResultReminderPrompt />
             <div className="card-glass p-6 mb-4">
               <div className="flex items-center gap-3 mb-4">
                 <BookOpen size={20} style={{ color: "var(--color-brand)" }} />

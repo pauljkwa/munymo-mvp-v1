@@ -1,4 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import { LEADERBOARD_QUALIFICATION_GAMES as QUALIFY_GAMES } from "@shared/const";
 import { trpc } from "@/lib/trpc";
 import { SignInButton } from "@clerk/clerk-react";
 import PublicLayout from "@/components/PublicLayout";
@@ -193,7 +194,7 @@ export default function MyDashboard() {
                     ? stats.leaderboardRank
                       ? `#${stats.leaderboardRank}`
                       : "Ranked"
-                    : `${stats.gamesPlayed}/20`
+                    : `${stats.gamesPlayed}/${QUALIFY_GAMES}`
                 }
                 sub={stats.isQualified ? "Qualified" : "Games to qualify"}
               />

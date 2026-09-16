@@ -2,6 +2,7 @@
  * Munymo Scoring — Pure, exportable logic functions
  * These are the canonical implementations used by routers.ts and tested directly in munymo.test.ts
  */
+import { LEADERBOARD_QUALIFICATION_GAMES } from "@shared/const";
 
 // ─── Score Calculation ────────────────────────────────────────────────────────
 
@@ -168,8 +169,22 @@ export function resolveWinner(
 }
 
 // ─── Leaderboard Qualification ────────────────────────────────────────────────
-/** The exact qualification threshold — never change without a documented decision. */
-export const LEADERBOARD_QUALIFICATION_THRESHOLD = 20;
+/**
+ * The exact qualification threshold — never change without a documented decision.
+ *
+ * Lowered 20 → 10 on 2026-09-16 (Paul's decision). At one game per trading day,
+ * 20 games is four calendar weeks: for a typical consumer app, surviving that
+ * long puts a player in roughly the top 5–10% of a cohort, so the threshold as
+ * set meant the overwhelming majority of signups would never reach the
+ * leaderboard at all. Ten games is two weeks — still a defensible sample for an
+ * average, and an actually reachable goal.
+ *
+ * Deliberately measures LIVE games only. Archived practice games do not count:
+ * a past matchup's outcome is lookup-able (the research prose names dated news
+ * events), so letting practice qualify anyone would mean ranking people who
+ * predicted an unknown future alongside people who could check the answer.
+ */
+export const LEADERBOARD_QUALIFICATION_THRESHOLD = LEADERBOARD_QUALIFICATION_GAMES;
 
 export function isQualified(gamesPlayed: number): boolean {
   return gamesPlayed >= LEADERBOARD_QUALIFICATION_THRESHOLD;

@@ -30,6 +30,7 @@ vi.mock("./_core/env", () => ({
 
 import {
   buildFeedbackEmail,
+  buildFinishYourPickEmail,
   buildGameAvailableEmail,
   buildResultPublishedEmail,
   buildStreakAtRiskEmail,
@@ -373,3 +374,52 @@ describe("broadcastEmail", () => {
   });
 });
 
+
+// ─── Finish Your Pick (first-timer reminder) ──────────────────────────────────
+// The streak-at-risk email requires currentStreak > 0, but a streak is only
+// written at scoring time — hours after lockout. So on a player's first game
+// their streak is still 0 when the reminder job runs and nothing reaches them.
+// That is precisely how the first real signup was lost. This template covers
+// the gap, and deliberately never mentions streaks.
+describe("buildFinishYourPickEmail", () => {
+  const base = {
+    playerName: "Khalid",
+    gutSelection: "B" as const,
+    companyAName: "American Airlines Group Inc.",
+    companyATicker: "AAL",
+    companyBName: "United Airlines Holdings",
+    companyBTicker: "UAL",
+    lockoutAt: new Date("2026-08-31T13:30:00Z"),
+  };
+
+  it("names both companies and the lockout time", () => {
+    const { subject, html } = buildFinishYourPickEmail(base);
+    expect(subject).toContain("AAL");
+    expect(subject).toContain("UAL");
+    expect(html).toContain("American Airlines Group Inc.");
+    expect(html).toContain("United Airlines Holdings");
+  });
+
+  it("reflects back the gut pick the player actually made", () => {
+    const html = buildFinishYourPickEmail(base).html;
+    expect(html).toContain("United Airlines Holdings");
+    const pickedA = buildFinishYourPickEmail({ ...base, gutSelection: "A" }).html;
+    expect(pickedA).toContain("American Airlines Group Inc.");
+  });
+
+  it("never mentions streaks — this player has not earned one", () => {
+    const { subject, html } = buildFinishYourPickEmail(base);
+    expect(subject.toLowerCase()).not.toContain("streak");
+    expect(html.toLowerCase()).not.toContain("streak");
+  });
+
+  it("greets without a name when none is set", () => {
+    const html = buildFinishYourPickEmail({ ...base, playerName: null }).html;
+    expect(html).toContain("Hi,");
+  });
+
+  it("prefers the magic link over the plain game url", () => {
+    const html = buildFinishYourPickEmail({ ...base, magicLink: "https://munymo.com/api/magic?token=xyz" }).html;
+    expect(html).toContain("token=xyz");
+  });
+});

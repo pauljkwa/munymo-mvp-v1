@@ -14,6 +14,7 @@ import {
   computeAverageDailyScore,
   LEADERBOARD_QUALIFICATION_THRESHOLD,
 } from "./scoring";
+import { LEADERBOARD_QUALIFICATION_GAMES } from "@shared/const";
 
 // ─── Score Calculation ────────────────────────────────────────────────────────
 describe("calculateScore — 80/20 model (production function)", () => {
@@ -301,19 +302,23 @@ describe("T3: resolveWinner — ticker guard + perf cross-check", () => {
 
 // ─── Leaderboard Qualification ────────────────────────────────────────────────
 describe("Leaderboard qualification — 20-game threshold (production constants)", () => {
-  it("threshold constant is exactly 20", () => {
-    expect(LEADERBOARD_QUALIFICATION_THRESHOLD).toBe(20);
+  it("threshold constant is exactly 10", () => {
+    expect(LEADERBOARD_QUALIFICATION_THRESHOLD).toBe(10);
   });
 
-  it("is not qualified with 19 games", () => {
-    expect(isQualified(19)).toBe(false);
+  it("reads from the shared constant, so client and server cannot drift", () => {
+    expect(LEADERBOARD_QUALIFICATION_THRESHOLD).toBe(LEADERBOARD_QUALIFICATION_GAMES);
   });
 
-  it("is qualified with exactly 20 games", () => {
-    expect(isQualified(20)).toBe(true);
+  it("is not qualified one game short", () => {
+    expect(isQualified(9)).toBe(false);
   });
 
-  it("is qualified with more than 20 games", () => {
+  it("is qualified with exactly the threshold", () => {
+    expect(isQualified(10)).toBe(true);
+  });
+
+  it("is qualified with more than the threshold", () => {
     expect(isQualified(35)).toBe(true);
   });
 

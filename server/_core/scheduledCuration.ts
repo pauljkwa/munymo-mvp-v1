@@ -947,7 +947,7 @@ async function streakAtRiskHandler(req: Request, res: Response) {
 
     const { getDb } = await import("../db");
     const { getActiveOrUpcomingGame, getAllUsers, getPlayerPick, getStreakForUser } = await import("../db");
-    const { buildStreakAtRiskEmail, sendEmail } = await import("../email");
+    const { buildStreakAtRiskEmail, buildFinishYourPickEmail, sendEmail } = await import("../email");
     const { ENV } = await import("./env");
 
     const game = await getActiveOrUpcomingGame();
@@ -972,10 +972,21 @@ async function streakAtRiskHandler(req: Request, res: Response) {
       if (!u.email || u.emailOptIn === false || u.deactivated) { skipped++; continue; }
 
       const streak = await getStreakForUser(u.id);
-      if (!streak || (streak.currentStreak ?? 0) <= 0 || streak.awayStatus === "away") { skipped++; continue; }
+      if (streak?.awayStatus === "away") { skipped++; continue; }
 
       const pick = await getPlayerPick(u.id, game.id);
       if (pick?.finalSelection) { skipped++; continue; } // already submitted
+
+      const hasStreak = (streak?.currentStreak ?? 0) > 0;
+
+      // A player with no streak yet used to be skipped outright, which meant
+      // the reminder could never reach anyone on their FIRST game — a streak
+      // is only written at scoring time, hours after lockout. That is how the
+      // first real signup was lost. Now they get a different email, but only
+      // if they actually started: someone who made a gut pick has shown
+      // intent and left the game half-finished. Emailing users who haven't
+      // engaged at all would just be daily spam, so they're still skipped.
+      if (!hasStreak && !pick?.gutSelection) { skipped++; continue; }
 
       // Generate magic link if Clerk is configured
       let magicLink: string | null = null;
@@ -991,16 +1002,28 @@ async function streakAtRiskHandler(req: Request, res: Response) {
         } catch { /* non-fatal */ }
       }
 
-      const { subject, html } = buildStreakAtRiskEmail({
-        playerName: u.name,
-        currentStreak: streak.currentStreak ?? 1,
-        companyAName: game.companyAName,
-        companyATicker: game.companyATicker,
-        companyBName: game.companyBName,
-        companyBTicker: game.companyBTicker,
-        lockoutAt,
-        magicLink,
-      });
+      const { subject, html } = hasStreak
+        ? buildStreakAtRiskEmail({
+            playerName: u.name,
+            currentStreak: streak?.currentStreak ?? 1,
+            companyAName: game.companyAName,
+            companyATicker: game.companyATicker,
+            companyBName: game.companyBName,
+            companyBTicker: game.companyBTicker,
+            lockoutAt,
+            magicLink,
+          })
+        : buildFinishYourPickEmail({
+            playerName: u.name,
+            // Guarded above: no streak means we only get here with a gut pick.
+            gutSelection: pick!.gutSelection as "A" | "B",
+            companyAName: game.companyAName,
+            companyATicker: game.companyATicker,
+            companyBName: game.companyBName,
+            companyBTicker: game.companyBTicker,
+            lockoutAt,
+            magicLink,
+          });
 
       const result = await sendEmail({ to: u.email, subject, html });
       if (result.success) sent++; else skipped++;

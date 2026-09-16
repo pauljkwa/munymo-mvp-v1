@@ -3,6 +3,10 @@ import { trpc } from "@/lib/trpc";
 import PublicLayout from "@/components/PublicLayout";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { Trophy, Medal, Info, Loader2, TrendingUp } from "lucide-react";
+// Single source of truth, shared with the server's qualification logic —
+// this was five separate hardcoded 20s that would drift the moment the
+// threshold changed.
+import { LEADERBOARD_QUALIFICATION_GAMES as QUALIFY_GAMES } from "@shared/const";
 
 export default function Leaderboard() {
   usePageMeta({ title: "Leaderboard | Munymo" });
@@ -31,7 +35,7 @@ export default function Leaderboard() {
             </h1>
           </div>
           <p className="text-sm" style={{ color: "var(--color-muted)" }}>
-            Ranked by Average Daily Score. Qualification requires 20 completed games.
+            Ranked by Average Daily Score. Qualification requires {QUALIFY_GAMES} completed games.
           </p>
         </div>
 
@@ -47,7 +51,7 @@ export default function Leaderboard() {
                 Your Progress
               </p>
               <p className="text-xs" style={{ color: "var(--color-muted)" }}>
-                {myStat.gamesPlayed} / 20 games played — {20 - myStat.gamesPlayed} more to qualify
+                {myStat.gamesPlayed} / {QUALIFY_GAMES} games played — {QUALIFY_GAMES - myStat.gamesPlayed} more to qualify
               </p>
             </div>
             <div className="text-right">
@@ -71,7 +75,7 @@ export default function Leaderboard() {
               No qualified players yet
             </p>
             <p className="text-sm" style={{ color: "var(--color-muted)" }}>
-              Players appear here after completing 20 games.
+              Players appear here after completing {QUALIFY_GAMES} games.
             </p>
           </div>
         ) : (
@@ -191,7 +195,7 @@ export default function Leaderboard() {
                 className="text-xs px-2 py-0.5 rounded-full"
                 style={{ background: "var(--color-surface-raised)", color: "var(--color-subtle)" }}
               >
-                &lt; 20 games
+                &lt; {QUALIFY_GAMES} games
               </span>
             </div>
             <p className="text-xs mb-4" style={{ color: "var(--color-subtle)" }}>
@@ -247,7 +251,7 @@ export default function Leaderboard() {
                         </td>
                         <td className="px-5 py-3 text-right hidden sm:table-cell">
                           <span className="text-xs tabular-nums" style={{ color: "var(--color-subtle)" }}>
-                            {entry.gamesPlayed} / 20
+                            {entry.gamesPlayed} / {QUALIFY_GAMES}
                           </span>
                         </td>
                       </tr>
