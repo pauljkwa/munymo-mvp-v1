@@ -7,6 +7,11 @@ import { Trophy, Medal, Info, Loader2, TrendingUp } from "lucide-react";
 // this was five separate hardcoded 20s that would drift the moment the
 // threshold changed.
 import { LEADERBOARD_QUALIFICATION_GAMES as QUALIFY_GAMES } from "@shared/const";
+// Golf-style ranking shared with the server so the two cannot disagree.
+import {
+  assignCompetitionRanks,
+  formatAverageScore,
+} from "@shared/leaderboard";
 
 export default function Leaderboard() {
   usePageMeta({ title: "Leaderboard | Munymo" });
@@ -16,6 +21,11 @@ export default function Leaderboard() {
   const { data: myStat } = trpc.scores.getMyLeaderboardStat.useQuery(undefined, {
     enabled: isAuthenticated,
   });
+
+  // Computed once per render rather than per row. The server already returns
+  // the rows in display order (score, then games played, then id).
+  const qualifiedRanks = assignCompetitionRanks(leaderboard ?? []);
+  const provisionalRanks = assignCompetitionRanks(provisional ?? []);
 
   const medalColors = [
     "oklch(0.78 0.14 75)", // gold
@@ -46,6 +56,15 @@ export default function Leaderboard() {
             is enough for your average to reflect how you actually play, so the ranking
             means something for everyone on it.
           </p>
+          {/* Shared positions are unusual enough to be worth stating, and the
+              games-played ordering looks arbitrary unless the reasoning is
+              given. It rewards a longer record without letting volume buy rank. */}
+          <p className="text-xs mt-2" style={{ color: "var(--color-subtle)" }}>
+            Players on the same average share a position, as on a golf scoreboard — two
+            players tied for 2nd are both 2nd, and the next player is 4th. Where scores are
+            level, whoever has played more games is listed first: a longer record behind the
+            same average. It affects the order, not the position.
+          </p>
         </div>
 
         {/* My stat card (if authenticated and not yet qualified) */}
@@ -66,7 +85,7 @@ export default function Leaderboard() {
             <div className="text-right">
               <p className="text-xs" style={{ color: "var(--color-subtle)" }}>Avg Score</p>
               <p className="font-display text-lg font-bold" style={{ color: "var(--color-brand)" }}>
-                {parseFloat(myStat.averageDailyScore).toFixed(1)}
+                {formatAverageScore(myStat.averageDailyScore)}
               </p>
             </div>
           </div>
@@ -121,7 +140,8 @@ export default function Leaderboard() {
               <tbody>
                 {leaderboard.map((entry, i) => {
                   const isMe = user && entry.userId === user.id;
-                  const rank = i + 1;
+                  // Shared position for equal scores — see @shared/leaderboard.
+                  const rank = qualifiedRanks[i];
                   return (
                     <tr
                       key={entry.userId}
@@ -176,7 +196,7 @@ export default function Leaderboard() {
                           className="font-display text-lg font-bold tabular-nums"
                           style={{ color: rank <= 3 ? medalColors[rank - 1] : "var(--color-foreground)" }}
                         >
-                          {parseFloat(entry.averageDailyScore).toFixed(1)}
+                          {formatAverageScore(entry.averageDailyScore)}
                         </span>
                       </td>
                       <td className="px-5 py-4 text-right hidden sm:table-cell">
@@ -223,6 +243,7 @@ export default function Leaderboard() {
                 <tbody>
                   {provisional.map((entry, i) => {
                     const isMe = user && entry.userId === user.id;
+                    const rank = provisionalRanks[i];
                     return (
                       <tr
                         key={entry.userId}
@@ -233,7 +254,7 @@ export default function Leaderboard() {
                       >
                         <td className="px-5 py-3">
                           <span className="text-sm font-semibold tabular-nums" style={{ color: "var(--color-subtle)" }}>
-                            {i + 1}
+                            {rank}
                           </span>
                         </td>
                         <td className="px-5 py-3">
@@ -255,7 +276,7 @@ export default function Leaderboard() {
                         </td>
                         <td className="px-5 py-3 text-right">
                           <span className="font-display text-base font-bold tabular-nums" style={{ color: "var(--color-muted)" }}>
-                            {parseFloat(entry.averageDailyScore).toFixed(1)}
+                            {formatAverageScore(entry.averageDailyScore)}
                           </span>
                         </td>
                         <td className="px-5 py-3 text-right hidden sm:table-cell">

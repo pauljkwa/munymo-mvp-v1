@@ -1,0 +1,20 @@
+CREATE TABLE `practice_picks` (
+	`id` bigint AUTO_INCREMENT NOT NULL,
+	`userId` int NOT NULL,
+	`gameId` int NOT NULL,
+	`gutSelection` enum('A','B'),
+	`gutSubmittedAt` timestamp,
+	`finalSelection` enum('A','B'),
+	`finalSubmittedAt` timestamp,
+	`validationAnswer` varchar(256),
+	`validationAnswerTimeMs` int,
+	`validationSubmittedAt` timestamp,
+	`predictionScore` int,
+	`validationScore` int,
+	`totalScore` int,
+	`completedAt` timestamp,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+	CONSTRAINT `practice_picks_id` PRIMARY KEY(`id`),
+	CONSTRAINT `practice_picks_user_game_unique` UNIQUE(`userId`,`gameId`)
+);

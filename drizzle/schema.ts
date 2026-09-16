@@ -505,3 +505,65 @@ export const lessonProgress = mysqlTable(
 
 export type LessonProgress = typeof lessonProgress.$inferSelect;
 export type InsertLessonProgress = typeof lessonProgress.$inferInsert;
+
+// ─── Practice Picks ───────────────────────────────────────────────────────────
+
+/**
+ * Plays of ARCHIVED games, kept deliberately separate from `player_picks`.
+ *
+ * A separate table rather than an `isPractice` flag on player_picks: that table
+ * feeds getPlayerScoreHistory → upsertLeaderboardStat → the ranked leaderboard,
+ * and every one of those queries would have needed a filter. One forgotten
+ * WHERE clause and practice results silently pollute the competitive board —
+ * exactly the failure this feature must never have. Separation makes that
+ * impossible by construction rather than by vigilance.
+ *
+ * Practice results never touch the leaderboard, streaks, or daily_scores. They
+ * score into the player's own stats only. The reason is integrity: an archived
+ * matchup's outcome already happened and is lookup-able — the research prose
+ * names dated news events — so ranking a practice score alongside a real
+ * prediction would compare predicting an unknown future with predicting a
+ * knowable past.
+ *
+ * Scores are stored on the row itself (rather than in daily_scores) so practice
+ * can never be mistaken for live play by anything reading that table.
+ */
+export const practicePicks = mysqlTable(
+  "practice_picks",
+  {
+    id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+    userId: int("userId").notNull(),
+    gameId: int("gameId").notNull(),
+
+    gutSelection: mysqlEnum("gutSelection", ["A", "B"]),
+    gutSubmittedAt: timestamp("gutSubmittedAt"),
+    finalSelection: mysqlEnum("finalSelection", ["A", "B"]),
+    finalSubmittedAt: timestamp("finalSubmittedAt"),
+
+    validationAnswer: varchar("validationAnswer", { length: 256 }),
+    validationAnswerTimeMs: int("validationAnswerTimeMs"),
+    validationSubmittedAt: timestamp("validationSubmittedAt"),
+
+    // Computed server-side at completion, same 80/20 model as live play.
+    predictionScore: int("predictionScore"),
+    validationScore: int("validationScore"),
+    totalScore: int("totalScore"),
+    // Set once the play is finished and the result revealed. Null means the
+    // player started this archived game but hasn't finished it.
+    completedAt: timestamp("completedAt"),
+
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  (table) => ({
+    // One practice play per game per player — an archived game can't be
+    // replayed for a better score.
+    userGameUnique: uniqueIndex("practice_picks_user_game_unique").on(
+      table.userId,
+      table.gameId
+    ),
+  })
+);
+
+export type PracticePick = typeof practicePicks.$inferSelect;
+export type InsertPracticePick = typeof practicePicks.$inferInsert;

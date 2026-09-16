@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, lt, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNotNull, lt, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -12,11 +12,13 @@ import {
   metricExplanations,
   outboundClicks,
   playerPicks,
+  practicePicks,
   pushSubscriptions,
   streakRecords,
   users,
   validationQuestions,
   type InsertOutboundClick,
+  type InsertPracticePick,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -641,7 +643,15 @@ export async function getLeaderboard() {
     .from(leaderboardStats)
     .innerJoin(users, eq(leaderboardStats.userId, users.id))
     .where(eq(leaderboardStats.qualificationStatus, "qualified"))
-    .orderBy(desc(leaderboardStats.averageDailyScore));
+    // Score decides RANK; games played only decides who is listed first among
+    // players who tie, and userId keeps that order stable. Without the
+    // secondary sorts, tied players came back in whatever order MySQL chose
+    // and could swap places between page loads.
+    .orderBy(
+      desc(leaderboardStats.averageDailyScore),
+      desc(leaderboardStats.gamesPlayed),
+      asc(leaderboardStats.userId)
+    );
 
   return rows.map(({ displayName, name, ...rest }) => ({
     ...rest,
@@ -663,7 +673,11 @@ export async function getProvisionalLeaderboard() {
     .from(leaderboardStats)
     .innerJoin(users, eq(leaderboardStats.userId, users.id))
     .where(eq(leaderboardStats.qualificationStatus, "pending"))
-    .orderBy(desc(leaderboardStats.averageDailyScore))
+    .orderBy(
+      desc(leaderboardStats.averageDailyScore),
+      desc(leaderboardStats.gamesPlayed),
+      asc(leaderboardStats.userId)
+    )
     .limit(20);
 
   return rows.map(({ displayName, name, ...rest }) => ({
@@ -1083,4 +1097,111 @@ export async function markLessonComplete(
     .insert(lessonProgress)
     .values({ userId, lessonId, quizCorrect })
     .onDuplicateKeyUpdate({ set: { lessonId: sql`lessonId` } });
+}
+
+// ─── Practice Picks (archived games) ──────────────────────────────────────────
+
+/**
+ * Archived games this player can still practise: result_published, and not
+ * already practised by them.
+ *
+ * Deliberately returns NO outcome data — no winner, no percentage moves, no
+ * game date. The player is predicting something that already happened, so any
+ * of those would hand them the answer. The date is withheld because knowing it
+ * makes the result searchable.
+ *
+ * Honest limitation: the research prose itself names dated news events, so a
+ * determined player can still date a matchup and look up the outcome. That is
+ * unavoidable without gutting the research, which IS the product. It is
+ * tolerable precisely because practice never touches the leaderboard — the
+ * only person a cheat misleads is themselves.
+ */
+export async function getAvailablePracticeGames(userId: number, limit = 50) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const played = await db
+    .select({ gameId: practicePicks.gameId })
+    .from(practicePicks)
+    .where(eq(practicePicks.userId, userId));
+  const playedIds = new Set(played.map((p) => p.gameId));
+
+  const rows = await db
+    .select({
+      id: dailyGames.id,
+      companyAName: dailyGames.companyAName,
+      companyATicker: dailyGames.companyATicker,
+      companyBName: dailyGames.companyBName,
+      companyBTicker: dailyGames.companyBTicker,
+      sector: dailyGames.sector,
+    })
+    .from(dailyGames)
+    .where(eq(dailyGames.status, "result_published"))
+    .orderBy(desc(dailyGames.gameDate))
+    .limit(5000);
+
+  return rows.filter((r) => !playedIds.has(r.id)).slice(0, limit);
+}
+
+export async function getPracticePick(userId: number, gameId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db
+    .select()
+    .from(practicePicks)
+    .where(and(eq(practicePicks.userId, userId), eq(practicePicks.gameId, gameId)))
+    .limit(1);
+  return rows[0];
+}
+
+export async function upsertPracticePick(
+  userId: number,
+  gameId: number,
+  data: Partial<InsertPracticePick>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const existing = await getPracticePick(userId, gameId);
+  if (existing) {
+    await db
+      .update(practicePicks)
+      .set(data)
+      .where(and(eq(practicePicks.userId, userId), eq(practicePicks.gameId, gameId)));
+  } else {
+    await db.insert(practicePicks).values({ userId, gameId, ...data });
+  }
+  return getPracticePick(userId, gameId);
+}
+
+/**
+ * A player's practice record. Averaged over COMPLETED plays only — a started
+ * and abandoned game has no score and must not drag the average down.
+ */
+export async function getPracticeStats(userId: number) {
+  const db = await getDb();
+  if (!db) return { gamesPlayed: 0, totalScore: 0, averageScore: 0 };
+
+  const rows = await db
+    .select({ totalScore: practicePicks.totalScore })
+    .from(practicePicks)
+    .where(and(eq(practicePicks.userId, userId), isNotNull(practicePicks.completedAt)));
+
+  const gamesPlayed = rows.length;
+  const totalScore = rows.reduce((sum, r) => sum + (r.totalScore ?? 0), 0);
+  return {
+    gamesPlayed,
+    totalScore,
+    averageScore: gamesPlayed === 0 ? 0 : Math.round((totalScore / gamesPlayed) * 100) / 100,
+  };
+}
+
+/** How many published archive games exist in total (for "x of y practised"). */
+export async function countPublishedGames(): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const rows = await db
+    .select({ id: dailyGames.id })
+    .from(dailyGames)
+    .where(eq(dailyGames.status, "result_published"));
+  return rows.length;
 }

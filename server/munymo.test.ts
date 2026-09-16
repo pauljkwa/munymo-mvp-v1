@@ -12,6 +12,7 @@ import {
   resolveWinner,
   isQualified,
   shuffleOptionsForGame,
+  computeProjectedRank,
   computeAverageDailyScore,
   LEADERBOARD_QUALIFICATION_THRESHOLD,
 } from "./scoring";
@@ -510,6 +511,39 @@ describe("shuffleOptionsForGame", () => {
   });
 });
 
+// ─── Practice Projected Rank ──────────────────────────────────────────────────
+// Shown to the player as "your practice average would place you Nth" — a
+// hypothetical, never stored, and never feeding the real leaderboard.
+describe("computeProjectedRank", () => {
+  const live = [92.5, 88.0, 85.0, 70.25];
+
+  it("places an average above everyone at first", () => {
+    expect(computeProjectedRank(99, live, 5)).toBe(1);
+  });
+
+  it("places an average below everyone last", () => {
+    expect(computeProjectedRank(10, live, 5)).toBe(live.length + 1);
+  });
+
+  it("slots into the middle correctly", () => {
+    expect(computeProjectedRank(86, live, 5)).toBe(3);
+  });
+
+  it("uses competition ranking — a tie takes the better position", () => {
+    // Tying the 88.0 in second place shows 2nd, not 3rd.
+    expect(computeProjectedRank(88.0, live, 5)).toBe(2);
+  });
+
+  it("returns null when no practice games are completed", () => {
+    expect(computeProjectedRank(0, live, 0)).toBeNull();
+    expect(computeProjectedRank(95, live, 0)).toBeNull();
+  });
+
+  it("ranks first when the live board is empty", () => {
+    expect(computeProjectedRank(50, [], 3)).toBe(1);
+  });
+});
+
 // ─── Auth Logout ──────────────────────────────────────────────────────────────
 // Since switching to Clerk, logout is handled client-side by Clerk's signOut().
 // The server procedure is a no-op stub for API compatibility.
@@ -865,5 +899,99 @@ describe("classifyCurationPayload — results-only payload skips freshness; lega
 
   it("routes a payload with neither field to 'invalid'", () => {
     expect(classifyCurationPayload({})).toBe("invalid");
+  });
+});
+
+// ─── Leaderboard Competition Ranking ──────────────────────────────────────────
+// Golf-style: equal scores share a position and the next distinct score skips
+// the numbers consumed by the tie. Previously the client just numbered rows
+// (rank = i + 1), so tied players got different positions purely from the order
+// the database happened to return — and the query had no secondary sort, so
+// that order could change between page loads.
+import {
+  assignCompetitionRanks,
+  sortForLeaderboard,
+  formatAverageScore,
+} from "@shared/leaderboard";
+
+const entry = (score: string, gamesPlayed: number, userId: number) => ({
+  averageDailyScore: score,
+  gamesPlayed,
+  userId,
+});
+
+describe("assignCompetitionRanks — 1-2-2-4", () => {
+  it("gives tied players the same position and skips the consumed number", () => {
+    const rows = [
+      entry("92.50", 40, 1),
+      entry("88.00", 35, 2),
+      entry("88.00", 22, 3),
+      entry("85.00", 30, 4),
+    ];
+    expect(assignCompetitionRanks(rows)).toEqual([1, 2, 2, 4]);
+  });
+
+  it("handles a three-way tie at the top — no 2nd or 3rd awarded", () => {
+    const rows = [
+      entry("90.00", 30, 1),
+      entry("90.00", 25, 2),
+      entry("90.00", 20, 3),
+      entry("80.00", 40, 4),
+    ];
+    expect(assignCompetitionRanks(rows)).toEqual([1, 1, 1, 4]);
+  });
+
+  it("numbers sequentially when nobody ties", () => {
+    const rows = [entry("90.00", 1, 1), entry("80.00", 1, 2), entry("70.00", 1, 3)];
+    expect(assignCompetitionRanks(rows)).toEqual([1, 2, 3]);
+  });
+
+  it("treats scores as equal on stored 2dp precision, not rounded display", () => {
+    // 88.75 and 88.84 both render "88.8" at 1dp — they are NOT tied, which is
+    // why the table shows two decimals.
+    const rows = [entry("88.84", 10, 1), entry("88.75", 10, 2)];
+    expect(assignCompetitionRanks(rows)).toEqual([1, 2]);
+  });
+
+  it("returns an empty array for an empty board", () => {
+    expect(assignCompetitionRanks([])).toEqual([]);
+  });
+});
+
+describe("sortForLeaderboard — games played orders ties, never outranks", () => {
+  it("lists the player with more games first when scores are level", () => {
+    const sorted = sortForLeaderboard([
+      entry("88.00", 22, 3),
+      entry("88.00", 35, 2),
+    ]);
+    expect(sorted.map((e) => e.userId)).toEqual([2, 3]);
+    // Both still share the position — order changed, rank did not.
+    expect(assignCompetitionRanks(sorted)).toEqual([1, 1]);
+  });
+
+  it("never lets more games beat a higher score", () => {
+    const sorted = sortForLeaderboard([
+      entry("70.00", 500, 9),
+      entry("90.00", 11, 1),
+    ]);
+    expect(sorted[0].userId).toBe(1);
+  });
+
+  it("is stable for players matching on both score and games played", () => {
+    const rows = [entry("80.00", 10, 7), entry("80.00", 10, 4)];
+    expect(sortForLeaderboard(rows).map((e) => e.userId)).toEqual([4, 7]);
+    expect(sortForLeaderboard([...rows].reverse()).map((e) => e.userId)).toEqual([4, 7]);
+  });
+});
+
+describe("formatAverageScore", () => {
+  it("always renders two decimals", () => {
+    expect(formatAverageScore("88.5")).toBe("88.50");
+    expect(formatAverageScore("0")).toBe("0.00");
+    expect(formatAverageScore(92.456)).toBe("92.46");
+  });
+
+  it("degrades to 0.00 rather than NaN", () => {
+    expect(formatAverageScore("not a number")).toBe("0.00");
   });
 });

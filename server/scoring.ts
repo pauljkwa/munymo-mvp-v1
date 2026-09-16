@@ -240,3 +240,29 @@ export function shuffleOptionsForGame<T>(options: T[], gameId: number): T[] {
   }
   return out;
 }
+
+// ─── Practice Projected Rank ──────────────────────────────────────────────────
+
+/**
+ * Where a practice average WOULD sit on the live leaderboard.
+ *
+ * Standard competition ranking: everyone strictly better is counted, so tying
+ * the current 3rd place shows 3rd, not 4th.
+ *
+ * This is a hypothetical and is never stored. Practice averages run higher than
+ * live ones — the outcome already happened and the research can be re-read
+ * without time pressure — so the UI must present it alongside that caveat. A
+ * player told they'd rank 2nd who then ranks 15th in live play is worse off
+ * than one who was never told.
+ *
+ * Returns null when there is nothing to rank (no completed practice games).
+ */
+export function computeProjectedRank(
+  averageScore: number,
+  liveAverages: number[],
+  practiceGamesPlayed: number
+): number | null {
+  if (practiceGamesPlayed <= 0) return null;
+  const better = liveAverages.filter((a) => a > averageScore).length;
+  return better + 1;
+}

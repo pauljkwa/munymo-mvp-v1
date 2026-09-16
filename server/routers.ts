@@ -6,6 +6,7 @@ import {
   computeNewStreak,
   isQualified,
   shuffleOptionsForGame,
+  computeProjectedRank,
 } from "./scoring";
 import { hashEndpoint } from "./push";
 import {
@@ -33,7 +34,12 @@ import {
   createOrReviveGame,
   eraseUserPersonalData,
   getAllUsers,
+  getAvailablePracticeGames,
   getPlayersForAdmin,
+  getPracticePick,
+  getPracticeStats,
+  countPublishedGames,
+  upsertPracticePick,
   getAuditLog,
   getCommunityStats,
   getGameById,
@@ -336,6 +342,193 @@ const scoresRouter = router({
 });
 
 // ─── Leaderboard Router ───────────────────────────────────────────────────────
+
+// ─── Practice Router (archived games) ─────────────────────────────────────────
+
+/**
+ * Practising archived games. Completely separate from the live game routers,
+ * and from `player_picks`, so practice can never reach the ranked leaderboard,
+ * streaks, or daily_scores.
+ *
+ * Blind-play rules enforced here, not in the client: the outcome of an archived
+ * matchup already exists, so winner, both percentage moves, the game DATE and
+ * the dated source article are all withheld until the player finishes. Hiding
+ * them client-side would be no protection at all — the payload would still
+ * carry the answer.
+ */
+const practiceRouter = router({
+  /** Archived games this player hasn't practised yet. No outcome data. */
+  available: protectedProcedure.query(async ({ ctx }) => {
+    const [games, total, stats] = await Promise.all([
+      getAvailablePracticeGames(ctx.user.id),
+      countPublishedGames(),
+      getPracticeStats(ctx.user.id),
+    ]);
+    return { games, totalArchive: total, practised: stats.gamesPlayed };
+  }),
+
+  /**
+   * One archived game, with the answer stripped out unless this player has
+   * already completed it.
+   */
+  getGame: protectedProcedure
+    .input(z.object({ gameId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      const game = await getGameById(input.gameId);
+      if (!game || game.status !== "result_published") {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Not an archived game" });
+      }
+
+      const pick = await getPracticePick(ctx.user.id, input.gameId);
+      const finished = Boolean(pick?.completedAt);
+      const research = await getResearchByGameId(input.gameId);
+
+      return {
+        id: game.id,
+        companyAName: game.companyAName,
+        companyATicker: game.companyATicker,
+        companyBName: game.companyBName,
+        companyBTicker: game.companyBTicker,
+        sector: game.sector,
+        pairingRationale: game.pairingRationale,
+        researchSummary: research?.researchSummary ?? null,
+        researchContent: research?.researchSnapshot ?? research?.content ?? null,
+        researchMetrics: research?.metricsSnapshot ?? research?.researchMetrics ?? null,
+
+        // Withheld until finished — each of these gives away the result, and
+        // the date makes it searchable.
+        gameDate: finished ? game.gameDate : null,
+        winner: finished ? game.winner : null,
+        companyAPerf: finished ? game.companyAPerf : null,
+        companyBPerf: finished ? game.companyBPerf : null,
+        sourceUrl: finished ? game.sourceUrl : null,
+        sourceTitle: finished ? game.sourceTitle : null,
+        sourcePublisher: finished ? game.sourcePublisher : null,
+
+        pick: pick ?? null,
+      };
+    }),
+
+  submitGut: protectedProcedure
+    .input(z.object({ gameId: z.number(), selection: z.enum(["A", "B"]) }))
+    .mutation(async ({ ctx, input }) => {
+      const game = await getGameById(input.gameId);
+      if (!game || game.status !== "result_published") {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Not an archived game" });
+      }
+      const existing = await getPracticePick(ctx.user.id, input.gameId);
+      if (existing?.completedAt) {
+        throw new TRPCError({ code: "CONFLICT", message: "Already practised this game" });
+      }
+      if (existing?.gutSelection) {
+        throw new TRPCError({ code: "CONFLICT", message: "Gut selection already made" });
+      }
+      await upsertPracticePick(ctx.user.id, input.gameId, {
+        gutSelection: input.selection,
+        gutSubmittedAt: new Date(),
+      });
+      return { success: true };
+    }),
+
+  submitFinal: protectedProcedure
+    .input(z.object({ gameId: z.number(), selection: z.enum(["A", "B"]) }))
+    .mutation(async ({ ctx, input }) => {
+      const pick = await getPracticePick(ctx.user.id, input.gameId);
+      if (!pick?.gutSelection) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Make a gut selection first" });
+      }
+      if (pick.completedAt) {
+        throw new TRPCError({ code: "CONFLICT", message: "Already practised this game" });
+      }
+      await upsertPracticePick(ctx.user.id, input.gameId, {
+        finalSelection: input.selection,
+        finalSubmittedAt: new Date(),
+      });
+      return { success: true };
+    }),
+
+  /**
+   * Answers the validation question, scores the play, and reveals the result.
+   *
+   * Scoring uses the same calculateScore as live play — the 80/20 model is the
+   * point of practice — but the score lands on the practice row only.
+   */
+  submitValidation: protectedProcedure
+    .input(
+      z.object({
+        gameId: z.number(),
+        answer: z.string().max(256),
+        answerTimeMs: z.number().int().min(0).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const game = await getGameById(input.gameId);
+      if (!game || game.status !== "result_published" || !game.winner) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Not a scoreable archived game" });
+      }
+      const pick = await getPracticePick(ctx.user.id, input.gameId);
+      if (!pick?.finalSelection) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Make a final selection first" });
+      }
+      if (pick.completedAt) {
+        throw new TRPCError({ code: "CONFLICT", message: "Already practised this game" });
+      }
+
+      const question = await getValidationQuestion(input.gameId);
+      const scored = calculateScore(
+        pick.finalSelection,
+        game.winner,
+        input.answer,
+        question?.correctAnswer ?? "",
+        input.answerTimeMs ?? null
+      );
+
+      await upsertPracticePick(ctx.user.id, input.gameId, {
+        validationAnswer: input.answer,
+        validationAnswerTimeMs: input.answerTimeMs ?? null,
+        validationSubmittedAt: new Date(),
+        predictionScore: scored.predictionScore,
+        validationScore: scored.validationScore,
+        totalScore: scored.dailyScore,
+        completedAt: new Date(),
+      });
+
+      return {
+        ...scored,
+        winner: game.winner,
+        correctAnswer: question?.correctAnswer ?? null,
+        companyAPerf: game.companyAPerf,
+        companyBPerf: game.companyBPerf,
+        gameDate: game.gameDate,
+      };
+    }),
+
+  /**
+   * The player's practice record, plus where that average WOULD sit on the live
+   * leaderboard.
+   *
+   * Reported as a hypothetical and never written anywhere: practice averages
+   * run higher than live ones because the outcome already exists and the
+   * research can be re-read at leisure. The client states that alongside the
+   * number so a player isn't set up to be deflated by their first real ranking.
+   */
+  stats: protectedProcedure.query(async ({ ctx }) => {
+    const stats = await getPracticeStats(ctx.user.id);
+    const leaderboard = await getLeaderboard();
+
+    const projectedRank = computeProjectedRank(
+      stats.averageScore,
+      leaderboard.map((e) => parseFloat(e.averageDailyScore)),
+      stats.gamesPlayed
+    );
+
+    return {
+      ...stats,
+      projectedRank,
+      liveBoardSize: leaderboard.length,
+    };
+  }),
+});
 
 const leaderboardRouter = router({
   get: publicProcedure.query(async () => {
@@ -1790,6 +1983,7 @@ export const appRouter = router({
   picks: picksRouter,
   scores: scoresRouter,
   leaderboard: leaderboardRouter,
+  practice: practiceRouter,
   streaks: streaksRouter,
   admin: adminRouter,
   dashboard: dashboardRouter,
