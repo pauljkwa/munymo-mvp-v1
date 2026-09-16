@@ -304,12 +304,25 @@ function htmlEscape(s: string): string {
  */
 const MAX_ARCHIVE_LINKS = 300;
 const MAX_HOME_GAME_LINKS = 12;
+/** Sibling links from a leaf page back into the archive, for crawl paths. */
+const MAX_SIBLING_LINKS = 8;
 
 function linkList(links: { href: string; text: string }[]): string {
   return links
     .map(
       (l) => `<li><a href="${htmlEscape(l.href)}">${htmlEscape(l.text)}</a></li>`
     )
+    .join("");
+}
+
+/** Plain text with blank-line paragraph breaks → escaped <p> elements. */
+function paragraphs(text: string | null | undefined): string {
+  if (!text) return "";
+  return text
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((p) => `<p>${htmlEscape(p)}</p>`)
     .join("");
 }
 
@@ -322,11 +335,132 @@ function gameLink(g: ArchiveGame): { href: string; text: string } {
   };
 }
 
-/** Links appropriate to one route, or "" for routes that need none. */
-export async function buildCrawlLinks(path: string): Promise<string> {
+/**
+ * The unique body content for one archive game, or "" if it shouldn't be shown.
+ *
+ * WHY this exists as well as the link lists: once Google started crawling the
+ * archive it reported "Duplicate, Google chose different canonical than user"
+ * and folded every /research/:id into a single URL. Each page served a unique
+ * <title> and a correct self-referential canonical, but an EMPTY
+ * <div id="root"> — so all ~60 pages were byte-identical below the head.
+ * Google dedupes on body content and overrode our canonical accordingly.
+ * Unique metadata is not enough; the page needs unique words.
+ *
+ * Only result_published games render, mirroring resolveArchiveGameMeta's
+ * guard, so a queued future matchup can never leak through the html.
+ */
+async function buildArchiveGameContent(id: number): Promise<string> {
+  const { getDb } = await import("../db");
+  const db = await getDb();
+  if (!db) return "";
+
+  const { dailyGames, gameResearch } = await import("../../drizzle/schema.js");
+  const { eq } = await import("drizzle-orm");
+
+  const [game] = await db.select().from(dailyGames).where(eq(dailyGames.id, id)).limit(1);
+  if (!game || game.status !== "result_published") return "";
+
+  const [research] = await db
+    .select()
+    .from(gameResearch)
+    .where(eq(gameResearch.gameId, id))
+    .limit(1);
+
+  const a = `${game.companyAName} (${game.companyATicker})`;
+  const b = `${game.companyBName} (${game.companyBTicker})`;
+
+  const parts: string[] = [
+    `<h1>${htmlEscape(`${game.companyATicker} vs ${game.companyBTicker} — which stock performed better?`)}</h1>`,
+    `<p>${htmlEscape(`${a} versus ${b}${game.sector ? `, ${game.sector}` : ""}, on ${game.gameDate}.`)}</p>`,
+  ];
+
+  if (game.winner) {
+    const winnerName = game.winner === "A" ? a : b;
+    const perf =
+      game.companyAPerf != null && game.companyBPerf != null
+        ? ` ${game.companyATicker} moved ${game.companyAPerf}%, ${game.companyBTicker} moved ${game.companyBPerf}%.`
+        : "";
+    parts.push(
+      `<h2>Result</h2><p>${htmlEscape(`${winnerName} performed better on ${game.gameDate}.${perf}`)}</p>`
+    );
+  }
+
+  if (game.pairingRationale) {
+    parts.push(`<h2>Why these two companies</h2>${paragraphs(game.pairingRationale)}`);
+  }
+
+  // researchSummary is the plain-English brief; content is the fuller markdown
+  // narrative. Prefer the summary — it reads as prose without markdown syntax.
+  const body = research?.researchSummary ?? research?.researchSnapshot ?? null;
+  if (body) {
+    parts.push(`<h2>The research</h2>${paragraphs(body)}`);
+  }
+
+  return `<article>${parts.join("")}</article>`;
+}
+
+/** Unique body content for one lesson. */
+function buildLessonContent(lessonId: string): string {
+  const lesson = ALL_LESSONS.find((l) => l.id === lessonId);
+  if (!lesson) return "";
+
+  const parts: string[] = [`<h1>${htmlEscape(lesson.title)}</h1>`];
+  if (lesson.jargonTerm) {
+    parts.push(`<p>${htmlEscape(`Key term: ${lesson.jargonTerm}`)}</p>`);
+  }
+  parts.push(paragraphs(lesson.body));
+  if (lesson.matchupHook) {
+    parts.push(`<h2>In the daily game</h2><p>${htmlEscape(lesson.matchupHook)}</p>`);
+  }
+  return `<article>${parts.join("")}</article>`;
+}
+
+/**
+ * Server-rendered content for one route, or "" for routes that need none.
+ *
+ * Hub routes get a list of links (so the pages below them are discoverable);
+ * leaf routes get their actual content (so they aren't all identical). Both
+ * exist for the same underlying reason: the app renders everything
+ * client-side, so without this the html Google receives is an empty shell.
+ */
+export async function buildCrawlContent(path: string): Promise<string> {
   try {
     let p = path.split("?")[0].split("#")[0];
     if (p.length > 1) p = p.replace(/\/+$/, "");
+
+    const gameMatch = p.match(/^\/research\/(\d+)$/);
+    if (gameMatch) {
+      const content = await buildArchiveGameContent(parseInt(gameMatch[1], 10));
+      if (!content) return "";
+      // Sibling + hub links so a crawler landing here has somewhere to go, and
+      // the archive gains an internal link graph rather than a flat sitemap.
+      const games = await getPublishedGames();
+      const siblings = games
+        .filter((g) => `/research/${g.id}` !== p)
+        .slice(0, MAX_SIBLING_LINKS)
+        .map(gameLink);
+      return (
+        content +
+        `<nav aria-label="More matchups"><h2>More matchups</h2><ul>` +
+        linkList([{ href: "/research", text: "Matchup archive" }, ...siblings]) +
+        `</ul></nav>`
+      );
+    }
+
+    const lessonMatch = p.match(/^\/learn\/([^/]+)$/);
+    if (lessonMatch) {
+      const content = buildLessonContent(lessonMatch[1]);
+      if (!content) return "";
+      const others = ALL_LESSONS.filter((l) => l.id !== lessonMatch[1])
+        .slice(0, MAX_SIBLING_LINKS)
+        .map((l) => ({ href: `/learn/${l.id}`, text: l.title }));
+      return (
+        content +
+        `<nav aria-label="More lessons"><h2>More lessons</h2><ul>` +
+        linkList([{ href: "/learn", text: "Learning hub" }, ...others]) +
+        `</ul></nav>`
+      );
+    }
 
     if (p === "/research") {
       const games = await getPublishedGames();
@@ -369,21 +503,21 @@ export async function buildCrawlLinks(path: string): Promise<string> {
 
     return "";
   } catch (err) {
-    console.error("[seo] buildCrawlLinks failed:", err);
+    console.error("[seo] buildCrawlContent failed:", err);
     return "";
   }
 }
 
 /**
- * Place the link list inside the empty <div id="root">. React clears it on
- * mount. Returns html untouched when there are no links or the mount point
- * isn't found, so a markup change upstream can't break the page.
+ * Place the server-rendered content inside the empty <div id="root">. React
+ * clears it on mount. Returns html untouched when there is no content or the
+ * mount point isn't found, so a markup change upstream can't break the page.
  */
-export function injectCrawlLinks(html: string, linksHtml: string): string {
-  if (!linksHtml) return html;
+export function injectCrawlContent(html: string, contentHtml: string): string {
+  if (!contentHtml) return html;
   const rootDiv = '<div id="root"></div>';
   if (!html.includes(rootDiv)) return html;
-  return html.replace(rootDiv, `<div id="root">${linksHtml}</div>`);
+  return html.replace(rootDiv, `<div id="root">${contentHtml}</div>`);
 }
 
 /**

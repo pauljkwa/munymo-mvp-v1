@@ -5,7 +5,7 @@ import { nanoid } from "nanoid";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import viteConfig from "../../vite.config";
-import { buildCrawlLinks, injectCrawlLinks, injectPageMeta, resolvePageMeta } from "./seo";
+import { buildCrawlContent, injectCrawlContent, injectPageMeta, resolvePageMeta } from "./seo";
 
 export async function setupVite(app: Express, server: Server) {
   const serverOptions = {
@@ -43,11 +43,11 @@ export async function setupVite(app: Express, server: Server) {
       // Same per-route title/canonical/status the production server sends, so
       // SEO output is inspectable in dev. resolvePageMeta never throws.
       const meta = await resolvePageMeta(url);
-      const links = await buildCrawlLinks(url);
+      const content = await buildCrawlContent(url);
       res
         .status(meta.status)
         .set({ "Content-Type": "text/html" })
-        .end(injectCrawlLinks(injectPageMeta(page, meta), links));
+        .end(injectCrawlContent(injectPageMeta(page, meta), content));
     } catch (e) {
       vite.ssrFixStacktrace(e as Error);
       next(e);
@@ -108,13 +108,14 @@ export function serveStatic(app: Express) {
       // req.path relative to the matched mount.
       const meta = await resolvePageMeta(req.originalUrl);
       const html = await fs.promises.readFile(indexPath, "utf-8");
-      // Crawlable <a> links inside the shell: without these the html Google
-      // receives has no internal links at all (see buildCrawlLinks).
-      const links = await buildCrawlLinks(req.originalUrl);
+      // Server-rendered content inside the shell: without this the html Google
+      // receives is an empty div — no links on hub pages, and every leaf page
+      // byte-identical to every other (see buildCrawlContent).
+      const content = await buildCrawlContent(req.originalUrl);
       res
         .status(meta.status)
         .set("Content-Type", "text/html; charset=utf-8")
-        .send(injectCrawlLinks(injectPageMeta(html, meta), links));
+        .send(injectCrawlContent(injectPageMeta(html, meta), content));
     } catch (err) {
       // Never let SEO decoration take the site down — serve the plain shell.
       console.error("[seo] falling back to plain index.html:", err);
