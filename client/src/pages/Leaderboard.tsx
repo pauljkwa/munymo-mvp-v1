@@ -112,25 +112,25 @@ export default function Leaderboard() {
               <thead>
                 <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
                   <th
-                    className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider"
+                    className="text-left px-3 sm:px-5 py-3 text-xs font-semibold uppercase tracking-wider"
                     style={{ color: "var(--color-subtle)" }}
                   >
                     Rank
                   </th>
                   <th
-                    className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider"
+                    className="text-left px-3 sm:px-5 py-3 text-xs font-semibold uppercase tracking-wider"
                     style={{ color: "var(--color-subtle)" }}
                   >
                     Player
                   </th>
                   <th
-                    className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider"
+                    className="text-right px-3 sm:px-5 py-3 text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
                     style={{ color: "var(--color-subtle)" }}
                   >
                     Avg Score
                   </th>
                   <th
-                    className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider hidden sm:table-cell"
+                    className="text-right px-3 sm:px-5 py-3 text-xs font-semibold uppercase tracking-wider hidden sm:table-cell"
                     style={{ color: "var(--color-subtle)" }}
                   >
                     Games
@@ -150,7 +150,7 @@ export default function Leaderboard() {
                         background: isMe ? "oklch(0.78 0.14 75 / 0.06)" : undefined,
                       }}
                     >
-                      <td className="px-5 py-4">
+                      <td className="px-3 sm:px-5 py-4">
                         {rank <= 3 ? (
                           <Medal size={18} style={{ color: medalColors[rank - 1] }} />
                         ) : (
@@ -162,8 +162,8 @@ export default function Leaderboard() {
                           </span>
                         )}
                       </td>
-                      <td className="px-5 py-4">
-                        <div className="flex items-center gap-3">
+                      <td className="px-3 sm:px-5 py-4">
+                        <div className="flex items-center gap-3 min-w-0">
                           <div
                             className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
                             style={{
@@ -173,9 +173,9 @@ export default function Leaderboard() {
                           >
                             {(entry.userName ?? "?")[0]?.toUpperCase()}
                           </div>
-                          <div>
+                          <div className="min-w-0">
                             <p
-                              className="text-sm font-medium"
+                              className="text-sm font-medium truncate"
                               style={{ color: isMe ? "var(--color-brand)" : "var(--color-foreground)" }}
                             >
                               {entry.userName ?? "Anonymous"}
@@ -191,7 +191,7 @@ export default function Leaderboard() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-5 py-4 text-right">
+                      <td className="px-3 sm:px-5 py-4 text-right whitespace-nowrap">
                         <span
                           className="font-display text-lg font-bold tabular-nums"
                           style={{ color: rank <= 3 ? medalColors[rank - 1] : "var(--color-foreground)" }}
@@ -199,7 +199,7 @@ export default function Leaderboard() {
                           {formatAverageScore(entry.averageDailyScore)}
                         </span>
                       </td>
-                      <td className="px-5 py-4 text-right hidden sm:table-cell">
+                      <td className="px-3 sm:px-5 py-4 text-right hidden sm:table-cell">
                         <span className="text-sm tabular-nums" style={{ color: "var(--color-muted)" }}>
                           {entry.gamesPlayed}
                         </span>
@@ -234,10 +234,10 @@ export default function Leaderboard() {
               <table className="w-full">
                 <thead>
                   <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
-                    <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-subtle)" }}>Rank</th>
-                    <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-subtle)" }}>Player</th>
-                    <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-subtle)" }}>Avg Score</th>
-                    <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider hidden sm:table-cell" style={{ color: "var(--color-subtle)" }}>Games</th>
+                    <th className="text-left px-3 sm:px-5 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-subtle)" }}>Rank</th>
+                    <th className="text-left px-3 sm:px-5 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-subtle)" }}>Player</th>
+                    <th className="text-right px-3 sm:px-5 py-3 text-xs font-semibold uppercase tracking-wider whitespace-nowrap" style={{ color: "var(--color-subtle)" }}>Avg Score</th>
+                    <th className="text-right px-3 sm:px-5 py-3 text-xs font-semibold uppercase tracking-wider hidden sm:table-cell" style={{ color: "var(--color-subtle)" }}>Games</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -252,13 +252,13 @@ export default function Leaderboard() {
                           background: isMe ? "oklch(0.78 0.14 75 / 0.06)" : undefined,
                         }}
                       >
-                        <td className="px-5 py-3">
+                        <td className="px-3 sm:px-5 py-3">
                           <span className="text-sm font-semibold tabular-nums" style={{ color: "var(--color-subtle)" }}>
                             {rank}
                           </span>
                         </td>
-                        <td className="px-5 py-3">
-                          <div className="flex items-center gap-3">
+                        <td className="px-3 sm:px-5 py-3">
+                          <div className="flex items-center gap-3 min-w-0">
                             <div
                               className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
                               style={{
@@ -268,18 +268,18 @@ export default function Leaderboard() {
                             >
                               {(entry.userName ?? "?")[0]?.toUpperCase()}
                             </div>
-                            <p className="text-sm" style={{ color: isMe ? "var(--color-brand)" : "var(--color-foreground)" }}>
+                            <p className="text-sm truncate" style={{ color: isMe ? "var(--color-brand)" : "var(--color-foreground)" }}>
                               {entry.userName ?? "Anonymous"}
                               {isMe && <span className="ml-2 text-xs" style={{ color: "var(--color-brand)" }}>(you)</span>}
                             </p>
                           </div>
                         </td>
-                        <td className="px-5 py-3 text-right">
+                        <td className="px-3 sm:px-5 py-3 text-right whitespace-nowrap">
                           <span className="font-display text-base font-bold tabular-nums" style={{ color: "var(--color-muted)" }}>
                             {formatAverageScore(entry.averageDailyScore)}
                           </span>
                         </td>
-                        <td className="px-5 py-3 text-right hidden sm:table-cell">
+                        <td className="px-3 sm:px-5 py-3 text-right hidden sm:table-cell">
                           <span className="text-xs tabular-nums" style={{ color: "var(--color-subtle)" }}>
                             {entry.gamesPlayed} / {QUALIFY_GAMES}
                           </span>
