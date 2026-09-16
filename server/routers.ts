@@ -391,6 +391,11 @@ const practiceRouter = router({
         companyBTicker: game.companyBTicker,
         sector: game.sector,
         pairingRationale: game.pairingRationale,
+        // Summary AND full analysis, as separate fields — practice has to give
+        // the player the same basis for a decision as the live game does, or
+        // it isn't rehearsing the real thing. Snapshot is preferred over the
+        // live row: it's the copy frozen at publish time, so an archived game
+        // shows the research as it stood on the day.
         researchSummary: research?.researchSummary ?? null,
         researchContent: research?.researchSnapshot ?? research?.content ?? null,
         researchMetrics: research?.metricsSnapshot ?? research?.researchMetrics ?? null,

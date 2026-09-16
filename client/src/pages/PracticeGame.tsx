@@ -1,10 +1,12 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
-import { useState, useEffect, useRef } from "react";
+import { Fragment, useState, useEffect, useRef } from "react";
 import { Link, useRoute } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { toast } from "sonner";
+import { metricGroupInfo } from "@/lib/metricGroups";
+import { MetricExplanationSheet } from "@/components/MetricExplanationSheet";
 import {
   Brain,
   BookOpen,
@@ -52,6 +54,7 @@ export default function PracticeGame() {
   const [gutChoice, setGutChoice] = useState<"A" | "B" | null>(null);
   const [finalChoice, setFinalChoice] = useState<"A" | "B" | null>(null);
   const [answer, setAnswer] = useState<string>("");
+  const [showFullResearch, setShowFullResearch] = useState(false);
   const [result, setResult] = useState<null | {
     predictionScore: number;
     validationScore: number;
@@ -134,6 +137,18 @@ export default function PracticeGame() {
     { side: "A", name: game.companyAName, ticker: game.companyATicker },
     { side: "B", name: game.companyBName, ticker: game.companyBTicker },
   ];
+
+  // researchMetrics is stored as an ARRAY of {label, value} (see ResearchMetric
+  // in the schema), not a keyed object — Object.entries on it would yield array
+  // indices as labels. Same conversion the archive router does.
+  const rawMetrics = (game.researchMetrics ?? []) as Array<{ label: string; value: string }>;
+  const metrics: [string, string][] = (Array.isArray(rawMetrics) ? rawMetrics : [])
+    .filter((m) => m && typeof m.label === "string")
+    .map((m) => [m.label, m.value] as [string, string])
+    .sort((a, b) => metricGroupInfo(a[0]).rank - metricGroupInfo(b[0]).rank);
+  const metricGroups = metrics.map(([label]) => metricGroupInfo(label));
+  // Legacy games whose metrics all sit in one group render without headers.
+  const showGroupHeaders = new Set(metricGroups.map((g) => g.id)).size > 1;
 
   const options: string[] =
     question?.questionType === "multiple_choice"
@@ -246,21 +261,103 @@ export default function PracticeGame() {
               )}
               {(game.researchSummary || game.researchContent) && (
                 <div>
-                  <p
-                    className="text-xs font-semibold uppercase tracking-wider mb-2"
-                    style={{ color: "var(--color-brand)" }}
-                  >
-                    The brief
-                  </p>
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <p
+                      className="text-xs font-semibold uppercase tracking-wider"
+                      style={{ color: "var(--color-brand)" }}
+                    >
+                      {game.researchSummary && !showFullResearch ? "Summary" : "Research Notes"}
+                    </p>
+                    {/* Same summary-by-default with a toggle to the full
+                        analysis as the live game — a practice player needs the
+                        same depth to qualify a decision. */}
+                    {game.researchSummary && game.researchContent && (
+                      <button
+                        className="text-xs font-medium"
+                        style={{ color: "var(--color-brand)" }}
+                        onClick={() => setShowFullResearch(!showFullResearch)}
+                      >
+                        {showFullResearch ? "← Show summary" : "Show full analysis →"}
+                      </button>
+                    )}
+                  </div>
                   <p
                     className="text-sm leading-relaxed whitespace-pre-line"
                     style={{ color: "var(--color-muted)" }}
                   >
-                    {game.researchSummary || game.researchContent}
+                    {game.researchSummary && !showFullResearch
+                      ? game.researchSummary
+                      : game.researchContent || game.researchSummary}
                   </p>
                 </div>
               )}
             </div>
+
+            {/* Key metrics — grouped exactly as the live game and the archive
+                page group them (The Long Game → Game-Day Setup). These were
+                being sent by the server and never rendered, so a practice
+                player had no numbers to reason from. */}
+            {metrics.length > 0 && (
+              <div className="card-glass p-6 mb-4">
+                <p
+                  className="text-xs font-semibold uppercase tracking-wider mb-3"
+                  style={{ color: "var(--color-brand)" }}
+                >
+                  Key Metrics
+                </p>
+                <div
+                  className="rounded-lg overflow-hidden"
+                  style={{ border: "1px solid var(--color-border)" }}
+                >
+                  <table className="w-full text-sm">
+                    <tbody>
+                      {metrics.map(([label, value], i, arr) => (
+                        <Fragment key={label}>
+                          {showGroupHeaders &&
+                            (i === 0 || metricGroups[i - 1].id !== metricGroups[i].id) && (
+                              <tr
+                                style={{
+                                  background: "var(--color-surface-raised)",
+                                  borderBottom: "1px solid var(--color-border)",
+                                }}
+                              >
+                                <td
+                                  colSpan={2}
+                                  className="px-3 sm:px-4 py-1.5 text-[0.625rem] font-bold uppercase tracking-widest"
+                                  style={{ color: "var(--color-brand)" }}
+                                >
+                                  {metricGroups[i].title}
+                                </td>
+                              </tr>
+                            )}
+                          <tr
+                            style={{
+                              borderBottom:
+                                i < arr.length - 1 ? "1px solid var(--color-border)" : undefined,
+                              background: i % 2 === 0 ? "var(--color-surface)" : "transparent",
+                            }}
+                          >
+                            <td
+                              className="px-3 sm:px-4 py-2.5 font-medium"
+                              style={{ color: "var(--color-muted)" }}
+                            >
+                              <div>{label}</div>
+                              <MetricExplanationSheet metricLabel={label} />
+                            </td>
+                            <td
+                              className="px-3 sm:px-4 py-2.5 text-right font-mono font-semibold whitespace-nowrap"
+                              style={{ color: "var(--color-foreground)" }}
+                            >
+                              {value}
+                            </td>
+                          </tr>
+                        </Fragment>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             <div className="card-glass p-6">
               <h2 className="mb-4" style={{ color: "var(--color-foreground)" }}>
