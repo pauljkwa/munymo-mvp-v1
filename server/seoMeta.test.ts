@@ -18,6 +18,7 @@ import { ALL_LEVELS } from "@/content/lessons";
 import {
   buildCrawlContent,
   injectCrawlContent,
+  stripUnconfiguredAnalytics,
   injectPageMeta,
   resolvePageMeta,
   type PageMeta,
@@ -247,5 +248,40 @@ describe("buildCrawlContent — leaf pages carry unique body content", () => {
     const html = await buildCrawlContent(`/learn/${first.id}`);
     // Whatever the prose contains, no stray unescaped script tag can appear.
     expect(html).not.toContain("<script");
+  });
+});
+
+// ─── Unconfigured analytics tag ───────────────────────────────────────────────
+// The umami tag shipped with its Vite %VAR% placeholders unresolved, so every
+// page load requested a literal "%VITE_ANALYTICS_ENDPOINT%/umami", got the SPA
+// shell back, and logged a console error — analytics silently dead rather than
+// absent. Stripped while unconfigured; ships again once the env vars are set.
+describe("stripUnconfiguredAnalytics", () => {
+  const tag =
+    '<script\n      defer\n      src="%VITE_ANALYTICS_ENDPOINT%/umami"\n      data-website-id="%VITE_ANALYTICS_WEBSITE_ID%"></script>';
+
+  it("removes the tag when the placeholder is unresolved", () => {
+    const out = stripUnconfiguredAnalytics(`<body>${tag}</body>`);
+    expect(out).not.toContain("VITE_ANALYTICS_ENDPOINT");
+    expect(out).not.toContain("umami");
+  });
+
+  it("leaves a resolved tag alone, so setting the env vars re-enables it", () => {
+    const resolved =
+      '<script defer src="https://analytics.example.com/umami" data-website-id="abc-123"></script>';
+    expect(stripUnconfiguredAnalytics(`<body>${resolved}</body>`)).toContain(resolved);
+  });
+
+  it("does not touch the working GA4 tag", () => {
+    const ga =
+      '<script async src="https://www.googletagmanager.com/gtag/js?id=G-RLCKFXCSF3"></script>';
+    const out = stripUnconfiguredAnalytics(`<body>${ga}${tag}</body>`);
+    expect(out).toContain(ga);
+    expect(out).not.toContain("umami");
+  });
+
+  it("returns the html untouched when there is no placeholder at all", () => {
+    const html = "<body><p>hello</p></body>";
+    expect(stripUnconfiguredAnalytics(html)).toBe(html);
   });
 });

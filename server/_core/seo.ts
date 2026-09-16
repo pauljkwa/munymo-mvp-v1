@@ -281,6 +281,31 @@ function htmlEscape(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
+/**
+ * Remove the umami analytics tag while it is unconfigured.
+ *
+ * client/index.html carries the tag with Vite `%VAR%` placeholders. Vite only
+ * substitutes those when the matching env vars exist — they never have been —
+ * so production shipped a literal `src="%VITE_ANALYTICS_ENDPOINT%/umami"`.
+ * The browser dutifully requested that path, the SPA catch-all answered with
+ * html, and the browser refused to execute it: a failed request and a console
+ * error on every single page load, collecting nothing. Analytics was silently
+ * dead rather than merely absent, which is worse — it looks installed.
+ *
+ * Stripping rather than deleting the tag from index.html keeps the wiring: set
+ * VITE_ANALYTICS_ENDPOINT and VITE_ANALYTICS_WEBSITE_ID, rebuild, and the
+ * placeholders resolve so this function stops matching and the tag ships.
+ *
+ * GA4 (gtag) is a separate, working install and is untouched.
+ */
+export function stripUnconfiguredAnalytics(html: string): string {
+  if (!html.includes("%VITE_ANALYTICS_ENDPOINT%")) return html;
+  return html.replace(
+    /<script[^>]*%VITE_ANALYTICS_ENDPOINT%[^>]*>[\s\S]*?<\/script>/g,
+    ""
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Crawlable link list
 // ---------------------------------------------------------------------------

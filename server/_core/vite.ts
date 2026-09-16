@@ -5,7 +5,13 @@ import { nanoid } from "nanoid";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import viteConfig from "../../vite.config";
-import { buildCrawlContent, injectCrawlContent, injectPageMeta, resolvePageMeta } from "./seo";
+import {
+  buildCrawlContent,
+  injectCrawlContent,
+  injectPageMeta,
+  resolvePageMeta,
+  stripUnconfiguredAnalytics,
+} from "./seo";
 
 export async function setupVite(app: Express, server: Server) {
   const serverOptions = {
@@ -47,7 +53,7 @@ export async function setupVite(app: Express, server: Server) {
       res
         .status(meta.status)
         .set({ "Content-Type": "text/html" })
-        .end(injectCrawlContent(injectPageMeta(page, meta), content));
+        .end(stripUnconfiguredAnalytics(injectCrawlContent(injectPageMeta(page, meta), content)));
     } catch (e) {
       vite.ssrFixStacktrace(e as Error);
       next(e);
@@ -115,7 +121,7 @@ export function serveStatic(app: Express) {
       res
         .status(meta.status)
         .set("Content-Type", "text/html; charset=utf-8")
-        .send(injectCrawlContent(injectPageMeta(html, meta), content));
+        .send(stripUnconfiguredAnalytics(injectCrawlContent(injectPageMeta(html, meta), content)));
     } catch (err) {
       // Never let SEO decoration take the site down — serve the plain shell.
       console.error("[seo] falling back to plain index.html:", err);
