@@ -1,12 +1,11 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
-import { Fragment, useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useRoute } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { toast } from "sonner";
-import { metricGroupInfo } from "@/lib/metricGroups";
-import { MetricExplanationSheet } from "@/components/MetricExplanationSheet";
+import ResearchMetricsPanel from "@/components/ResearchMetricsPanel";
 import {
   Brain,
   BookOpen,
@@ -138,17 +137,14 @@ export default function PracticeGame() {
     { side: "B", name: game.companyBName, ticker: game.companyBTicker },
   ];
 
-  // researchMetrics is stored as an ARRAY of {label, value} (see ResearchMetric
-  // in the schema), not a keyed object — Object.entries on it would yield array
-  // indices as labels. Same conversion the archive router does.
+  // researchMetrics is stored as an ARRAY of {label, value} (see
+  // ResearchMetric in the schema), not a keyed object — Object.entries on it
+  // would yield array indices as labels. Grouping and pairing are the panel's
+  // job; this only normalises the shape.
   const rawMetrics = (game.researchMetrics ?? []) as Array<{ label: string; value: string }>;
   const metrics: [string, string][] = (Array.isArray(rawMetrics) ? rawMetrics : [])
     .filter((m) => m && typeof m.label === "string")
-    .map((m) => [m.label, m.value] as [string, string])
-    .sort((a, b) => metricGroupInfo(a[0]).rank - metricGroupInfo(b[0]).rank);
-  const metricGroups = metrics.map(([label]) => metricGroupInfo(label));
-  // Legacy games whose metrics all sit in one group render without headers.
-  const showGroupHeaders = new Set(metricGroups.map((g) => g.id)).size > 1;
+    .map((m) => [m.label, m.value] as [string, string]);
 
   const options: string[] =
     question?.questionType === "multiple_choice"
@@ -293,71 +289,16 @@ export default function PracticeGame() {
               )}
             </div>
 
-            {/* Key metrics — grouped exactly as the live game and the archive
-                page group them (The Long Game → Game-Day Setup). These were
-                being sent by the server and never rendered, so a practice
-                player had no numbers to reason from. */}
-            {metrics.length > 0 && (
-              <div className="card-glass p-6 mb-4">
-                <p
-                  className="text-xs font-semibold uppercase tracking-wider mb-3"
-                  style={{ color: "var(--color-brand)" }}
-                >
-                  Key Metrics
-                </p>
-                <div
-                  className="rounded-lg overflow-hidden"
-                  style={{ border: "1px solid var(--color-border)" }}
-                >
-                  <table className="w-full text-sm">
-                    <tbody>
-                      {metrics.map(([label, value], i, arr) => (
-                        <Fragment key={label}>
-                          {showGroupHeaders &&
-                            (i === 0 || metricGroups[i - 1].id !== metricGroups[i].id) && (
-                              <tr
-                                style={{
-                                  background: "var(--color-surface-raised)",
-                                  borderBottom: "1px solid var(--color-border)",
-                                }}
-                              >
-                                <td
-                                  colSpan={2}
-                                  className="px-3 sm:px-4 py-1.5 text-[0.625rem] font-bold uppercase tracking-widest"
-                                  style={{ color: "var(--color-brand)" }}
-                                >
-                                  {metricGroups[i].title}
-                                </td>
-                              </tr>
-                            )}
-                          <tr
-                            style={{
-                              borderBottom:
-                                i < arr.length - 1 ? "1px solid var(--color-border)" : undefined,
-                              background: i % 2 === 0 ? "var(--color-surface)" : "transparent",
-                            }}
-                          >
-                            <td
-                              className="px-3 sm:px-4 py-2.5 font-medium"
-                              style={{ color: "var(--color-muted)" }}
-                            >
-                              <div>{label}</div>
-                              <MetricExplanationSheet metricLabel={label} />
-                            </td>
-                            <td
-                              className="px-3 sm:px-4 py-2.5 text-right font-mono font-semibold whitespace-nowrap"
-                              style={{ color: "var(--color-foreground)" }}
-                            >
-                              {value}
-                            </td>
-                          </tr>
-                        </Fragment>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
+            {/* Two-column comparison, matching the live game. The first
+                attempt used the archive page's flat table, which stacked every
+                metric in one column and collapsed the value column. */}
+            <ResearchMetricsPanel
+              metrics={metrics}
+              tickerA={game.companyATicker}
+              tickerB={game.companyBTicker}
+              companyAName={game.companyAName}
+              companyBName={game.companyBName}
+            />
 
             <div className="card-glass p-6">
               <h2 className="mb-4" style={{ color: "var(--color-foreground)" }}>
