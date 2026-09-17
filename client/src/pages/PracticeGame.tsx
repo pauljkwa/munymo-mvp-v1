@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import ResearchMetricsPanel from "@/components/ResearchMetricsPanel";
 import { ChartSheet } from "@/components/ChartSheet";
 import { ValidationModal } from "@/components/ValidationModal";
+import PerfectScoreConfetti from "@/components/PerfectScoreConfetti";
 import { BarChart2, TrendingUp, Timer } from "lucide-react";
 import {
   Brain,
@@ -413,6 +414,9 @@ export default function PracticeGame() {
         {/* ── Step 4: result ── */}
         {step === "done" && (
           <div className="card-glass p-6 animate-scale-in text-center">
+            {/* Same threshold as the live result — practice rehearses the real
+                thing, so a perfect game earns the same moment. */}
+            {result?.dailyScore === 100 && <PerfectScoreConfetti />}
             <Trophy size={36} className="mx-auto mb-4" style={{ color: "var(--color-brand)" }} />
             {result ? (
               <>

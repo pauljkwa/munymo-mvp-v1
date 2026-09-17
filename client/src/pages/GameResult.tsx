@@ -1,4 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import PerfectScoreConfetti from "@/components/PerfectScoreConfetti";
 import { trpc } from "@/lib/trpc";
 import { useParams } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
@@ -87,6 +88,10 @@ export default function GameResult() {
 
   return (
     <PublicLayout>
+      {/* Reserved for a genuine perfect game: correct prediction AND a correct
+          validation answer inside the 15s window. Anything less gets nothing,
+          which is what keeps it feeling earned. */}
+      {myScore?.totalScore === 100 && <PerfectScoreConfetti />}
       <div className="container py-10 max-w-3xl mx-auto">
         <Link href="/game" className="btn-ghost text-sm mb-6 inline-flex">
           <ArrowLeft size={14} /> Back to Today's Game
