@@ -14,6 +14,7 @@ import { ALL_LEVELS } from "@/content/lessons";
 import { toast } from "sonner";
 import { ValidationModal } from "@/components/ValidationModal";
 import ResultReminderPrompt from "@/components/ResultReminderPrompt";
+import MoreToPlay from "@/components/MoreToPlay";
 import {
   Brain,
   BookOpen,
@@ -805,6 +806,11 @@ export default function DailyGame() {
             </Link>
           </div>
         )}
+
+        {/* Nothing live left to play today. Previously this screen ended at
+            "results will be published after the game closes" — accurate, and a
+            dead end for the seven hours between lockout and the close. */}
+        {(step === "submitted" || isLocked) && <MoreToPlay />}
 
         {/* ── Auto-submitted (gut pick was submitted by cron at lockout) ── */}
         {(step === "submitted" && wasAutoSubmitted) && (

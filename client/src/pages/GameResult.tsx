@@ -1,5 +1,6 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import PerfectScoreConfetti from "@/components/PerfectScoreConfetti";
+import MoreToPlay from "@/components/MoreToPlay";
 import { trpc } from "@/lib/trpc";
 import { useParams } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
@@ -455,6 +456,10 @@ export default function GameResult() {
             Research Hub
           </Link>
         </div>
+
+        {/* The other dead end: they've read their result, and tomorrow's game
+            is hours away. */}
+        <MoreToPlay />
       </div>
     </PublicLayout>
   );
