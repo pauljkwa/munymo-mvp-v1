@@ -1263,3 +1263,127 @@ describe("rankSeasonStandings — total points, golf ties, percentiles", () => {
     expect(rankSeasonStandings([])).toEqual([]);
   });
 });
+
+// ─── Gut vs Research (shared/insight) ────────────────────────────────────────
+import { computeGutVsResearch, describeGutVsResearch } from "@shared/insight";
+
+describe("computeGutVsResearch", () => {
+  const row = (gameDate: string, sector: string, gut: "A" | "B", final: "A" | "B", winner: "A" | "B") => ({ gameDate, sector, gut, final, winner });
+
+  it("counts helped and hurt only where the pick changed", () => {
+    const g = computeGutVsResearch([
+      row("2026-08-03", "Energy", "A", "A", "A"), // kept, right
+      row("2026-08-04", "Energy", "A", "B", "B"), // changed, helped
+      row("2026-08-05", "Energy", "A", "B", "A"), // changed, hurt
+      row("2026-09-01", "Tech", "B", "B", "A"), // kept, wrong
+    ]);
+    expect(g.games).toBe(4);
+    expect(g.changed).toBe(2);
+    expect(g.changedHelped).toBe(1);
+    expect(g.changedHurt).toBe(1);
+    expect(g.kept).toBe(2);
+    expect(g.net).toBe(0);
+    expect(g.gutCorrect).toBe(2); // A,A / A,B(no) / A,A(yes) / B,A(no) => games 1 and 3
+    expect(g.finalCorrect).toBe(2);
+    expect(g.gutAccuracy).toBe(50);
+    expect(g.finalAccuracy).toBe(50);
+  });
+
+  it("ignores games without a final pick or a winner", () => {
+    const g = computeGutVsResearch([
+      { gameDate: "2026-09-01", sector: "Tech", gut: "A", final: null, winner: "A" },
+      { gameDate: "2026-09-02", sector: "Tech", gut: "A", final: "A", winner: null },
+    ]);
+    expect(g.games).toBe(0);
+  });
+
+  it("only reports sectors with enough games, best first", () => {
+    const g = computeGutVsResearch([
+      row("2026-08-03", "Energy", "A", "A", "A"),
+      row("2026-08-04", "Energy", "A", "A", "A"),
+      row("2026-08-05", "Energy", "A", "A", "B"),
+      row("2026-08-06", "Tech", "A", "A", "A"),
+    ]);
+    expect(g.bySector).toEqual([{ sector: "Energy", games: 3, correct: 2, accuracy: 67 }]);
+  });
+
+  it("groups accuracy by month, oldest first", () => {
+    const g = computeGutVsResearch([
+      row("2026-09-01", "Tech", "A", "A", "A"),
+      row("2026-08-01", "Tech", "A", "A", "B"),
+    ]);
+    expect(g.byMonth.map((m) => m.month)).toEqual(["2026-08", "2026-09"]);
+    expect(g.byMonth[0].accuracy).toBe(0);
+    expect(g.byMonth[1].accuracy).toBe(100);
+  });
+
+  it("describes the result honestly in each direction", () => {
+    const base = computeGutVsResearch([]);
+    expect(describeGutVsResearch(base)).toMatch(/Play a few games/);
+    expect(describeGutVsResearch({ ...base, games: 5, changed: 0 })).toMatch(/never changed your pick/);
+    expect(describeGutVsResearch({ ...base, games: 10, changed: 3, changedHelped: 2, changedHurt: 1, net: 1 })).toMatch(/paying off/);
+    expect(describeGutVsResearch({ ...base, games: 10, changed: 3, changedHelped: 1, changedHurt: 2, net: -1 })).toMatch(/first instinct/);
+    expect(describeGutVsResearch({ ...base, games: 10, changed: 2, changedHelped: 1, changedHurt: 1, net: 0 })).toMatch(/wash/);
+  });
+});
+
+// ─── Milestones (shared/milestones) ──────────────────────────────────────────
+import { computeMilestones } from "@shared/milestones";
+
+describe("computeMilestones", () => {
+  const base = { totalGames: 12, currentStreak: 4, longestStreak: 9, currentWinStreak: 1, score: 80, qualificationGames: 10, perfectGames: 0 };
+
+  it("says nothing on an ordinary day", () => {
+    expect(computeMilestones(base)).toEqual([]);
+  });
+
+  it("marks the first game", () => {
+    const m = computeMilestones({ ...base, totalGames: 1, currentStreak: 1, longestStreak: 1 });
+    expect(m.map((x) => x.title)).toEqual(["First game on the record"]);
+  });
+
+  it("marks qualification on exactly the qualifying game", () => {
+    expect(computeMilestones({ ...base, totalGames: 10 })[0].title).toMatch(/qualified/);
+    expect(computeMilestones({ ...base, totalGames: 11 })).toEqual([]);
+  });
+
+  it("marks streak landmarks and otherwise a new personal best", () => {
+    expect(computeMilestones({ ...base, currentStreak: 10, longestStreak: 10 })[0].title).toBe("10-day streak");
+    expect(computeMilestones({ ...base, currentStreak: 7, longestStreak: 7 })[0].title).toBe("New longest streak: 7 days");
+    expect(computeMilestones({ ...base, currentStreak: 2, longestStreak: 2 })).toEqual([]);
+  });
+
+  it("marks win runs", () => {
+    expect(computeMilestones({ ...base, currentWinStreak: 5 })[0].title).toBe("5 correct in a row");
+  });
+
+  it("marks a perfect game, numbered after the first", () => {
+    expect(computeMilestones({ ...base, score: 100, perfectGames: 1 })[0].title).toBe("Your first perfect game");
+    expect(computeMilestones({ ...base, score: 100, perfectGames: 3 })[0].title).toBe("Perfect game number 3");
+  });
+
+  it("never returns more than two", () => {
+    const m = computeMilestones({ totalGames: 10, currentStreak: 10, longestStreak: 10, currentWinStreak: 5, score: 100, qualificationGames: 10, perfectGames: 1 });
+    expect(m.length).toBe(2);
+  });
+});
+
+// ─── Unsubscribe tokens ──────────────────────────────────────────────────────
+import { unsubscribeToken, verifyUnsubscribeToken, buildUnsubscribeUrl } from "./unsubscribe";
+
+describe("unsubscribe tokens", () => {
+  it("verifies its own token and rejects a forged or foreign one", () => {
+    const t = unsubscribeToken(42, "k");
+    expect(t).toHaveLength(32);
+    expect(verifyUnsubscribeToken(42, t, "k")).toBe(true);
+    expect(verifyUnsubscribeToken(43, t, "k")).toBe(false);
+    expect(verifyUnsubscribeToken(42, t, "other-key")).toBe(false);
+    expect(verifyUnsubscribeToken(42, "x".repeat(32), "k")).toBe(false);
+    expect(verifyUnsubscribeToken(42, "", "k")).toBe(false);
+    expect(verifyUnsubscribeToken(0, t, "k")).toBe(false);
+  });
+
+  it("builds a link carrying the id and token", () => {
+    expect(buildUnsubscribeUrl(42)).toMatch(/^https:\/\/munymo\.com\/api\/unsubscribe\?u=42&t=[0-9a-f]{32}$/);
+  });
+});

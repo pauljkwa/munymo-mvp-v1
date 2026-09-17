@@ -1,3 +1,4 @@
+import { buildUnsubscribeUrl } from "./unsubscribe";
 import { Resend } from "resend";
 import { ENV } from "./_core/env";
 
@@ -554,10 +555,23 @@ export const FEEDBACK_ADDRESS = "feedback@munymo.com";
  * Send a single transactional email. Returns { success: true } or { success: false, error }.
  * Never throws — callers can proceed even if email delivery fails.
  */
+/**
+ * Adds the one-click unsubscribe link to the standard footer. Player-facing
+ * mail must carry it (Gmail/Yahoo bulk-sender rules, and plain courtesy);
+ * owner notifications and feedback relays have no recipient to unsubscribe.
+ */
+export function withUnsubscribeFooter(html: string, unsubscribeUrl: string): string {
+  const marker = "You're receiving this because you have a Munymo account.<br/>";
+  const link = `You're receiving this because you have a Munymo account. <a href="${unsubscribeUrl}" style="color:${TEXT_LABEL};text-decoration:underline;">Unsubscribe</a><br/>`;
+  return html.includes(marker) ? html.replace(marker, link) : html;
+}
+
 export async function sendEmail(opts: {
   to: string;
   subject: string;
   html: string;
+  /** Per-recipient one-click opt-out link (server/unsubscribe.ts). Omit only for non-player mail. */
+  unsubscribeUrl?: string;
 }): Promise<EmailResult> {
   const resend = getResend();
   if (!resend) {
@@ -565,12 +579,20 @@ export async function sendEmail(opts: {
     return { success: false, error: "RESEND_API_KEY not configured" };
   }
   try {
+    const html = opts.unsubscribeUrl ? withUnsubscribeFooter(opts.html, opts.unsubscribeUrl) : opts.html;
+    const headers = opts.unsubscribeUrl
+      ? {
+          "List-Unsubscribe": `<${opts.unsubscribeUrl}>`,
+          "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+        }
+      : undefined;
     const { error } = await resend.emails.send({
       from: FROM_ADDRESS,
       to: opts.to,
       replyTo: FEEDBACK_ADDRESS,
       subject: opts.subject,
-      html: opts.html,
+      html,
+      headers,
     });
     if (error) {
       console.warn("[Email] Resend error:", error);
@@ -589,7 +611,7 @@ export async function sendEmail(opts: {
  * abort the loop — a single bad address will not block others.
  */
 export async function broadcastEmail(opts: {
-  recipients: Array<{ email: string | null; name: string | null }>;
+  recipients: Array<{ id?: number; email: string | null; name: string | null }>;
   subject: string;
   html: string;
 }): Promise<{ sent: number; failed: number }> {
@@ -597,7 +619,8 @@ export async function broadcastEmail(opts: {
   let failed = 0;
   for (const recipient of opts.recipients) {
     if (!recipient.email) { failed++; continue; }
-    const result = await sendEmail({ to: recipient.email, subject: opts.subject, html: opts.html });
+    const unsubscribeUrl = recipient.id ? buildUnsubscribeUrl(recipient.id) : undefined;
+    const result = await sendEmail({ to: recipient.email, subject: opts.subject, html: opts.html, unsubscribeUrl });
     if (result.success) sent++;
     else failed++;
   }

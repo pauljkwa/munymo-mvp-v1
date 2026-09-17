@@ -24,6 +24,7 @@ import {
 import { ENV } from "./_core/env";
 import { BENCHMARK_BOT_ID, HIDDEN_BOT_IDS, LEADERBOARD_QUALIFICATION_GAMES, TESTER_BOT_IDS } from "@shared/const";
 import { rankSeasonStandings, type SeasonRow } from "@shared/leaderboard";
+import type { PickOutcome } from "@shared/insight";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -1375,4 +1376,33 @@ export async function getChartSnapshot(gameId: number) {
     .where(eq(gameResearch.gameId, gameId))
     .limit(1);
   return rows[0]?.chartSnapshot ?? null;
+}
+
+// ─── Gut vs Research ─────────────────────────────────────────────────────────
+/**
+ * Every published game this player made a final pick in, with what they
+ * picked and what won. Feeds computeGutVsResearch (shared/insight.ts).
+ */
+export async function getPlayerPickOutcomes(userId: number): Promise<PickOutcome[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select({
+      gameDate: dailyGames.gameDate,
+      sector: dailyGames.sector,
+      gut: playerPicks.gutSelection,
+      final: playerPicks.finalSelection,
+      winner: dailyGames.winner,
+    })
+    .from(playerPicks)
+    .innerJoin(dailyGames, eq(playerPicks.gameId, dailyGames.id))
+    .where(and(eq(playerPicks.userId, userId), eq(dailyGames.status, "result_published")))
+    .orderBy(asc(dailyGames.gameDate));
+  return rows.map((r) => ({
+    gameDate: r.gameDate,
+    sector: r.sector ?? null,
+    gut: (r.gut as "A" | "B" | null) ?? null,
+    final: (r.final as "A" | "B" | null) ?? null,
+    winner: (r.winner as "A" | "B" | null) ?? null,
+  }));
 }

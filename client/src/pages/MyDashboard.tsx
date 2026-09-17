@@ -19,6 +19,8 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { Link } from "wouter";
+import { Brain, Microscope } from "lucide-react";
+import { seasonLabel } from "@shared/leaderboard";
 
 // ─── Stat Card ────────────────────────────────────────────────────────────────
 
@@ -131,7 +133,7 @@ export default function MyDashboard() {
   const displayName = profile?.displayName || user?.name || "Player";
   const tier = profile?.tier ?? "free";
   const memberSince = profile?.createdAt
-    ? new Date(profile.createdAt).toLocaleDateString("en-GB", { month: "long", year: "numeric" })
+    ? new Date(profile.createdAt).toLocaleDateString("en-US", { month: "long", year: "numeric" })
     : "—";
 
   return (
@@ -175,11 +177,16 @@ export default function MyDashboard() {
                 value={stats.currentWinStreak}
                 sub={`Best: ${stats.longestWinStreak}`}
               />
-              <StatCard
-                icon={TrendingDown}
-                label="Lose Streak"
-                value={stats.currentLoseStreak}
-              />
+              {/* A red zero on your home screen helps nobody. Shown only when
+                  there is actually a run to talk about. */}
+              {stats.currentLoseStreak > 0 && (
+                <StatCard
+                  icon={TrendingDown}
+                  label="Losing run"
+                  value={stats.currentLoseStreak}
+                  sub="Wrong in a row"
+                />
+              )}
               <StatCard
                 icon={BookOpen}
                 label="Research Score"
@@ -216,6 +223,88 @@ export default function MyDashboard() {
           )}
         </Section>
 
+        {/* ── Gut vs Research ── */}
+        {stats && (
+          <Section title="Gut vs Research">
+            <div
+              className="rounded-2xl p-5"
+              style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)" }}
+            >
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="rounded-xl p-4 text-center" style={{ background: "var(--color-surface-raised)" }}>
+                  <Brain size={16} className="mx-auto mb-1" style={{ color: "var(--color-brand)" }} />
+                  <p className="text-2xl font-display font-bold" style={{ color: "var(--color-foreground)" }}>
+                    {stats.insight.games > 0 ? `${stats.insight.gutAccuracy}%` : "—"}
+                  </p>
+                  <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-muted)" }}>
+                    Instinct alone
+                  </p>
+                  <p className="text-[0.625rem] mt-0.5" style={{ color: "var(--color-subtle)" }}>
+                    if your gut pick had been final
+                  </p>
+                </div>
+                <div className="rounded-xl p-4 text-center" style={{ background: "var(--color-brand-muted)", border: "1px solid var(--color-brand)" }}>
+                  <Microscope size={16} className="mx-auto mb-1" style={{ color: "var(--color-brand)" }} />
+                  <p className="text-2xl font-display font-bold" style={{ color: "var(--color-foreground)" }}>
+                    {stats.insight.games > 0 ? `${stats.insight.finalAccuracy}%` : "—"}
+                  </p>
+                  <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-muted)" }}>
+                    After research
+                  </p>
+                  <p className="text-[0.625rem] mt-0.5" style={{ color: "var(--color-subtle)" }}>
+                    your scored picks
+                  </p>
+                </div>
+              </div>
+              <p className="text-sm leading-relaxed" style={{ color: "var(--color-foreground)" }}>
+                {stats.insightSummary}
+              </p>
+
+              {stats.insight.bySector.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--color-subtle)" }}>
+                    By sector (3+ games)
+                  </p>
+                  <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--color-border)" }}>
+                    {stats.insight.bySector.map((sec, i) => (
+                      <div
+                        key={sec.sector}
+                        className="flex items-center justify-between px-3 py-2 text-xs"
+                        style={{
+                          background: i % 2 === 0 ? "var(--color-surface)" : "var(--color-surface-raised)",
+                          borderBottom: i < stats.insight.bySector.length - 1 ? "1px solid var(--color-border)" : "none",
+                        }}
+                      >
+                        <span style={{ color: "var(--color-foreground)" }}>{sec.sector}</span>
+                        <span className="tabular-nums" style={{ color: "var(--color-muted)" }}>
+                          {sec.correct}/{sec.games} · <strong style={{ color: sec.accuracy >= 50 ? "var(--color-success)" : "var(--color-foreground)" }}>{sec.accuracy}%</strong>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {stats.insight.byMonth.length > 1 && (
+                <div className="mt-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--color-subtle)" }}>
+                    Accuracy by month
+                  </p>
+                  <div className="flex items-end gap-2">
+                    {stats.insight.byMonth.map((m) => (
+                      <div key={m.month} className="flex-1 text-center">
+                        <div className="mx-auto w-full rounded-t-md" style={{ height: `${Math.max(6, m.accuracy * 0.6)}px`, background: "var(--color-brand)", opacity: 0.35 + (m.accuracy / 100) * 0.65 }} />
+                        <p className="text-[0.625rem] mt-1 tabular-nums" style={{ color: "var(--color-foreground)" }}>{m.accuracy}%</p>
+                        <p className="text-[0.625rem]" style={{ color: "var(--color-subtle)" }}>{seasonLabel(m.month).slice(0, 3)} · {m.games}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </Section>
+        )}
+
         {/* ── Game History ── */}
         <Section title="Game History">
           {historyLoading ? (
@@ -245,7 +334,7 @@ export default function MyDashboard() {
                     <div>
                       <p className="text-xs font-mono" style={{ color: "var(--color-muted)" }}>
                         {entry.gameDate
-                          ? new Date(entry.gameDate + "T12:00:00Z").toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short" })
+                          ? new Date(entry.gameDate + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
                           : `Game #${entry.gameId}`}
                       </p>
                     </div>

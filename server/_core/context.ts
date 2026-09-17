@@ -89,6 +89,7 @@ export async function createContext(
           welcomeEmailSent.add(clerkUserId);
           const to = user.email;
           const playerName = user.name;
+          const unsubscribeUserId = user.id;
           import("../email")
             .then(({ buildWelcomeEmail, sendEmail }) => {
               const joinDate = new Date().toLocaleDateString("en-AU", {
@@ -97,7 +98,9 @@ export async function createContext(
                 year: "numeric",
               });
               const { subject, html } = buildWelcomeEmail({ playerName, joinDate });
-              return sendEmail({ to, subject, html });
+              return import("../unsubscribe").then(({ buildUnsubscribeUrl }) =>
+                sendEmail({ to, subject, html, unsubscribeUrl: buildUnsubscribeUrl(unsubscribeUserId) })
+              );
             })
             .then((result) => {
               if (result && !result.success) {

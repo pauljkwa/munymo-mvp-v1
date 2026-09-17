@@ -1,6 +1,9 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import PerfectScoreConfetti from "@/components/PerfectScoreConfetti";
 import MoreToPlay from "@/components/MoreToPlay";
+import ShareResultButton from "@/components/ShareResultButton";
+import { computeMilestones } from "@shared/milestones";
+import { LEADERBOARD_QUALIFICATION_GAMES } from "@shared/const";
 import { trpc } from "@/lib/trpc";
 import { useParams } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
@@ -38,6 +41,10 @@ export default function GameResult() {
     undefined,
     { enabled: isAuthenticated }
   );
+  // For milestones and the share card. Only the player's LATEST scored game
+  // gets milestones — an archive page from July must not say "first game".
+  const { data: stats } = trpc.dashboard.getStats.useQuery(undefined, { enabled: isAuthenticated });
+  const { data: history } = trpc.scores.getMyHistory.useQuery(undefined, { enabled: isAuthenticated });
 
   if (isLoading) {
     return (
@@ -108,7 +115,7 @@ export default function GameResult() {
         >
           <Trophy size={40} className="mx-auto mb-4" style={{ color: "var(--color-brand)" }} />
           <p className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: "var(--color-brand)" }}>
-            {game.gameDate} — Winner
+            {new Date(`${game.gameDate}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: "UTC" })} — Winner
           </p>
           <div className="ticker-chip mx-auto mb-2">{winnerTicker}</div>
           <h2 className="font-display text-2xl" style={{ color: "var(--color-foreground)" }}>
@@ -192,6 +199,37 @@ export default function GameResult() {
           );
         })()}
 
+        {/* ── Milestones (latest game only) ── */}
+        {isAuthenticated && myPick && myScore && myStreak && stats && history && history[0]?.gameId === gameId && (() => {
+          const ms = computeMilestones({
+            totalGames: stats.totalGames,
+            currentStreak: myStreak.currentStreak,
+            longestStreak: myStreak.longestStreak,
+            currentWinStreak: myStreak.currentWinStreak ?? 0,
+            score: myScore.totalScore,
+            qualificationGames: LEADERBOARD_QUALIFICATION_GAMES,
+            perfectGames: stats.perfectGames,
+          });
+          if (ms.length === 0) return null;
+          return (
+            <div className="grid gap-3 mb-6 animate-fade-up delay-75" style={{ gridTemplateColumns: ms.length > 1 ? "repeat(auto-fit, minmax(240px, 1fr))" : "1fr" }}>
+              {ms.map((m) => (
+                <div
+                  key={m.title}
+                  className="card-glass p-4 flex items-start gap-3"
+                  style={{ borderColor: "var(--color-gold)", background: "var(--color-gold-muted)" }}
+                >
+                  <span className="text-2xl leading-none">{m.emoji}</span>
+                  <div>
+                    <p className="text-sm font-semibold" style={{ color: "var(--color-foreground)" }}>{m.title}</p>
+                    <p className="text-xs mt-0.5" style={{ color: "var(--color-muted)" }}>{m.body}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+
         {/* ── Player result (played) ── */}
         {isAuthenticated && myPick && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 animate-fade-up delay-75">
@@ -271,20 +309,54 @@ export default function GameResult() {
         {/* ── Streak summary ── */}
         {isAuthenticated && myPick && myStreak && (
           <>
-            {/* Losing streak intervention */}
-            {(myStreak.currentLoseStreak ?? 0) >= 5 && (
-              <div
-                className="card-glass p-4 mb-4 animate-fade-up delay-75"
-                style={{
-                  borderColor: "var(--color-border)",
-                  background: "var(--color-surface-raised)",
-                }}
-              >
-                <p className="text-sm italic" style={{ color: "var(--color-muted)" }}>
-                  {myStreak.currentLoseStreak} losses in a row — even the best analysts hit rough patches. Keep showing up; the edge comes from staying in the game.
-                </p>
+            {/* Share — the Wordle grid, for Munymo */}
+            {myScore && (
+              <div className="flex justify-center mb-4 animate-fade-up delay-75">
+                <ShareResultButton
+                  gameId={gameId}
+                  gameDate={game.gameDate}
+                  tickerA={game.companyATicker}
+                  tickerB={game.companyBTicker}
+                  gutCorrect={myPick.gutSelection ? gutCorrect : null}
+                  finalCorrect={finalCorrect}
+                  validationScore={myScore.validationScore}
+                  validationAnswered={Boolean(myPick.validationAnswer)}
+                  totalScore={myScore.totalScore}
+                  currentStreak={myStreak.currentStreak}
+                />
               </div>
             )}
+
+            {/* Losing streak intervention (Decision 2). Five wrong in a row
+                gets a specific lesson, not a platitude; three gets a nudge. */}
+            {(myStreak.currentLoseStreak ?? 0) >= 5 ? (
+              <div
+                className="card-glass p-4 mb-4 animate-fade-up delay-75"
+                style={{ borderColor: "var(--color-brand)", background: "var(--color-brand-muted)" }}
+              >
+                <p className="text-sm font-semibold mb-1" style={{ color: "var(--color-foreground)" }}>
+                  {myStreak.currentLoseStreak} wrong in a row. Time to change the method, not the effort.
+                </p>
+                <p className="text-xs mb-2" style={{ color: "var(--color-muted)" }}>
+                  A run like this usually means picks are being made on a story rather than a checklist.
+                  Three minutes on this lesson before tomorrow's game is the reset: it turns the
+                  metrics panel into a fixed set of questions you answer the same way every day.
+                </p>
+                <Link href="/learn/l500-3" className="text-xs font-semibold" style={{ color: "var(--color-brand)" }}>
+                  Checklists Beat Hunches (3 min) →
+                </Link>
+              </div>
+            ) : (myStreak.currentLoseStreak ?? 0) >= 3 ? (
+              <div
+                className="card-glass p-4 mb-4 animate-fade-up delay-75"
+                style={{ borderColor: "var(--color-border)", background: "var(--color-surface-raised)" }}
+              >
+                <p className="text-sm" style={{ color: "var(--color-muted)" }}>
+                  {myStreak.currentLoseStreak} wrong in a row. On a one-day head-to-head that happens to everyone;
+                  what matters is whether you read the Hindsight Spotlight below and can say what you'd weigh differently.
+                </p>
+              </div>
+            ) : null}
             {/* Streak row */}
             <div
               className="card-glass p-4 mb-6 flex flex-wrap items-center gap-4 animate-fade-up delay-75"

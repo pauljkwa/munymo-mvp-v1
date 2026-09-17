@@ -226,8 +226,14 @@ export default function DailyGame() {
             No Game Today
           </h2>
           <p style={{ color: "var(--color-muted)" }}>
-            There is no active game scheduled for today. Check back tomorrow.
+            There is no active game scheduled for today — usually a US market holiday. The next
+            matchup goes live after the next trading session.
           </p>
+          {/* Same alternatives as every other "nothing live" state; this was
+              the one dead end left in the product. */}
+          <div className="max-w-3xl mx-auto text-left mt-8">
+            <MoreToPlay />
+          </div>
         </div>
       </PublicLayout>
     );
@@ -1083,6 +1089,10 @@ export default function DailyGame() {
 // ─── Lockout Countdown Footer ─────────────────────────────────────────────────
 
 function LockoutCountdown({ lockoutTime }: { lockoutTime: Date }) {
+  // The bottom tab bar only exists for signed-in players. For a visitor the
+  // bar used to float 56px above the bottom of the screen over the footer,
+  // with an empty strip beneath it.
+  const { likelyAuthenticated } = useAuth();
   const [timeLeft, setTimeLeft] = useState(() => lockoutTime.getTime() - Date.now());
 
   useEffect(() => {
@@ -1115,14 +1125,14 @@ function LockoutCountdown({ lockoutTime }: { lockoutTime: Date }) {
   return (
     <>
       {/* Spacer so page content isn't hidden behind this bar + bottom nav */}
-      <div className="h-[56px] md:h-[48px]" />
+      <div className="h-[48px]" />
       <div
         className={[
           "fixed left-0 right-0 z-40 flex items-center justify-center gap-3 px-4 py-3 shadow-[0_-2px_16px_rgba(0,0,0,0.15)]",
           // On mobile dock on top of the BottomNav tab bar (56px + iOS
           // safe-area inset — keep in sync with BottomNav.tsx); desktop has no
           // tab bar, so sit at bottom-0.
-          "bottom-[calc(56px+env(safe-area-inset-bottom))] md:bottom-0",
+          likelyAuthenticated ? "bottom-[calc(56px+env(safe-area-inset-bottom))] md:bottom-0" : "bottom-0",
           isFlashing ? "animate-pulse" : "",
         ].join(" ")}
         style={{ background: bgColor, transition: "background 1s ease" }}

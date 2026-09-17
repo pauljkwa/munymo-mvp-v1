@@ -12,6 +12,7 @@ import type { Express, Request, Response } from "express";
 import { notifyOwner } from "./notification";
 import { ENV } from "./env";
 import { settleFromPrices } from "../scoring";
+import { buildUnsubscribeUrl } from "../unsubscribe";
 
 /**
  * Shared-secret auth for the scheduled endpoints.
@@ -1044,7 +1045,7 @@ async function streakAtRiskHandler(req: Request, res: Response) {
             magicLink,
           });
 
-      const result = await sendEmail({ to: u.email, subject, html });
+      const result = await sendEmail({ to: u.email, subject, html, unsubscribeUrl: buildUnsubscribeUrl(u.id) });
       if (result.success) sent++; else skipped++;
     }
 

@@ -10,6 +10,7 @@ import {
   settleFromPrices,
 } from "./scoring";
 import { hashEndpoint } from "./push";
+import { buildUnsubscribeUrl } from "./unsubscribe";
 import {
   broadcastEmail,
   buildFeedbackEmail,
@@ -22,6 +23,7 @@ import {
 import { z } from "zod";
 import { COOKIE_NAME } from "@shared/const";
 import { currentSeasonKey, seasonLabel, seasonWindow } from "@shared/leaderboard";
+import { computeGutVsResearch, describeGutVsResearch } from "@shared/insight";
 import type { Candle } from "../drizzle/schema";
 import { createMagicLink as createMagicLinkShared } from "./_core/magicLink";
 import { ENV } from "./_core/env";
@@ -93,6 +95,7 @@ import {
   markLessonComplete,
   getSeasonStandings,
   getSeasonKeys,
+  getPlayerPickOutcomes,
 } from "./db";
 import { ALL_LESSON_IDS } from "@shared/lessonIds";
 
@@ -1209,7 +1212,7 @@ const adminRouter = router({
             gameDate: game.gameDate,
           });
           const result = await import("./email").then((m) =>
-            m.sendEmail({ to: user.email!, subject, html })
+            m.sendEmail({ to: user.email!, subject, html, unsubscribeUrl: buildUnsubscribeUrl(user.id) })
           );
           if (result.success) emailsSent++; else emailsFailed++;
         }
@@ -1605,7 +1608,9 @@ const adminRouter = router({
                 magicLink: playMagicLink,
               }));
             }
-            const result = await import("./email").then((m) => m.sendEmail({ to: user.email!, subject, html }));
+            const result = await import("./email").then((m) =>
+              m.sendEmail({ to: user.email!, subject, html, unsubscribeUrl: buildUnsubscribeUrl(user.id) })
+            );
             if (result.success) emailsSent++; else emailsFailed++;
           }
           console.log(`[Email] End-of-day notifications: ${emailsSent} sent, ${emailsFailed} failed (${scoredPicks.length} players, ${allUsers.length - scoredPicks.length} non-players)`);
@@ -1921,8 +1926,15 @@ const dashboardRouter = router({
       rank: mine?.rank ?? null,
     };
 
+    // Gut vs Research — the insight the two-pick mechanic exists to produce.
+    const insight = computeGutVsResearch(await getPlayerPickOutcomes(ctx.user.id));
+    const perfectGames = history.filter((h) => (h.totalScore ?? 0) === 100).length;
+
     return {
       season,
+      insight,
+      insightSummary: describeGutVsResearch(insight),
+      perfectGames,
       totalGames,
       accuracy,
       totalScore,

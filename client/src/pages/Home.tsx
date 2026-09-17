@@ -116,7 +116,7 @@ const FAQ_ITEMS = [
   },
   {
     q: "Do I need trading or investing experience to play?",
-    a: "No. Munymo is daily calisthenics for your financial brain, whichever end of the spectrum you're on. If you're new to markets, the plain-English research briefs and daily repetition build genuine intuition from zero. If you already know your way around a balance sheet, it's a morning kickstart for the trading day, or five focused minutes on the train — and the leaderboard doesn't care which one you are.",
+    a: "No. Munymo is daily calisthenics for your financial brain, whichever end of the spectrum you're on. If you're new to markets, the plain-English research briefs and daily repetition build genuine intuition from zero. If you already know your way around a balance sheet, it's a kickstart before the US open — morning in New York, evening in Sydney — or five focused minutes on the train — and the leaderboard doesn't care which one you are.",
   },
   {
     q: "Can a complete beginner learn stock analysis by playing a game?",
