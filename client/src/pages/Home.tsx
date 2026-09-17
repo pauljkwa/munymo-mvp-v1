@@ -6,6 +6,7 @@ import { Link } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
 import MunymoLogo from "@/components/MunymoLogo";
 import { usePageMeta } from "@/hooks/usePageMeta";
+import { LEADERBOARD_QUALIFICATION_GAMES as QUALIFY_GAMES } from "@shared/const";
 import {
   Accordion,
   AccordionContent,
@@ -108,7 +109,7 @@ const FAQ_ITEMS = [
   },
   {
     q: "Why do I pick twice — once before the research and once after?",
-    a: "The first pick captures your raw instinct before any information can influence it. Comparing your gut picks with your final picks over time reveals something no course can teach you: whether research genuinely improves your judgment, and in which direction. The gut pick is also your safety net: it registers you as in the game, so if life pulls you away before you finish, it's automatically submitted as your final pick at lockout — your streak stays alive — and the validation question is held for you to answer later, even after the next trading day has begun, so its 20 points aren't lost.",
+    a: "The first pick captures your raw instinct before any information can influence it. Comparing your gut picks with your final picks over time reveals something no course can teach you: whether research genuinely improves your judgment, and in which direction. The gut pick is also your safety net: it registers you as in the game, so if life pulls you away before you finish, it's automatically submitted as your final pick at lockout — your streak stays alive — and the validation question is held for you to answer any time before the result is published after the close, so its 20 points aren't lost.",
   },
   {
     q: "How does scoring work?",
@@ -132,11 +133,15 @@ const FAQ_ITEMS = [
   },
   {
     q: "Why is it daily, and what happens if I miss a day?",
-    a: "Financial intuition is a skill, and skills are built through consistent repetition — one focused decision a day beats a weekend cram. Streaks track that consistency. If life gets in the way, Away Status lets you protect your streak for a defined period while you're not playing: you keep the streak, but you don't earn points for days you sit out.",
+    a: "Financial intuition is a skill, and skills are built through consistent repetition — one focused decision a day beats a weekend cram. Streaks track that consistency. If life gets in the way, Away Status lets you pause your streak for as long as you need, no questions asked: switch it on from your profile and your streak is frozen until you switch it off. You don't earn points for days you sit out, and the streak doesn't grow while it's paused.",
   },
   {
     q: "How are the two companies chosen each day?",
     a: "Every matchup is curated fresh from what's actually happening in the market. The two companies always share a sector so the comparison is meaningful, both must have a genuine case for outperforming, and the pairing is tied to a real news story from the last couple of days. That article is credited and linked right on the game page — click through and read it if you want the full story behind the day's pairing. Strict freshness rules stop sectors and companies from repeating too often, so the game keeps showing you new territory.",
+  },
+  {
+    q: "Who writes the research?",
+    a: "An AI research agent, every trading day, from live sources. After the close it reads the day's financial news, picks tomorrow's pairing, gathers both companies' metrics and writes the brief, the validation question and the next day's Hindsight Spotlight. Every pairing is tied to a real, credited article that you can open from the game page, and the results are settled from published open and close prices, not from anything the agent writes. It is not reviewed by a human before it goes live, which is why Munymo is honest about what it is: a training brief for a game, not analysis you should act on. If you spot an error, the feedback form goes straight to the founder.",
   },
   {
     q: "What is MunyIQ?",
@@ -559,7 +564,7 @@ export default function Home() {
                   icon: BookOpen,
                   step: "02",
                   title: "Read the Research",
-                  body: "Charts, financial metrics, and an expert-curated research brief.",
+                  body: "Charts, financial metrics, and a plain-English brief researched fresh each day by Munymo's AI research agent from live, credited sources.",
                 },
                 {
                   icon: TrendingUp,
@@ -694,7 +699,7 @@ export default function Home() {
                   iconColor: "var(--color-brand)",
                   iconBg: "var(--color-brand-muted)",
                   title: "Leaderboard",
-                  body: "Ranked by Average Daily Score. Qualify after 20 games — rankings reflect sustained performance, not luck.",
+                  body: `Ranked by Average Daily Score. Qualify after ${QUALIFY_GAMES} games — rankings reflect sustained performance, not luck.`,
                 },
                 {
                   icon: Lock,

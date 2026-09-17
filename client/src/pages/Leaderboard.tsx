@@ -228,7 +228,7 @@ export default function Leaderboard() {
               </span>
             </div>
             <p className="text-xs mb-4" style={{ color: "var(--color-subtle)" }}>
-              Players still working toward the 20-game qualification threshold. Scores are not yet official.
+              Players still working toward the {QUALIFY_GAMES}-game qualification threshold. Scores are not yet official.
             </p>
             <div className="card-glass overflow-hidden opacity-70">
               <table className="w-full">

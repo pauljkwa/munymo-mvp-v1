@@ -5,7 +5,7 @@ export default function TermsOfUse() {
     <LegalPage
       title="Terms of Use"
       subtitle="Please read these terms carefully before playing. They are written in plain English, because legal documents that nobody reads serve nobody."
-      lastUpdated="June 2025"
+      lastUpdated="September 2026"
     >
       <LegalSection title="1. Who We Are">
         <p>

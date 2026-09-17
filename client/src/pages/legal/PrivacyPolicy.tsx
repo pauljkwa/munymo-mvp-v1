@@ -5,7 +5,7 @@ export default function PrivacyPolicy() {
     <LegalPage
       title="Privacy Policy"
       subtitle="We collect what we need to run the game. We do not sell it, share it unnecessarily, or do anything with it that would make you uncomfortable if you knew about it."
-      lastUpdated="June 2025"
+      lastUpdated="September 2026"
     >
       <LegalSection title="1. What We Collect">
         <p>

@@ -5,7 +5,7 @@ export default function ResponsibleGaming() {
     <LegalPage
       title="Responsible Gaming"
       subtitle="Munymo is designed to be engaging. Engaging is good. Obsessive is less good. Here is how we think about keeping the balance right."
-      lastUpdated="June 2025"
+      lastUpdated="September 2026"
     >
       <LegalSection title="Our Approach">
         <p>

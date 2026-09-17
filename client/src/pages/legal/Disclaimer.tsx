@@ -5,7 +5,7 @@ export default function Disclaimer() {
     <LegalPage
       title="Disclaimer"
       subtitle="The short version: Munymo is a game. Nothing here is financial advice. Please do not bet your retirement savings on the outcome of a daily stock prediction game. That would be inadvisable."
-      lastUpdated="June 2025"
+      lastUpdated="September 2026"
     >
       <LegalSection title="Not Financial Advice">
         <p>
@@ -33,6 +33,14 @@ export default function Disclaimer() {
           They are not comprehensive analyses, and they should not be treated as such. Real investment
           decisions require far more depth, professional expertise, and individual circumstance than
           any game can provide.
+        </p>
+        <p>
+          The daily matchup selection, research brief, metrics, validation question, result summary
+          and Hindsight Spotlight are produced by an automated AI research agent working from
+          publicly available news and market data, and are published without prior human review.
+          Every pairing is attributed to a credited source article, and game results are settled from
+          published open and close prices independently of the written content. AI-generated content
+          can contain errors; if you find one, please use the feedback form.
         </p>
       </LegalSection>
 
