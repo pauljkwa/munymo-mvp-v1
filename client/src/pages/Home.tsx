@@ -1146,7 +1146,8 @@ export default function Home() {
                 But you don't have to wait until tomorrow to have a go. Every matchup we've
                 run stays playable in the archive — the same research, the same scoring, the
                 same timed question. The only difference is that the result already exists,
-                so you'll find out how you did in about five minutes.
+                so you'll find out how you did straight away — and you can play as many past
+                games as you like.
               </p>
             </div>
 
