@@ -7,7 +7,8 @@ import { usePageMeta } from "@/hooks/usePageMeta";
 import { toast } from "sonner";
 import ResearchMetricsPanel from "@/components/ResearchMetricsPanel";
 import { ChartSheet } from "@/components/ChartSheet";
-import { BarChart2 } from "lucide-react";
+import { ValidationModal } from "@/components/ValidationModal";
+import { BarChart2, TrendingUp, Timer } from "lucide-react";
 import {
   Brain,
   BookOpen,
@@ -54,9 +55,15 @@ export default function PracticeGame() {
   const [step, setStep] = useState<Step>("gut");
   const [gutChoice, setGutChoice] = useState<"A" | "B" | null>(null);
   const [finalChoice, setFinalChoice] = useState<"A" | "B" | null>(null);
-  const [answer, setAnswer] = useState<string>("");
   const [showFullResearch, setShowFullResearch] = useState(false);
   const [chartTicker, setChartTicker] = useState<string | null>(null);
+  // Mirrors the live game's modal phases so the question is preceded by the
+  // same warning and run under the same timer.
+  const [modalPhase, setModalPhase] = useState<"confirm" | "question" | "result" | null>(null);
+  const [validationResult, setValidationResult] = useState<{
+    isCorrect: boolean;
+    correctAnswer?: string;
+  } | null>(null);
   const [result, setResult] = useState<null | {
     predictionScore: number;
     validationScore: number;
@@ -92,8 +99,9 @@ export default function PracticeGame() {
 
   const submitFinal = trpc.practice.submitFinal.useMutation({
     onSuccess: () => {
-      setStep("final");
-      questionShownAt.current = Date.now();
+      // Opens the same confirmation the live game shows — the warning about
+      // one attempt, the timer, and not navigating away — before the question.
+      setModalPhase("confirm");
       utils.practice.getGame.invalidate({ gameId });
     },
     onError: (e: { message: string }) => toast.error(e.message),
@@ -102,7 +110,11 @@ export default function PracticeGame() {
   const submitValidation = trpc.practice.submitValidation.useMutation({
     onSuccess: (r) => {
       setResult(r as typeof result);
-      setStep("done");
+      setValidationResult({
+        isCorrect: (r.validationScore ?? 0) > 0,
+        correctAnswer: r.correctAnswer ?? undefined,
+      });
+      setModalPhase("result");
       utils.practice.available.invalidate();
       utils.practice.stats.invalidate();
       utils.practice.getGame.invalidate({ gameId });
@@ -159,12 +171,6 @@ export default function PracticeGame() {
   const seriesFor = (ticker: string) => snapshot?.series?.[ticker] ?? null;
   const hasCharts = Boolean(seriesFor(game.companyATicker) || seriesFor(game.companyBTicker));
 
-  const options: string[] =
-    question?.questionType === "multiple_choice"
-      ? question.options ?? []
-      : question?.questionType === "yes_no"
-      ? ["Yes", "No"]
-      : ["True", "False"];
 
   function CompanyButtons({
     selected,
@@ -348,84 +354,59 @@ export default function PracticeGame() {
               </p>
             )}
 
-            <div className="card-glass p-6">
-              <h2 className="mb-4" style={{ color: "var(--color-foreground)" }}>
-                Final Selection
-              </h2>
-              <CompanyButtons selected={finalChoice} onSelect={setFinalChoice} />
-              <button
-                className="btn-gold text-sm px-6 py-3 w-full justify-center"
-                disabled={!finalChoice || submitFinal.isPending}
-                onClick={() =>
-                  finalChoice && submitFinal.mutate({ gameId, selection: finalChoice })
-                }
-              >
-                {submitFinal.isPending ? <Loader2 size={15} className="animate-spin" /> : null}
-                Submit final pick <ArrowRight size={15} />
-              </button>
+            {/* Same warning the live game shows before the final pick, so the
+                player knows a timed question is coming and reads accordingly. */}
+            <div
+              className="card-glass p-4 mb-4 flex items-start gap-3"
+              style={{ borderColor: "var(--color-warning)" }}
+            >
+              <Timer size={16} className="mt-0.5 shrink-0" style={{ color: "var(--color-warning)" }} />
+              <p className="text-sm" style={{ color: "var(--color-muted)" }}>
+                After submitting your final selection, a{" "}
+                <strong style={{ color: "var(--color-foreground)" }}>
+                  timed Research Validation Question
+                </strong>{" "}
+                will open worth{" "}
+                <strong style={{ color: "var(--color-foreground)" }}>20% of your score</strong>.
+                Study the research carefully.
+              </p>
             </div>
+
+            {/* Explicit "I've read it" step — the live game returns you to a
+                dedicated pick screen rather than putting the final selection
+                directly under the research. */}
+            <button
+              className="btn-brand w-full justify-center"
+              onClick={() => {
+                setStep("final");
+                requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
+              }}
+            >
+              I've Read the Research — Make Final Pick
+              <ArrowRight size={16} />
+            </button>
           </div>
         )}
 
-        {/* ── Step 3: validation question ── */}
+        {/* ── Step: Final selection, on its own screen ── */}
         {step === "final" && (
           <div className="card-glass p-6 animate-scale-in">
-            <h2 className="mb-2" style={{ color: "var(--color-foreground)" }}>
-              Validation Question
-            </h2>
-            <p className="text-xs mb-5" style={{ color: "var(--color-subtle)" }}>
-              Worth 20% of the score. Answering faster scores higher.
+            <div className="flex items-center gap-3 mb-4">
+              <TrendingUp size={20} style={{ color: "var(--color-brand)" }} />
+              <h2 style={{ color: "var(--color-foreground)" }}>Final Selection</h2>
+            </div>
+            <p className="text-sm mb-5" style={{ color: "var(--color-muted)" }}>
+              Your official prediction. You can stick with your gut pick or change your mind.
             </p>
-            {!question ? (
-              <div className="flex justify-center py-8">
-                <Loader2 size={22} className="animate-spin" style={{ color: "var(--color-brand)" }} />
-              </div>
-            ) : (
-              <>
-                <p className="text-sm mb-5" style={{ color: "var(--color-foreground)" }}>
-                  {question.questionText}
-                </p>
-                <div className="space-y-2 mb-5">
-                  {options.map((opt) => (
-                    <button
-                      key={opt}
-                      onClick={() => setAnswer(opt)}
-                      className="w-full p-3 rounded-xl text-left text-sm transition-all active:scale-95"
-                      style={{
-                        background:
-                          answer === opt
-                            ? "var(--color-brand-muted)"
-                            : "var(--color-surface-raised)",
-                        border: `2px solid ${
-                          answer === opt ? "var(--color-brand)" : "var(--color-border)"
-                        }`,
-                        color: "var(--color-foreground)",
-                      }}
-                    >
-                      {opt}
-                    </button>
-                  ))}
-                </div>
-                <button
-                  className="btn-gold text-sm px-6 py-3 w-full justify-center"
-                  disabled={!answer || submitValidation.isPending}
-                  onClick={() =>
-                    submitValidation.mutate({
-                      gameId,
-                      answer,
-                      answerTimeMs: questionShownAt.current
-                        ? Date.now() - questionShownAt.current
-                        : undefined,
-                    })
-                  }
-                >
-                  {submitValidation.isPending ? (
-                    <Loader2 size={15} className="animate-spin" />
-                  ) : null}
-                  Submit answer
-                </button>
-              </>
-            )}
+            <CompanyButtons selected={finalChoice} onSelect={setFinalChoice} />
+            <button
+              className="btn-gold text-sm px-6 py-3 w-full justify-center"
+              disabled={!finalChoice || submitFinal.isPending}
+              onClick={() => finalChoice && submitFinal.mutate({ gameId, selection: finalChoice })}
+            >
+              {submitFinal.isPending ? <Loader2 size={15} className="animate-spin" /> : null}
+              Submit final pick <ArrowRight size={15} />
+            </button>
           </div>
         )}
 
@@ -493,6 +474,34 @@ export default function PracticeGame() {
           </div>
         )}
       </div>
+
+      {modalPhase && (
+        <ValidationModal
+          phase={modalPhase}
+          question={
+            question
+              ? {
+                  questionType: question.questionType,
+                  questionText: question.questionText,
+                  options: question.options,
+                }
+              : null
+          }
+          onOpenQuestion={() => {
+            questionShownAt.current = Date.now();
+            setModalPhase("question");
+          }}
+          onSubmitAnswer={(ans, timeMs) =>
+            submitValidation.mutate({ gameId, answer: ans, answerTimeMs: timeMs })
+          }
+          isSubmitting={submitValidation.isPending}
+          result={validationResult}
+          onClose={() => {
+            setModalPhase(null);
+            setStep("done");
+          }}
+        />
+      )}
 
       {chartTicker && (
         <ChartSheet

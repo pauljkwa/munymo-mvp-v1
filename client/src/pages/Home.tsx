@@ -32,6 +32,8 @@ import {
   Star,
   Zap,
   Gift,
+  Target,
+  Clock,
   Loader2,
 } from "lucide-react";
 
@@ -1099,6 +1101,94 @@ export default function Home() {
               }),
             }}
           />
+        </div>
+      </section>
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          SECTION 6b — PRACTICE THE ARCHIVE
+
+          Added because the live game has a hard lockout: arrive after 9:30 ET
+          and there is nothing to play until tomorrow. A new visitor hitting
+          that window previously had no way to experience the game at all, and
+          "come back tomorrow" is how the first real signup was lost. The
+          archive turns that dead time into a playable product.
+      ══════════════════════════════════════════════════════════════════════ */}
+      <section className="py-20" style={{ background: "var(--color-surface)" }}>
+        <div className="container">
+          <div className="max-w-3xl mx-auto">
+            <p className="section-label mb-5 justify-center">Play Right Now</p>
+            <h2
+              className="font-display mb-4 text-center"
+              style={{ color: "var(--color-foreground)", lineHeight: 1.15 }}
+            >
+              Missed today's game?
+              <br />
+              <span className="text-gradient-gold">Play the archive instead.</span>
+            </h2>
+
+            <p
+              className="mb-8 text-sm leading-relaxed text-center max-w-xl mx-auto"
+              style={{ color: "var(--color-muted)" }}
+            >
+              The daily game locks when the US market opens — same as backing a horse, once
+              they're out of the gates the odds are settled. But every completed matchup stays
+              playable. Same research, same scoring, same timed question, and you find out how
+              you did in five minutes instead of waiting for the closing bell.
+            </p>
+
+            <div className="grid sm:grid-cols-3 gap-4 mb-8">
+              {[
+                {
+                  icon: Clock,
+                  title: "No waiting",
+                  body: "The result already exists, so you get your score straight away.",
+                },
+                {
+                  icon: BookOpen,
+                  title: "The full brief",
+                  body: "The same research, metrics and price charts as on the day.",
+                },
+                {
+                  icon: Target,
+                  title: "Practice only",
+                  body: "Doesn't touch the leaderboard or your streak — it's for building the habit.",
+                },
+              ].map((item, i) => (
+                <div
+                  key={item.title}
+                  className="card-glass p-5 animate-fade-up"
+                  style={{ animationDelay: `${i * 60}ms` }}
+                >
+                  <item.icon size={18} className="mb-3" style={{ color: "var(--color-brand)" }} />
+                  <h4
+                    className="text-sm font-semibold mb-1.5"
+                    style={{ color: "var(--color-foreground)" }}
+                  >
+                    {item.title}
+                  </h4>
+                  <p className="text-xs leading-relaxed" style={{ color: "var(--color-muted)" }}>
+                    {item.body}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="text-center">
+              {likelyAuthenticated ? (
+                <Link href="/practice" className="btn-gold text-sm px-7 py-3">
+                  Practise a past matchup
+                  <ArrowRight size={16} />
+                </Link>
+              ) : (
+                <SignUpButton mode="modal">
+                  <button className="btn-gold text-sm px-7 py-3">
+                    Start with a past matchup
+                    <ArrowRight size={16} />
+                  </button>
+                </SignUpButton>
+              )}
+            </div>
+          </div>
         </div>
       </section>
 
