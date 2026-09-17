@@ -3,7 +3,7 @@ import { SignInButton } from "@clerk/clerk-react";
 import { trpc } from "@/lib/trpc";
 import { withReferralParams } from "@/lib/utils";
 import { useState, useEffect, useRef } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { ChartSheet } from "@/components/ChartSheet";
@@ -131,6 +131,29 @@ export default function DailyGame() {
     if (myPick?.finalSelection) setStep("submitted");
     else if (myPick?.gutSelection) setStep("research");
   }, [myPick]);
+
+  /**
+   * Someone who arrives after lockout with no pick can't play today at all —
+   * the old dead end was a locked game and "come back tomorrow", which is how
+   * the first real signup was lost. Send them to the archive instead, where
+   * there is something they CAN play right now.
+   *
+   * Deliberately only when they have NO gut selection: a player who already
+   * picked is coming back to see their own game, and must not be hijacked.
+   * Signed-out visitors are left alone too — they get the sign-in prompt, and
+   * /practice would only bounce them to the same place.
+   */
+  const [, navigate] = useLocation();
+  const cannotPlayToday =
+    isAuthenticated &&
+    !isLoadingPick &&
+    Boolean(game) &&
+    (game?.status === "locked" || game?.status === "result_published") &&
+    !myPick?.gutSelection;
+
+  useEffect(() => {
+    if (cannotPlayToday) navigate("/practice?missed=1", { replace: true });
+  }, [cannotPlayToday, navigate]);
 
   const submitGut = trpc.picks.submitGut.useMutation({
     onSuccess: () => {

@@ -1,10 +1,10 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { formatAverageScore } from "@shared/leaderboard";
-import { Dumbbell, Loader2, ArrowRight, Info, Trophy } from "lucide-react";
+import { Dumbbell, Loader2, ArrowRight, Info, Trophy, Clock } from "lucide-react";
 
 /**
  * Practice hub — the archive as a training ground.
@@ -22,6 +22,10 @@ export default function Practice() {
   // settles immediately from the cached hint and self-corrects once Clerk
   // loads — same reasoning as the PWA cold-launch fix.
   const { isAuthenticated, likelyAuthenticated } = useAuth();
+  // Set when /game redirected here because today's game was already locked and
+  // the player had no pick. The explanation only makes sense in that context —
+  // someone who chose Practice from the menu knows why they're here.
+  const missedToday = new URLSearchParams(useSearch()).get("missed") === "1";
 
   const { data, isLoading } = trpc.practice.available.useQuery(undefined, {
     enabled: isAuthenticated,
@@ -55,6 +59,37 @@ export default function Practice() {
   return (
     <PublicLayout>
       <div className="container py-10 max-w-3xl mx-auto">
+        {/* Shown only to someone who just tried to play and couldn't. This
+            used to be a section near the bottom of the homepage, which meant it
+            reached only people who had already scrolled that far — the opposite
+            of the newcomer it was written for. Meeting them at the moment they
+            actually try to play is what makes it land. */}
+        {missedToday && (
+          <div
+            className="card-glass p-5 mb-6 animate-fade-up"
+            style={{ borderColor: "var(--color-brand)" }}
+          >
+            <div className="flex items-start gap-3">
+              <Clock size={20} className="flex-shrink-0 mt-0.5" style={{ color: "var(--color-brand)" }} />
+              <div>
+                <p className="font-medium mb-2" style={{ color: "var(--color-foreground)" }}>
+                  Today's game is already locked
+                </p>
+                <p className="text-sm leading-relaxed mb-2" style={{ color: "var(--color-muted)" }}>
+                  The trading day has started, so picks are closed for everyone. Much the same
+                  way you can't back a horse once the race is under way.
+                </p>
+                <p className="text-sm leading-relaxed" style={{ color: "var(--color-muted)" }}>
+                  But you don't have to wait until tomorrow to have a go. Every matchup we've
+                  run stays playable below — the same research, the same scoring, the same
+                  timed question. The result already exists, so you'll find out how you did
+                  straight away, and you can play as many as you like.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="mb-6 animate-fade-up">
           <div className="flex items-center gap-3 mb-2">
             <Dumbbell size={26} style={{ color: "var(--color-brand)" }} />
