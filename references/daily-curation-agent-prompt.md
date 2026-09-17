@@ -35,16 +35,18 @@ Study this list carefully before selecting tomorrow's companies. Any violation w
 
 From the recent games list, identify the game with status `active` or `locked` that has the EARLIEST `gameDate` — the one whose trading day has just concluded. Do not pick a game with a later/future `gameDate` just because it happens to be listed first; if more than one game is active/locked at once, the earliest-dated one is always the correct one to score. Note its `companyATicker` and `companyBTicker`.
 
-Look up the **closing prices** for both companies on Yahoo Finance (finance.yahoo.com) for today's trading session. The company with the **higher closing price percentage change** from the previous close is the winner.
+**Settlement rule (canonical since 2026-09-17, founder Decision 6):** each company's move is measured from today's **regular-session open** (first trade at 9:30 AM ET) to today's **regular-session close** (official 4:00 PM ET close). `companyAPerf = (close − open) / open × 100`, rounded to 2 decimals; same for B. The company with the **higher open-to-close move** is the winner; a tie goes to Company A.
 
-- If Company A's % change > Company B's % change → winner is Company A (winnerTicker = companyATicker)
-- If Company B's % change > Company A's % change → winner is Company B (winnerTicker = companyBTicker)
-- In the rare case of a tie, select the company with higher absolute volume
+Do **not** use the "% change" printed on a quote page. That number is measured against the previous day's close and includes the overnight gap, which players could already see before picks locked at the open. Look up the actual open and close prices on Yahoo Finance (finance.yahoo.com) and compute the percentages yourself. The server recomputes both percentages from the four prices you supply and overrides `companyAPerf`, `companyBPerf` and `winnerTicker` if they disagree, so the four prices are what matter.
+
+- If Company A's open-to-close % > Company B's → winner is Company A (winnerTicker = companyATicker)
+- If Company B's open-to-close % > Company A's → winner is Company B (winnerTicker = companyBTicker)
+- Equal → Company A
 
 Record:
 - `winnerTicker` — the winning company's ticker symbol
-- `companyAPerf` — Company A's % price change today (e.g. 2.34 for +2.34%)
-- `companyBPerf` — Company B's % price change today (e.g. -1.12 for -1.12%)
+- `companyAPerf` — Company A's open-to-close % move today (e.g. 2.34 for +2.34%)
+- `companyBPerf` — Company B's open-to-close % move today (e.g. -1.12 for -1.12%)
 - `companyAStartPrice` / `companyAEndPrice` — Company A's actual $ price at today's session open and close
 - `companyBStartPrice` / `companyBEndPrice` — Company B's actual $ price at today's session open and close
 - `resultSummary` — 2–3 sentence explanation of why the winner won today (use real data: earnings, news, sector moves)

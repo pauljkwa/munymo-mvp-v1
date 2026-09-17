@@ -22,6 +22,7 @@ import {
   type ChartSnapshot,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
+import { LEADERBOARD_QUALIFICATION_GAMES } from "@shared/const";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -707,7 +708,9 @@ export async function upsertLeaderboardStat(userId: number) {
   const gamesPlayed = scores.length;
   const totalScore = scores.reduce((sum, s) => sum + s.totalScore, 0);
   const averageDailyScore = gamesPlayed > 0 ? (totalScore / gamesPlayed).toFixed(2) : "0.00";
-  const qualificationStatus = gamesPlayed >= 20 ? "qualified" : "pending";
+  // Shared constant, not a literal: this line still said 20 for a day after the
+  // threshold moved to 10, so anyone qualifying at 10 was stored as "pending".
+  const qualificationStatus = gamesPlayed >= LEADERBOARD_QUALIFICATION_GAMES ? "qualified" : "pending";
 
   await db
     .insert(leaderboardStats)

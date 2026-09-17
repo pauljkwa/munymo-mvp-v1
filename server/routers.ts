@@ -7,6 +7,7 @@ import {
   isQualified,
   shuffleOptionsForGame,
   computeProjectedRank,
+  settleFromPrices,
 } from "./scoring";
 import { hashEndpoint } from "./push";
 import {
@@ -834,7 +835,11 @@ async function closeAndScoreGame(
     hindsightSpotlight?: string;
     resultCommentary?: string;
   }
-): Promise<Array<{ userId: number; predictionScore: number; validationScore: number; totalScore: number }>> {
+): Promise<{
+  scoredPicks: Array<{ userId: number; predictionScore: number; validationScore: number; totalScore: number }>;
+  winner: "A" | "B";
+  settlementWarnings: string[];
+}> {
   const game = await getGameById(gameId);
   if (!game) throw new TRPCError({ code: "NOT_FOUND", message: "Game not found" });
   if (game.status === "result_published") {
@@ -843,6 +848,30 @@ async function closeAndScoreGame(
   if (game.status === "cancelled") {
     throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot publish result for cancelled game" });
   }
+
+  // 0. Settle. This is the single choke point every publish path goes through
+  //    (admin.publishResult, admin.endOfDay, both curation handlers), so the
+  //    open-to-close rule is applied here regardless of what the caller passed.
+  //    When prices are present they win; the caller's winner/perf are only a
+  //    cross-check. See settleFromPrices for why.
+  const settlement = settleFromPrices({
+    tickerA: game.companyATicker,
+    tickerB: game.companyBTicker,
+    winnerTicker: opts.winner === "A" ? game.companyATicker : game.companyBTicker,
+    companyAPerf: opts.companyAPerf,
+    companyBPerf: opts.companyBPerf,
+    companyAStartPrice: opts.companyAStartPrice,
+    companyAEndPrice: opts.companyAEndPrice,
+    companyBStartPrice: opts.companyBStartPrice,
+    companyBEndPrice: opts.companyBEndPrice,
+  });
+  if ("error" in settlement) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: settlement.error });
+  }
+  for (const w of settlement.warnings) console.warn(`[settlement] game ${gameId}: ${w}`);
+  const winner = settlement.winner;
+  const companyAPerf = settlement.companyAPerf;
+  const companyBPerf = settlement.companyBPerf;
 
   // 1. Auto-submit: players who made a Gut Selection but no Final Selection
   //    have their gut copied to final at lockout — per founder Decision 1.
@@ -890,7 +919,7 @@ async function closeAndScoreGame(
     const alreadyScored = await getPlayerScoreForGame(pick.userId, gameId);
     const { predictionScore, validationScore } = calculateScore(
       pick.finalSelection,
-      opts.winner,
+      winner,
       pick.validationAnswer,
       question?.correctAnswer ?? "",
       pick.validationAnswerTimeMs
@@ -901,7 +930,7 @@ async function closeAndScoreGame(
     // 5. Update leaderboard and streaks
     await upsertLeaderboardStat(pick.userId);
     if (!alreadyScored) {
-      await updateStreakForPlayer(pick.userId, game.gameDate, pick.finalSelection === opts.winner);
+      await updateStreakForPlayer(pick.userId, game.gameDate, pick.finalSelection === winner);
     }
   }
 
@@ -911,9 +940,9 @@ async function closeAndScoreGame(
   // 7. Mark game as result_published
   await updateGame(gameId, {
     status: "result_published",
-    winner: opts.winner,
-    companyAPerf: opts.companyAPerf !== undefined ? String(opts.companyAPerf) : undefined,
-    companyBPerf: opts.companyBPerf !== undefined ? String(opts.companyBPerf) : undefined,
+    winner,
+    companyAPerf: companyAPerf !== undefined ? String(companyAPerf) : undefined,
+    companyBPerf: companyBPerf !== undefined ? String(companyBPerf) : undefined,
     companyAStartPrice: opts.companyAStartPrice !== undefined ? String(opts.companyAStartPrice) : undefined,
     companyAEndPrice: opts.companyAEndPrice !== undefined ? String(opts.companyAEndPrice) : undefined,
     companyBStartPrice: opts.companyBStartPrice !== undefined ? String(opts.companyBStartPrice) : undefined,
@@ -924,7 +953,7 @@ async function closeAndScoreGame(
     publishedAt: new Date(),
   });
 
-  return scoredPicks;
+  return { scoredPicks, winner, settlementWarnings: settlement.warnings };
 }
 
 // ─── Admin Router ─────────────────────────────────────────────────────────────
@@ -1093,7 +1122,7 @@ const adminRouter = router({
       const game = await getGameById(input.gameId);
       if (!game) throw new TRPCError({ code: "NOT_FOUND" });
 
-      const scoredPicks = await closeAndScoreGame(input.gameId, {
+      const { scoredPicks, winner: settledWinner } = await closeAndScoreGame(input.gameId, {
         winner: input.winner,
         companyAPerf: input.companyAPerf,
         companyBPerf: input.companyBPerf,
@@ -1111,7 +1140,7 @@ const adminRouter = router({
         "publish_result",
         "game",
         input.gameId,
-        JSON.stringify({ winner: input.winner })
+        JSON.stringify({ winner: settledWinner, requestedWinner: input.winner })
       );
 
       // Send personalised result emails to each participant
@@ -1130,7 +1159,7 @@ const adminRouter = router({
             companyATicker: game.companyATicker,
             companyBName: game.companyBName,
             companyBTicker: game.companyBTicker,
-            winner: input.winner,
+            winner: settledWinner,
             predictionScore: scored.predictionScore,
             validationScore: scored.validationScore,
             totalScore: scored.totalScore,
@@ -1292,7 +1321,10 @@ const adminRouter = router({
           resultSummary: input.resultSummary,
           hindsightSpotlight: input.hindsightSpotlight,
         });
-        scoredPicks.push(...closed);
+        // The settled winner is what was scored and stored; everything below
+        // (audit log, result emails, push) must describe that, not the input.
+        winner = closed.winner;
+        scoredPicks.push(...closed.scoredPicks);
       }
 
       // ── 2. Resolve tomorrow's game — activate a game Phase A already staged,
@@ -1443,7 +1475,7 @@ const adminRouter = router({
         "end_of_day",
         "game",
         input.closeGameId ?? 0,
-        JSON.stringify({ winner: input.winner, nextGameDate: resolvedNextGame.gameDate, activatedStaged: !!input.activateStagedGameId })
+        JSON.stringify({ winner, requestedWinner: input.winner, nextGameDate: resolvedNextGame.gameDate, activatedStaged: !!input.activateStagedGameId })
       );
 
       // ── 3–5. Notification fan-out — detached from the response (audit M5) ──
@@ -1543,8 +1575,8 @@ const adminRouter = router({
         try {
           const { sendPushToUsers } = await import("./push");
           const optedInUserIds = allUsers.filter((u) => u.pushOptIn !== false).map((u) => u.id);
-          const winnerTicker = input.winner === "A" ? game.companyATicker : game.companyBTicker;
-          const loserTicker = input.winner === "A" ? game.companyBTicker : game.companyATicker;
+          const winnerTicker = winner === "A" ? game.companyATicker : game.companyBTicker;
+          const loserTicker = winner === "A" ? game.companyBTicker : game.companyATicker;
           const pushResult = await sendPushToUsers(optedInUserIds, {
             title: `Results are in: ${winnerTicker} beats ${loserTicker}`,
             body: input.resultSummary

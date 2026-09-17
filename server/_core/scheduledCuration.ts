@@ -11,7 +11,7 @@
 import type { Express, Request, Response } from "express";
 import { notifyOwner } from "./notification";
 import { ENV } from "./env";
-import { resolveWinner } from "../scoring";
+import { settleFromPrices } from "../scoring";
 
 /**
  * Shared-secret auth for the scheduled endpoints.
@@ -410,30 +410,43 @@ async function applyResultsOnlyCuration(
     return res.json({ ok: true, skipped: true, reason: msg });
   }
 
-  // ── Determine winner — identical logic to the legacy path's step 4 ──
+  // ── Determine winner — identical logic to the legacy path's step 4.
+  // Open-to-close from the agent's prices is canonical; its own % and
+  // winnerTicker only generate warnings (reported in the run summary). ──
   let winner: "A" | "B" | undefined;
+  let settledPerfA = today?.companyAPerf;
+  let settledPerfB = today?.companyBPerf;
+  let settlementWarnings: string[] = [];
   const closingGameRows = await db.select().from(dailyGames).where(eq(dailyGames.id, closeGameId)).limit(1);
   if (closingGameRows[0]) {
-    const resolved = resolveWinner(
-      closingGameRows[0].companyATicker,
-      closingGameRows[0].companyBTicker,
-      today!.winnerTicker!,
-      today!.companyAPerf,
-      today!.companyBPerf
-    );
-    if ("error" in resolved) {
-      console.error("[daily-curation] T3 winner validation failed:", resolved.error);
-      await notifyOwner({ title: "⚠️ Curation rejected — winner validation failed", content: resolved.error });
-      return res.status(422).json({ error: "Winner validation failed", detail: resolved.error });
+    const settled = settleFromPrices({
+      tickerA: closingGameRows[0].companyATicker,
+      tickerB: closingGameRows[0].companyBTicker,
+      winnerTicker: today!.winnerTicker!,
+      companyAPerf: today!.companyAPerf,
+      companyBPerf: today!.companyBPerf,
+      companyAStartPrice: today!.companyAStartPrice,
+      companyAEndPrice: today!.companyAEndPrice,
+      companyBStartPrice: today!.companyBStartPrice,
+      companyBEndPrice: today!.companyBEndPrice,
+    });
+    if ("error" in settled) {
+      console.error("[daily-curation] settlement failed:", settled.error);
+      await notifyOwner({ title: "⚠️ Curation rejected — settlement failed", content: settled.error });
+      return res.status(422).json({ error: "Settlement failed", detail: settled.error });
     }
-    winner = resolved.winner;
+    winner = settled.winner;
+    settledPerfA = settled.companyAPerf;
+    settledPerfB = settled.companyBPerf;
+    settlementWarnings = settled.warnings;
+    for (const w of settlementWarnings) console.warn("[daily-curation] settlement:", w);
   }
 
   const endOfDayInput = {
     closeGameId,
     winner,
-    companyAPerf: today?.companyAPerf,
-    companyBPerf: today?.companyBPerf,
+    companyAPerf: settledPerfA,
+    companyBPerf: settledPerfB,
     companyAStartPrice: today?.companyAStartPrice,
     companyAEndPrice: today?.companyAEndPrice,
     companyBStartPrice: today?.companyBStartPrice,
@@ -455,7 +468,10 @@ async function applyResultsOnlyCuration(
   const result = await caller.admin.endOfDay(endOfDayInput);
 
   const elapsed = Date.now() - startTime;
-  const summary = `Results-only curation completed in ${elapsed}ms. Closed game #${closeGameId} (winner: ${winner}). Activated staged game #${result.nextGameId} (${result.nextGameTickers}).`;
+  const warningNote = settlementWarnings.length
+    ? ` Settlement warnings: ${settlementWarnings.join("; ")}.`
+    : "";
+  const summary = `Results-only curation completed in ${elapsed}ms. Closed game #${closeGameId} (winner: ${winner}, open-to-close ${settledPerfA}% vs ${settledPerfB}%).${warningNote} Activated staged game #${result.nextGameId} (${result.nextGameTickers}).`;
   console.log("[daily-curation]", summary);
   await notifyOwner({
     title: `✅ Daily curation complete — activated staged game (${result.nextGameTickers})`,
@@ -597,24 +613,35 @@ async function dailyCurationHandler(req: Request, res: Response) {
       }
     }
 
-    // ── 4. Determine winner ──
+    // ── 4. Determine winner (open-to-close from prices is canonical) ──
     let winner: "A" | "B" | undefined;
+    let settledPerfA = today?.companyAPerf;
+    let settledPerfB = today?.companyBPerf;
+    let settlementWarnings: string[] = [];
     if (!marketClosed && today && today.winnerTicker && closeGameId) {
       const game = await db.select().from(dailyGames).where(eq(dailyGames.id, closeGameId)).limit(1);
       if (game[0]) {
-        const resolved = resolveWinner(
-          game[0].companyATicker,
-          game[0].companyBTicker,
-          today.winnerTicker,
-          today.companyAPerf,
-          today.companyBPerf
-        );
-        if ("error" in resolved) {
-          console.error("[daily-curation] T3 winner validation failed:", resolved.error);
-          await notifyOwner({ title: "⚠️ Curation rejected — winner validation failed", content: resolved.error });
-          return res.status(422).json({ error: "Winner validation failed", detail: resolved.error });
+        const settled = settleFromPrices({
+          tickerA: game[0].companyATicker,
+          tickerB: game[0].companyBTicker,
+          winnerTicker: today.winnerTicker,
+          companyAPerf: today.companyAPerf,
+          companyBPerf: today.companyBPerf,
+          companyAStartPrice: today.companyAStartPrice,
+          companyAEndPrice: today.companyAEndPrice,
+          companyBStartPrice: today.companyBStartPrice,
+          companyBEndPrice: today.companyBEndPrice,
+        });
+        if ("error" in settled) {
+          console.error("[daily-curation] settlement failed:", settled.error);
+          await notifyOwner({ title: "⚠️ Curation rejected — settlement failed", content: settled.error });
+          return res.status(422).json({ error: "Settlement failed", detail: settled.error });
         }
-        winner = resolved.winner;
+        winner = settled.winner;
+        settledPerfA = settled.companyAPerf;
+        settledPerfB = settled.companyBPerf;
+        settlementWarnings = settled.warnings;
+        for (const w of settlementWarnings) console.warn("[daily-curation] settlement:", w);
       }
     }
 
@@ -648,8 +675,8 @@ async function dailyCurationHandler(req: Request, res: Response) {
     const endOfDayInput = {
       closeGameId,
       winner,
-      companyAPerf: today?.companyAPerf,
-      companyBPerf: today?.companyBPerf,
+      companyAPerf: settledPerfA,
+      companyBPerf: settledPerfB,
       companyAStartPrice: today?.companyAStartPrice,
       companyAEndPrice: today?.companyAEndPrice,
       companyBStartPrice: today?.companyBStartPrice,
@@ -695,7 +722,8 @@ async function dailyCurationHandler(req: Request, res: Response) {
     const closedNote = marketClosed
       ? "No game was scored today — no completed game was due (market holiday, or the pending game's session hasn't concluded yet)."
       : closeGameId
-        ? `Closed game #${closeGameId} (winner: ${winner}).`
+        ? `Closed game #${closeGameId} (winner: ${winner}, open-to-close ${settledPerfA}% vs ${settledPerfB}%).` +
+          (settlementWarnings.length ? ` Settlement warnings: ${settlementWarnings.join("; ")}.` : "")
         : "No game closed (first game).";
     // Reflect whether we actually created the next game or the cadence guard
     // kept an already-queued one (in which case the agent's proposal was discarded).

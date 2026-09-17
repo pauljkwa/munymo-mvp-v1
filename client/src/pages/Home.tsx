@@ -96,7 +96,7 @@ function HeroMatchupUnavailable() {
 const FAQ_ITEMS = [
   {
     q: "What exactly is Munymo?",
-    a: "Munymo is a daily stock market training game. Each US trading day we publish one matchup between two well-known companies in the same sector, and you predict which one will post the better performance by the close. There's no real money involved — the goal is to build genuine market intuition through daily practice, feedback, and a track record you can watch improve.",
+    a: "Munymo is a daily stock market training game. Each US trading day we publish one matchup between two well-known companies in the same sector, and you predict which one will post the bigger percentage move from the opening bell to the close. There's no real money involved — the goal is to build genuine market intuition through daily practice, feedback, and a track record you can watch improve.",
   },
   {
     q: "Is Munymo like Wordle for the stock market?",

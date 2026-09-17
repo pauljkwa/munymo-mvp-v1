@@ -1071,3 +1071,127 @@ describe("formatAverageScore", () => {
     expect(formatAverageScore("not a number")).toBe("0.00");
   });
 });
+
+// ─── Settlement from prices (open-to-close, Decision 6) ──────────────────────
+import { settleFromPrices, openToClosePerf } from "./scoring";
+
+describe("openToClosePerf", () => {
+  it("measures the move from open to close, rounded to 2dp", () => {
+    expect(openToClosePerf(100, 101.234)).toBe(1.23);
+    expect(openToClosePerf(80.28, 80.79)).toBe(0.64);
+    expect(openToClosePerf(140.9, 138.75)).toBe(-1.53);
+  });
+});
+
+describe("settleFromPrices — prices are canonical", () => {
+  const base = { tickerA: "NVDA", tickerB: "AVGO" };
+
+  it("derives perf and winner from the four prices", () => {
+    const r = settleFromPrices({
+      ...base,
+      winnerTicker: "NVDA",
+      companyAPerf: 0.55,
+      companyBPerf: 0.52,
+      companyAStartPrice: 194.48,
+      companyAEndPrice: 195.55,
+      companyBStartPrice: 371.34,
+      companyBEndPrice: 373.28,
+    });
+    expect("error" in r).toBe(false);
+    if ("error" in r) return;
+    expect(r.derivedFromPrices).toBe(true);
+    expect(r.companyAPerf).toBe(0.55);
+    expect(r.companyBPerf).toBe(0.52);
+    expect(r.winner).toBe("A");
+    expect(r.warnings).toEqual([]);
+  });
+
+  it("overrides the agent's prior-close percentages AND its winner, with warnings (the 2026-07-06 case)", () => {
+    const r = settleFromPrices({
+      ...base,
+      winnerTicker: "AVGO",
+      companyAPerf: 0.37,
+      companyBPerf: 3.55,
+      companyAStartPrice: 194.48,
+      companyAEndPrice: 195.55,
+      companyBStartPrice: 371.34,
+      companyBEndPrice: 373.28,
+    });
+    if ("error" in r) throw new Error(r.error);
+    expect(r.winner).toBe("A");
+    expect(r.companyAPerf).toBe(0.55);
+    expect(r.companyBPerf).toBe(0.52);
+    expect(r.warnings.length).toBe(3);
+    expect(r.warnings.some((w) => w.includes("winner overridden"))).toBe(true);
+  });
+
+  it("does not warn when the agent's figures are within tolerance", () => {
+    const r = settleFromPrices({
+      ...base,
+      winnerTicker: "NVDA",
+      companyAPerf: 0.6, // 0.05 off
+      companyBPerf: 0.5,
+      companyAStartPrice: 194.48,
+      companyAEndPrice: 195.55,
+      companyBStartPrice: 371.34,
+      companyBEndPrice: 373.28,
+    });
+    if ("error" in r) throw new Error(r.error);
+    expect(r.warnings).toEqual([]);
+  });
+
+  it("a tie goes to company A", () => {
+    const r = settleFromPrices({
+      ...base,
+      companyAStartPrice: 100, companyAEndPrice: 101,
+      companyBStartPrice: 200, companyBEndPrice: 202,
+    });
+    if ("error" in r) throw new Error(r.error);
+    expect(r.winner).toBe("A");
+  });
+
+  it("refuses to settle on an implausible move (a wrong price)", () => {
+    const r = settleFromPrices({
+      ...base,
+      winnerTicker: "NVDA",
+      companyAStartPrice: 19.448, // decimal slip
+      companyAEndPrice: 195.55,
+      companyBStartPrice: 371.34,
+      companyBEndPrice: 373.28,
+    });
+    expect("error" in r).toBe(true);
+  });
+
+  it("falls back to ticker + agent perf when any price is missing", () => {
+    const r = settleFromPrices({
+      ...base,
+      winnerTicker: "AVGO",
+      companyAPerf: 0.37,
+      companyBPerf: 3.55,
+      companyAStartPrice: 194.48,
+      companyAEndPrice: 195.55,
+      // B prices absent
+    });
+    if ("error" in r) throw new Error(r.error);
+    expect(r.derivedFromPrices).toBe(false);
+    expect(r.winner).toBe("B");
+    expect(r.companyBPerf).toBe(3.55);
+    expect(r.warnings.length).toBe(1);
+  });
+
+  it("with no prices and no winnerTicker it errors rather than guessing", () => {
+    const r = settleFromPrices({ ...base, companyAPerf: 1, companyBPerf: 2 });
+    expect("error" in r).toBe(true);
+  });
+
+  it("treats zero and negative prices as missing", () => {
+    const r = settleFromPrices({
+      ...base,
+      winnerTicker: "NVDA",
+      companyAStartPrice: 0, companyAEndPrice: 195.55,
+      companyBStartPrice: 371.34, companyBEndPrice: 373.28,
+    });
+    if ("error" in r) throw new Error(r.error);
+    expect(r.derivedFromPrices).toBe(false);
+  });
+});

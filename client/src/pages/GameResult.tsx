@@ -168,7 +168,7 @@ export default function GameResult() {
                       <p className="text-2xl font-bold font-mono" style={{ color: perfColor }}>
                         {perf != null ? fmt(perf) : "—"}
                       </p>
-                      <p className="text-[0.625rem] mt-1" style={{ color: "var(--color-subtle)" }}>day's change</p>
+                      <p className="text-[0.625rem] mt-1" style={{ color: "var(--color-subtle)" }}>open to close</p>
                       {start != null && end != null && (
                         <p className="text-xs font-mono mt-2" style={{ color: "var(--color-muted)" }}>
                           {fmtPrice(start)} → {fmtPrice(end)}
@@ -183,6 +183,11 @@ export default function GameResult() {
                   Winning margin: <span className="font-semibold" style={{ color: "var(--color-foreground)" }}>{margin.toFixed(2)}%</span>
                 </p>
               )}
+              {/* The rule, stated where the numbers are. A reader who divides
+                  the two prices should get the percentage above it. */}
+              <p className="text-[0.625rem] text-center mt-2" style={{ color: "var(--color-subtle)" }}>
+                Settled on each stock's move from the regular-session open to the close. The overnight gap doesn't count — picks lock at the open.
+              </p>
             </div>
           );
         })()}

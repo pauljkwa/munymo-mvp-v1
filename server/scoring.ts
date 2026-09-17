@@ -168,6 +168,127 @@ export function resolveWinner(
   return { winner };
 }
 
+// ─── Settlement from prices (Decision 6, made canonical 2026-09-17) ──────────
+/**
+ * The rule: each company's move is measured from the regular-session OPEN to
+ * the regular-session CLOSE, in percent. Higher move wins; a tie goes to A.
+ *
+ * Why the server derives this instead of trusting the agent's percentages:
+ * the agent reads "today's % change" off a quote page, and that figure is
+ * measured against the PRIOR close, so it includes the overnight gap. Lockout
+ * is 9:30 ET — the open — so anything that moved before the open was visible
+ * to a player before they picked. Only the open-to-close move is a fair
+ * measure of "what happened after you locked in". An audit on 2026-09-17
+ * found 17 of 50 archived games where the agent's % disagreed with the prices
+ * printed beside it on the result card, and three where the winner flipped.
+ *
+ * Prices are the source of truth when all four are present; the agent's
+ * percentages and winnerTicker become a cross-check that produces warnings,
+ * never a silent override in the other direction. With no prices we fall
+ * back to the older ticker/perf resolution so legacy payloads still settle.
+ */
+export const SETTLEMENT_PERF_TOLERANCE_PCT_POINTS = 0.15;
+/** A single regular-session move beyond this almost certainly means a wrong price. */
+export const SETTLEMENT_MAX_PLAUSIBLE_MOVE_PCT = 40;
+
+export function openToClosePerf(startPrice: number, endPrice: number): number {
+  return Math.round(((endPrice - startPrice) / startPrice) * 100 * 100) / 100;
+}
+
+export interface SettlementInput {
+  tickerA: string;
+  tickerB: string;
+  winnerTicker?: string | null;
+  companyAPerf?: number | null;
+  companyBPerf?: number | null;
+  companyAStartPrice?: number | null;
+  companyAEndPrice?: number | null;
+  companyBStartPrice?: number | null;
+  companyBEndPrice?: number | null;
+}
+
+export interface Settlement {
+  winner: "A" | "B";
+  companyAPerf?: number;
+  companyBPerf?: number;
+  /** true when perf and winner were computed from the four prices */
+  derivedFromPrices: boolean;
+  /** disagreements between the agent's figures and the derived ones — log and report, don't fail */
+  warnings: string[];
+}
+
+function isPositiveNumber(v: unknown): v is number {
+  return typeof v === "number" && Number.isFinite(v) && v > 0;
+}
+
+export function settleFromPrices(input: SettlementInput): Settlement | { error: string } {
+  const havePrices =
+    isPositiveNumber(input.companyAStartPrice) &&
+    isPositiveNumber(input.companyAEndPrice) &&
+    isPositiveNumber(input.companyBStartPrice) &&
+    isPositiveNumber(input.companyBEndPrice);
+
+  if (!havePrices) {
+    // Legacy path: no usable prices, settle on the agent's ticker + perf.
+    if (!input.winnerTicker) {
+      return { error: "Cannot settle: no open/close prices and no winnerTicker" };
+    }
+    const resolved = resolveWinner(
+      input.tickerA,
+      input.tickerB,
+      input.winnerTicker,
+      input.companyAPerf ?? undefined,
+      input.companyBPerf ?? undefined
+    );
+    if ("error" in resolved) return resolved;
+    return {
+      winner: resolved.winner,
+      companyAPerf: input.companyAPerf ?? undefined,
+      companyBPerf: input.companyBPerf ?? undefined,
+      derivedFromPrices: false,
+      warnings: ["Settled on agent figures: open/close prices were not all supplied"],
+    };
+  }
+
+  const perfA = openToClosePerf(input.companyAStartPrice!, input.companyAEndPrice!);
+  const perfB = openToClosePerf(input.companyBStartPrice!, input.companyBEndPrice!);
+
+  if (Math.abs(perfA) > SETTLEMENT_MAX_PLAUSIBLE_MOVE_PCT || Math.abs(perfB) > SETTLEMENT_MAX_PLAUSIBLE_MOVE_PCT) {
+    return {
+      error:
+        `Implausible open-to-close move from supplied prices ` +
+        `(${input.tickerA} ${perfA}%, ${input.tickerB} ${perfB}%) — a price is probably wrong; refusing to settle`,
+    };
+  }
+
+  const winner: "A" | "B" = perfA >= perfB ? "A" : "B";
+  const warnings: string[] = [];
+
+  const check = (ticker: string, agent: number | null | undefined, derived: number) => {
+    if (typeof agent === "number" && Math.abs(agent - derived) > SETTLEMENT_PERF_TOLERANCE_PCT_POINTS) {
+      warnings.push(`${ticker}: agent reported ${agent}% but open-to-close from prices is ${derived}% — using ${derived}%`);
+    }
+  };
+  check(input.tickerA, input.companyAPerf, perfA);
+  check(input.tickerB, input.companyBPerf, perfB);
+
+  if (input.winnerTicker) {
+    const w = input.winnerTicker.toUpperCase();
+    const agentWinner = w === input.tickerA.toUpperCase() ? "A" : w === input.tickerB.toUpperCase() ? "B" : null;
+    if (agentWinner === null) {
+      warnings.push(`winnerTicker '${input.winnerTicker}' matches neither company — winner taken from prices`);
+    } else if (agentWinner !== winner) {
+      const derivedTicker = winner === "A" ? input.tickerA : input.tickerB;
+      warnings.push(
+        `agent named ${input.winnerTicker} the winner but open-to-close prices favour ${derivedTicker} ` +
+          `(${input.tickerA} ${perfA}% vs ${input.tickerB} ${perfB}%) — winner overridden`
+      );
+    }
+  }
+
+  return { winner, companyAPerf: perfA, companyBPerf: perfB, derivedFromPrices: true, warnings };
+}
+
 // ─── Leaderboard Qualification ────────────────────────────────────────────────
 /**
  * The exact qualification threshold — never change without a documented decision.
