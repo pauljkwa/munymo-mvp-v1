@@ -1126,15 +1126,29 @@ export default function Home() {
               <span className="text-gradient-gold">Play the archive instead.</span>
             </h2>
 
-            <p
-              className="mb-8 text-sm leading-relaxed text-center max-w-xl mx-auto"
-              style={{ color: "var(--color-muted)" }}
-            >
-              The daily game locks when the US market opens — same as backing a horse, once
-              they're out of the gates the odds are settled. But every completed matchup stays
-              playable. Same research, same scoring, same timed question, and you find out how
-              you did in five minutes instead of waiting for the closing bell.
-            </p>
+            {/* Written for someone arriving mid-session who finds nothing to
+                play. The earlier copy said the game "locks when the US market
+                opens", which assumes the reader knows what that means for
+                them — this states the situation plainly, then reassures. */}
+            <div className="mb-8 max-w-xl mx-auto space-y-3">
+              <p
+                className="text-sm leading-relaxed text-center"
+                style={{ color: "var(--color-muted)" }}
+              >
+                New here, and the trading day has already started? Today's game is locked —
+                once the US market opens, picks close for everyone. Much the same way you
+                can't back a horse once the race is under way.
+              </p>
+              <p
+                className="text-sm leading-relaxed text-center"
+                style={{ color: "var(--color-muted)" }}
+              >
+                But you don't have to wait until tomorrow to have a go. Every matchup we've
+                run stays playable in the archive — the same research, the same scoring, the
+                same timed question. The only difference is that the result already exists,
+                so you'll find out how you did in about five minutes.
+              </p>
+            </div>
 
             <div className="grid sm:grid-cols-3 gap-4 mb-8">
               {[
