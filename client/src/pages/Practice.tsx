@@ -139,7 +139,7 @@ export default function Practice() {
               {stats.projectedRank !== null && stats.liveBoardSize > 0 && (
                 <p className="text-xs mt-0.5" style={{ color: "var(--color-subtle)" }}>
                   That would place you {stats.projectedRank}
-                  {ordinalSuffix(stats.projectedRank)} on the live board — but practice runs
+                  {ordinalSuffix(stats.projectedRank)} on the all-time board — but practice runs
                   high, because the result already exists and you can read at your own pace.
                 </p>
               )}

@@ -21,6 +21,7 @@ import {
 } from "./email";
 import { z } from "zod";
 import { COOKIE_NAME } from "@shared/const";
+import { currentSeasonKey, seasonLabel, seasonWindow } from "@shared/leaderboard";
 import type { Candle } from "../drizzle/schema";
 import { createMagicLink as createMagicLinkShared } from "./_core/magicLink";
 import { ENV } from "./_core/env";
@@ -90,6 +91,8 @@ import {
   getOutboundClickStats,
   getLessonProgressForUser,
   markLessonComplete,
+  getSeasonStandings,
+  getSeasonKeys,
 } from "./db";
 import { ALL_LESSON_IDS } from "@shared/lessonIds";
 
@@ -554,6 +557,45 @@ const leaderboardRouter = router({
   getProvisional: publicProcedure.query(async () => {
     return getProvisionalLeaderboard();
   }),
+  /**
+   * The season board: one calendar month of game dates, ranked by total
+   * points. See references/leaderboard-seasons-spec.md. Defaults to the
+   * season in progress; any past season with published games can be asked for.
+   */
+  season: publicProcedure
+    .input(z.object({ season: z.string().regex(/^\d{4}-\d{2}$/).optional() }).optional())
+    .query(async ({ input }) => {
+      const current = currentSeasonKey();
+      const keys = await getSeasonKeys();
+      const seasons = keys.includes(current) ? keys : [current, ...keys];
+      const season = input?.season ?? current;
+      const { from, to } = seasonWindow(season);
+      const standings = await getSeasonStandings(from, to);
+      const benchmark = standings.find((s) => s.isBenchmark) ?? null;
+
+      // Past winners, newest first. A handful of months, one query each.
+      const pastSeasons: Array<{ season: string; label: string; winnerName: string | null; winnerPoints: number; players: number }> = [];
+      for (const key of seasons.filter((k) => k < current)) {
+        const w = seasonWindow(key);
+        const rows = await getSeasonStandings(w.from, w.to);
+        const top = rows.find((r) => !r.isBenchmark) ?? rows[0];
+        if (!top) continue;
+        pastSeasons.push({ season: key, label: seasonLabel(key), winnerName: top.userName, winnerPoints: top.points, players: rows.length });
+      }
+
+      return {
+        season,
+        label: seasonLabel(season),
+        from,
+        to,
+        isCurrent: season === current,
+        seasons,
+        playerCount: standings.length,
+        standings,
+        benchmark: benchmark ? { points: benchmark.points, games: benchmark.games, average: benchmark.average } : null,
+        pastSeasons,
+      };
+    }),
 });
 
 // ─── Streaks Router ───────────────────────────────────────────────────────────
@@ -1865,7 +1907,22 @@ const dashboardRouter = router({
     const rankIndex = leaderboard.findIndex((entry) => entry.userId === ctx.user.id);
     const leaderboardRank = rankIndex >= 0 ? rankIndex + 1 : null;
 
+    // This month's season standing — the board players actually compete on.
+    const seasonKey = currentSeasonKey();
+    const window = seasonWindow(seasonKey);
+    const seasonStandings = await getSeasonStandings(window.from, window.to);
+    const mine = seasonStandings.find((s) => s.userId === ctx.user.id);
+    const season = {
+      key: seasonKey,
+      label: seasonLabel(seasonKey),
+      players: seasonStandings.length,
+      points: mine?.points ?? 0,
+      games: mine?.games ?? 0,
+      rank: mine?.rank ?? null,
+    };
+
     return {
+      season,
       totalGames,
       accuracy,
       totalScore,

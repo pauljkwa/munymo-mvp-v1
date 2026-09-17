@@ -11,8 +11,11 @@
 import type { Express, Request, Response } from "express";
 import { notifyOwner } from "./notification";
 import { ENV } from "./env";
+import { TESTER_BOT_IDS } from "@shared/const";
 
-const TESTER_IDS = [870002, 870004, 870006, 870008, 870010, 870012];
+// Shared with the public-surface filters: one of these is shown as the
+// "Coin Flip" benchmark, the rest are hidden. They all keep playing.
+const TESTER_IDS: readonly number[] = TESTER_BOT_IDS;
 
 function randomPick(): "A" | "B" {
   return Math.random() < 0.5 ? "A" : "B";

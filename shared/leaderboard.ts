@@ -72,3 +72,85 @@ export function formatAverageScore(value: string | number): string {
   const n = typeof value === "number" ? value : parseFloat(value);
   return Number.isFinite(n) ? n.toFixed(2) : "0.00";
 }
+
+// ─── Seasons ─────────────────────────────────────────────────────────────────
+/**
+ * A season is a calendar month of GAME dates. `gameDate` is already the
+ * market-calendar date (America/New_York), so the month is a string slice —
+ * no timezone arithmetic, and a game can never straddle two seasons.
+ */
+export function seasonKeyOf(gameDate: string): string {
+  return gameDate.slice(0, 7);
+}
+
+/** First and last calendar day of a season, as YYYY-MM-DD, for BETWEEN queries. */
+export function seasonWindow(seasonKey: string): { from: string; to: string } {
+  const [y, m] = seasonKey.split("-").map(Number);
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate(); // day 0 of next month
+  return { from: `${seasonKey}-01`, to: `${seasonKey}-${String(lastDay).padStart(2, "0")}` };
+}
+
+/**
+ * The season in progress "now", in the market's calendar. Uses New York time so
+ * the board rolls over when the market's month does, not when a player's
+ * local midnight or UTC midnight does — a Perth player at 10 am on the 1st is
+ * still in the previous season until the New York date changes.
+ */
+export function currentSeasonKey(now: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(now);
+  const y = parts.find((p) => p.type === "year")!.value;
+  const m = parts.find((p) => p.type === "month")!.value;
+  return `${y}-${m}`;
+}
+
+export function seasonLabel(seasonKey: string): string {
+  const [y, m] = seasonKey.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+export interface SeasonRow {
+  userId: number;
+  points: number;
+  games: number;
+  average: number;
+}
+
+export interface RankedSeasonRow extends SeasonRow {
+  rank: number;
+  /** rank / players, as a whole percent rounded up: 1st of 10 is "Top 10%" */
+  percentile: number;
+}
+
+/**
+ * Season standings are ranked by TOTAL points, not average. A total rewards
+ * showing up — the value of the daily rep — and a break costs nothing except
+ * the points not earned, which is the same stance Away Status takes. There is
+ * no qualification gate because a total is not an average: one lucky game is
+ * 100 points, not a 100 average.
+ *
+ * Ties share a position (golf ranking). Among tied totals the higher average
+ * is listed first — the same points from fewer games — then the lower user id
+ * so the order is stable between loads.
+ */
+export function rankSeasonStandings(rows: SeasonRow[]): RankedSeasonRow[] {
+  const sorted = [...rows].sort((a, b) => {
+    if (b.points !== a.points) return b.points - a.points;
+    if (b.average !== a.average) return b.average - a.average;
+    return a.userId - b.userId;
+  });
+  const n = sorted.length;
+  const out: RankedSeasonRow[] = [];
+  for (let i = 0; i < n; i++) {
+    const rank = i > 0 && sorted[i].points === sorted[i - 1].points ? out[i - 1].rank : i + 1;
+    out.push({ ...sorted[i], rank, percentile: Math.ceil((rank / n) * 100) });
+  }
+  return out;
+}

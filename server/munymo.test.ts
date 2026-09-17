@@ -1195,3 +1195,71 @@ describe("settleFromPrices — prices are canonical", () => {
     expect(r.derivedFromPrices).toBe(false);
   });
 });
+
+// ─── Seasons (shared/leaderboard) ────────────────────────────────────────────
+import {
+  seasonKeyOf,
+  seasonWindow,
+  currentSeasonKey,
+  seasonLabel,
+  rankSeasonStandings,
+} from "@shared/leaderboard";
+
+describe("season helpers", () => {
+  it("season key is the game date's month", () => {
+    expect(seasonKeyOf("2026-09-17")).toBe("2026-09");
+  });
+
+  it("season window covers the whole month, including 30/31/28-day months", () => {
+    expect(seasonWindow("2026-09")).toEqual({ from: "2026-09-01", to: "2026-09-30" });
+    expect(seasonWindow("2026-10")).toEqual({ from: "2026-10-01", to: "2026-10-31" });
+    expect(seasonWindow("2027-02")).toEqual({ from: "2027-02-01", to: "2027-02-28" });
+    expect(seasonWindow("2028-02")).toEqual({ from: "2028-02-01", to: "2028-02-29" });
+  });
+
+  it("current season follows New York's calendar, not UTC", () => {
+    // 2026-10-01 02:00 UTC is still 2026-09-30 22:00 in New York
+    expect(currentSeasonKey(new Date("2026-10-01T02:00:00Z"))).toBe("2026-09");
+    expect(currentSeasonKey(new Date("2026-10-01T05:00:00Z"))).toBe("2026-10");
+  });
+
+  it("labels a season in US English", () => {
+    expect(seasonLabel("2026-09")).toBe("September 2026");
+  });
+});
+
+describe("rankSeasonStandings — total points, golf ties, percentiles", () => {
+  const rows = [
+    { userId: 3, points: 300, games: 5, average: 60 },
+    { userId: 1, points: 412, games: 9, average: 45.78 },
+    { userId: 2, points: 300, games: 4, average: 75 },
+    { userId: 4, points: 120, games: 3, average: 40 },
+  ];
+
+  it("ranks by total points, not average", () => {
+    const r = rankSeasonStandings(rows);
+    expect(r.map((x) => x.userId)).toEqual([1, 2, 3, 4]);
+    expect(r[0].rank).toBe(1);
+  });
+
+  it("ties share a position and the next rank skips (1-2-2-4)", () => {
+    const r = rankSeasonStandings(rows);
+    expect(r.map((x) => x.rank)).toEqual([1, 2, 2, 4]);
+  });
+
+  it("among tied totals the higher average is listed first", () => {
+    const r = rankSeasonStandings(rows);
+    expect(r[1].userId).toBe(2); // 300 pts from 4 games
+    expect(r[2].userId).toBe(3); // 300 pts from 5 games
+  });
+
+  it("percentile is rank over players, rounded up", () => {
+    const r = rankSeasonStandings(rows);
+    expect(r[0].percentile).toBe(25);
+    expect(r[3].percentile).toBe(100);
+  });
+
+  it("handles an empty board", () => {
+    expect(rankSeasonStandings([])).toEqual([]);
+  });
+});

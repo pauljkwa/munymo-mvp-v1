@@ -6,7 +6,6 @@ import { Link } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
 import MunymoLogo from "@/components/MunymoLogo";
 import { usePageMeta } from "@/hooks/usePageMeta";
-import { LEADERBOARD_QUALIFICATION_GAMES as QUALIFY_GAMES } from "@shared/const";
 import {
   Accordion,
   AccordionContent,
@@ -699,7 +698,7 @@ export default function Home() {
                   iconColor: "var(--color-brand)",
                   iconBg: "var(--color-brand-muted)",
                   title: "Leaderboard",
-                  body: `Ranked by Average Daily Score. Qualify after ${QUALIFY_GAMES} games — rankings reflect sustained performance, not luck.`,
+                  body: "Monthly seasons ranked by total points — you're on the board from your first game, and every game you play adds to your total. Beat the Coin Flip to prove it isn't luck.",
                 },
                 {
                   icon: Lock,

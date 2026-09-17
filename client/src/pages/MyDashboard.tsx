@@ -188,7 +188,17 @@ export default function MyDashboard() {
               />
               <StatCard
                 icon={Trophy}
-                label="Leaderboard"
+                label={`${stats.season.label} season`}
+                value={stats.season.rank ? `#${stats.season.rank} of ${stats.season.players}` : "—"}
+                sub={
+                  stats.season.games > 0
+                    ? `${stats.season.points} pts · ${stats.season.games} ${stats.season.games === 1 ? "game" : "games"}`
+                    : "Play a game to join this month's board"
+                }
+              />
+              <StatCard
+                icon={Trophy}
+                label="All-time board"
                 value={
                   stats.isQualified
                     ? stats.leaderboardRank
@@ -196,7 +206,7 @@ export default function MyDashboard() {
                       : "Ranked"
                     : `${stats.gamesPlayed}/${QUALIFY_GAMES}`
                 }
-                sub={stats.isQualified ? "Qualified" : "Games to qualify"}
+                sub={stats.isQualified ? "By average score" : "Games to qualify"}
               />
             </div>
           ) : (

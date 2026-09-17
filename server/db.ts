@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, isNotNull, lt, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, lt, lte, notInArray, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -22,7 +22,8 @@ import {
   type ChartSnapshot,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
-import { LEADERBOARD_QUALIFICATION_GAMES } from "@shared/const";
+import { BENCHMARK_BOT_ID, HIDDEN_BOT_IDS, LEADERBOARD_QUALIFICATION_GAMES, TESTER_BOT_IDS } from "@shared/const";
+import { rankSeasonStandings, type SeasonRow } from "@shared/leaderboard";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -644,7 +645,12 @@ export async function getLeaderboard() {
     })
     .from(leaderboardStats)
     .innerJoin(users, eq(leaderboardStats.userId, users.id))
-    .where(eq(leaderboardStats.qualificationStatus, "qualified"))
+    .where(
+      and(
+        eq(leaderboardStats.qualificationStatus, "qualified"),
+        notInArray(leaderboardStats.userId, HIDDEN_BOT_IDS)
+      )
+    )
     // Score decides RANK; games played only decides who is listed first among
     // players who tie, and userId keeps that order stable. Without the
     // secondary sorts, tied players came back in whatever order MySQL chose
@@ -655,10 +661,106 @@ export async function getLeaderboard() {
       asc(leaderboardStats.userId)
     );
 
+  const available = await availableGamesByUser(rows.map((r) => r.userId));
   return rows.map(({ displayName, name, ...rest }) => ({
     ...rest,
     userName: publicPlayerName({ displayName, name }),
+    isBenchmark: rest.userId === BENCHMARK_BOT_ID,
+    availableGames: available.get(rest.userId) ?? rest.gamesPlayed,
   }));
+}
+
+/**
+ * "Played X of Y available": Y is the number of published games since the
+ * player's first scored game. An average ignores the days a player skipped,
+ * so this is the number that makes a selective player's average read
+ * honestly. Skipping is allowed (Away Status is unlimited by design); it just
+ * shouldn't be invisible.
+ */
+async function availableGamesByUser(userIds: number[]): Promise<Map<number, number>> {
+  const out = new Map<number, number>();
+  const db = await getDb();
+  if (!db || userIds.length === 0) return out;
+  const [firstDates, publishedDates] = await Promise.all([
+    db
+      .select({ userId: dailyScores.userId, first: sql<string>`MIN(${dailyGames.gameDate})` })
+      .from(dailyScores)
+      .innerJoin(dailyGames, eq(dailyScores.gameId, dailyGames.id))
+      .where(and(eq(dailyGames.status, "result_published"), inArray(dailyScores.userId, userIds)))
+      .groupBy(dailyScores.userId),
+    db
+      .select({ gameDate: dailyGames.gameDate })
+      .from(dailyGames)
+      .where(eq(dailyGames.status, "result_published"))
+      .orderBy(asc(dailyGames.gameDate)),
+  ]);
+  const dates = publishedDates.map((r) => r.gameDate);
+  for (const r of firstDates) {
+    if (!r.first) continue;
+    out.set(r.userId, dates.filter((d) => d >= r.first).length);
+  }
+  return out;
+}
+
+// ─── Seasons (the competition engine, first instance) ────────────────────────
+/**
+ * Standings for any window of game dates, optionally restricted to a member
+ * list. This is the whole competition engine: a season is a month, a league is
+ * a member list, a head-to-head is a two-member list. Every per-game score is
+ * already in daily_scores, so every competition is this one query.
+ *
+ * Hidden bots never appear. The benchmark bot does, flagged, so the UI can
+ * mark it. Ranking (ties, percentiles) is the pure helper in @shared/leaderboard
+ * so the client and tests can reason about it without a database.
+ */
+export async function getSeasonStandings(from: string, to: string, memberIds?: number[]) {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions = [
+    eq(dailyGames.status, "result_published"),
+    gte(dailyGames.gameDate, from),
+    lte(dailyGames.gameDate, to),
+    notInArray(dailyScores.userId, HIDDEN_BOT_IDS),
+  ];
+  if (memberIds) conditions.push(inArray(dailyScores.userId, memberIds));
+
+  const rows = await db
+    .select({
+      userId: dailyScores.userId,
+      displayName: users.displayName,
+      name: users.name,
+      points: sql<string | number>`SUM(${dailyScores.totalScore})`,
+      games: sql<string | number>`COUNT(*)`,
+    })
+    .from(dailyScores)
+    .innerJoin(dailyGames, eq(dailyScores.gameId, dailyGames.id))
+    .innerJoin(users, eq(dailyScores.userId, users.id))
+    .where(and(...conditions))
+    .groupBy(dailyScores.userId, users.displayName, users.name);
+
+  const names = new Map(rows.map((r) => [r.userId, publicPlayerName({ displayName: r.displayName, name: r.name })]));
+  const seasonRows: SeasonRow[] = rows.map((r) => {
+    const points = Number(r.points);
+    const games = Number(r.games);
+    return { userId: r.userId, points, games, average: games > 0 ? Math.round((points / games) * 100) / 100 : 0 };
+  });
+  return rankSeasonStandings(seasonRows).map((r) => ({
+    ...r,
+    userName: names.get(r.userId) ?? null,
+    isBenchmark: r.userId === BENCHMARK_BOT_ID,
+  }));
+}
+
+/** Every season (YYYY-MM) that has at least one published game, newest first. */
+export async function getSeasonKeys(): Promise<string[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .selectDistinct({ season: sql<string>`SUBSTRING(${dailyGames.gameDate}, 1, 7)` })
+    .from(dailyGames)
+    .where(eq(dailyGames.status, "result_published"))
+    .orderBy(desc(sql`SUBSTRING(${dailyGames.gameDate}, 1, 7)`));
+  return rows.map((r) => r.season);
 }
 
 export async function getProvisionalLeaderboard() {
@@ -674,7 +776,12 @@ export async function getProvisionalLeaderboard() {
     })
     .from(leaderboardStats)
     .innerJoin(users, eq(leaderboardStats.userId, users.id))
-    .where(eq(leaderboardStats.qualificationStatus, "pending"))
+    .where(
+      and(
+        eq(leaderboardStats.qualificationStatus, "pending"),
+        notInArray(leaderboardStats.userId, HIDDEN_BOT_IDS)
+      )
+    )
     .orderBy(
       desc(leaderboardStats.averageDailyScore),
       desc(leaderboardStats.gamesPlayed),
@@ -682,9 +789,12 @@ export async function getProvisionalLeaderboard() {
     )
     .limit(20);
 
+  const available = await availableGamesByUser(rows.map((r) => r.userId));
   return rows.map(({ displayName, name, ...rest }) => ({
     ...rest,
     userName: publicPlayerName({ displayName, name }),
+    isBenchmark: rest.userId === BENCHMARK_BOT_ID,
+    availableGames: available.get(rest.userId) ?? rest.gamesPlayed,
   }));
 }
 
@@ -938,7 +1048,10 @@ export async function computeAndStoreCommunityStats(gameId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  const picks = await getPicksForGame(gameId);
+  // "How the crowd voted" is humans only. With six random bots and one
+  // founder, the crowd split was the bots' coin flips.
+  const botIds = new Set<number>(TESTER_BOT_IDS);
+  const picks = (await getPicksForGame(gameId)).filter((p) => !botIds.has(p.userId));
   const question = await getValidationQuestion(gameId);
   const game = await getGameById(gameId);
   if (!game) throw new Error("Game not found");
