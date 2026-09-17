@@ -24,8 +24,25 @@ const COLORS = [
   "#ffffff",
 ];
 
-const PIECES = 90;
-const DURATION_MS = 2600;
+const PIECES = 150;
+const DURATION_MS = 5000;
+
+/**
+ * Physics in pixels per SECOND, driven by elapsed time — not per frame.
+ *
+ * The first version advanced by a fixed amount each frame, which silently
+ * halved both the height and the duration on a 120Hz display (ProMotion
+ * iPhones, high-refresh monitors): twice the frames in the same second means
+ * twice the gravity applied. It looked fine at 60Hz and anticlimactic on a
+ * modern phone, which is exactly how it was reported.
+ */
+const GRAVITY = 900; // px/s²
+/**
+ * Downward speed is capped so pieces flutter back down rather than plummeting.
+ * This is what makes the burst last: without it everything is off-screen in
+ * about two seconds regardless of how hard it was launched.
+ */
+const TERMINAL_VY = 260; // px/s
 
 type Piece = {
   x: number;
@@ -37,6 +54,8 @@ type Piece = {
   w: number;
   h: number;
   color: string;
+  swayPhase: number;
+  swayAmp: number;
 };
 
 export default function PerfectScoreConfetti() {
@@ -61,41 +80,67 @@ export default function PerfectScoreConfetti() {
     canvas.style.height = `${height}px`;
     ctx.scale(dpr, dpr);
 
-    // Two launch points, lower corners, angled inward — reads as a celebration
-    // rather than as something falling on the player.
+    // Launch speed is derived from how far up the screen each piece should
+    // reach, so the burst fills a tall desktop window and a short phone alike
+    // instead of being tuned to one screen size. v = √(2·g·rise).
+    const launchSpeedFor = (riseFraction: number) =>
+      Math.sqrt(2 * GRAVITY * height * riseFraction);
+
+    // Two launch points in the lower corners, angled inward — reads as a
+    // celebration rather than as something falling on the player.
     const pieces: Piece[] = Array.from({ length: PIECES }, (_, i) => {
       const fromLeft = i % 2 === 0;
-      const spread = (Math.random() - 0.5) * 1.1;
+      // 0.8–1.25 of the viewport height: most clear the top of the screen.
+      const rise = 0.8 + Math.random() * 0.45;
+      const speed = launchSpeedFor(rise);
+      // Mostly upward, fanned INWARD across the screen. The sign matters: the
+      // left launcher must throw right and vice versa, or both fire off the
+      // sides and you see a thin strip of confetti down each edge.
+      const angle = (fromLeft ? 1 : -1) * (0.28 + Math.random() * 0.5);
       return {
-        x: fromLeft ? width * 0.1 : width * 0.9,
-        y: height * 0.95,
-        vx: (fromLeft ? 1 : -1) * (3 + Math.random() * 5) + spread,
-        vy: -(9 + Math.random() * 7),
+        x: fromLeft ? width * 0.08 : width * 0.92,
+        y: height + 10,
+        vx: Math.sin(angle) * speed * 0.85,
+        vy: -Math.cos(angle) * speed,
         rot: Math.random() * Math.PI,
-        vrot: (Math.random() - 0.5) * 0.3,
-        w: 6 + Math.random() * 6,
-        h: 3 + Math.random() * 5,
+        vrot: (Math.random() - 0.5) * 7,
+        w: 7 + Math.random() * 7,
+        h: 4 + Math.random() * 6,
         color: COLORS[Math.floor(Math.random() * COLORS.length)],
+        swayPhase: Math.random() * Math.PI * 2,
+        swayAmp: 20 + Math.random() * 45,
       };
     });
 
     let raf = 0;
     const start = performance.now();
+    let last = start;
 
     const frame = (now: number) => {
+      // Clamped so a backgrounded tab doesn't resume with one enormous step
+      // that teleports every piece off-screen.
+      const dt = Math.min((now - last) / 1000, 0.05);
+      last = now;
       const elapsed = now - start;
+
       ctx.clearRect(0, 0, width, height);
 
-      // Fade the whole burst out near the end so it doesn't just stop.
-      const fade = Math.max(0, 1 - Math.max(0, elapsed - DURATION_MS * 0.6) / (DURATION_MS * 0.4));
+      // Fade over the final quarter so the burst ends rather than vanishing.
+      const fadeStart = DURATION_MS * 0.75;
+      const fade =
+        elapsed < fadeStart ? 1 : Math.max(0, 1 - (elapsed - fadeStart) / (DURATION_MS - fadeStart));
       ctx.globalAlpha = fade;
 
       for (const p of pieces) {
-        p.vy += 0.28; // gravity
-        p.vx *= 0.99; // drag
-        p.x += p.vx;
-        p.y += p.vy;
-        p.rot += p.vrot;
+        p.vy = Math.min(p.vy + GRAVITY * dt, TERMINAL_VY);
+        p.vx *= 1 - 1.1 * dt; // air drag
+        p.swayPhase += 2.4 * dt;
+        p.x += (p.vx + Math.cos(p.swayPhase) * p.swayAmp) * dt;
+        p.y += p.vy * dt;
+        p.rot += p.vrot * dt;
+
+        // Skip anything that has fallen well past the bottom.
+        if (p.y > height + 40) continue;
 
         ctx.save();
         ctx.translate(p.x, p.y);
