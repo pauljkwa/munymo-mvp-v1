@@ -4,10 +4,10 @@ import { withReferralParams } from "@/lib/utils";
 import { useParams } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
 import { Link } from "wouter";
-import { ArrowLeft, Trophy, BookOpen, Users, Loader2, HelpCircle, Lightbulb, ExternalLink } from "lucide-react";
-import { MetricExplanationSheet } from "@/components/MetricExplanationSheet";
-import { metricGroupInfo } from "@/lib/metricGroups";
-import { Fragment } from "react";
+import { ArrowLeft, Trophy, BookOpen, Users, Loader2, HelpCircle, Lightbulb, ExternalLink, BarChart2 } from "lucide-react";
+import ResearchMetricsPanel from "@/components/ResearchMetricsPanel";
+import { ChartSheet } from "@/components/ChartSheet";
+import { useState } from "react";
 
 export default function ArchiveGame() {
   const { id } = useParams<{ id: string }>();
@@ -22,6 +22,7 @@ export default function ArchiveGame() {
   const { data: validationQ } = trpc.games.getValidationQuestion.useQuery({ gameId });
   // Fire-and-forget: log clicks on the source-article link for referral reporting.
   const recordOutboundClick = trpc.games.recordOutboundClick.useMutation();
+  const [chartTicker, setChartTicker] = useState<string | null>(null);
 
   // Every archive game is a unique "TICKER vs TICKER" page in the sitemap —
   // the per-game title is what lets each one rank for comparison searches.
@@ -161,57 +162,50 @@ export default function ArchiveGame() {
           </div>
         )}
 
-        {/* Key Metrics with explanations */}
-        {research?.metrics && Object.keys(research.metrics as Record<string, string>).length > 0 && (
-          <div className="card-glass p-6 mb-5 animate-fade-up delay-125">
-            <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--color-brand)" }}>
-              Key Metrics
-            </p>
-            <div className="rounded-lg overflow-hidden" style={{ border: "1px solid var(--color-border)" }}>
-              <table className="w-full text-sm">
-                <tbody>
-                  {(() => {
-                    // Order by metric group (The Long Game → Game-Day Setup) and
-                    // insert a header row where the group changes; legacy games
-                    // whose metrics all share one group render without headers
-                    const entries = Object.entries(research.metrics as Record<string, string>).sort(
-                      (a, b) => metricGroupInfo(a[0]).rank - metricGroupInfo(b[0]).rank
-                    );
-                    const groups = entries.map(([label]) => metricGroupInfo(label));
-                    const showGroupHeaders = new Set(groups.map((g) => g.id)).size > 1;
-                    return entries.map(([label, value], i, arr) => (
-                      <Fragment key={label}>
-                        {showGroupHeaders && (i === 0 || groups[i - 1].id !== groups[i].id) && (
-                          <tr style={{ background: "var(--color-surface-raised)", borderBottom: "1px solid var(--color-border)" }}>
-                            <td
-                              colSpan={2}
-                              className="px-4 py-1.5 text-[0.625rem] font-bold uppercase tracking-widest"
-                              style={{ color: "var(--color-brand)" }}
-                            >
-                              {groups[i].title}
-                            </td>
-                          </tr>
-                        )}
-                        <tr
-                          style={{
-                            borderBottom: i < arr.length - 1 ? "1px solid var(--color-border)" : undefined,
-                            background: i % 2 === 0 ? "var(--color-surface)" : "transparent",
-                          }}
-                        >
-                          <td className="px-4 py-2.5 font-medium" style={{ color: "var(--color-muted)" }}>
-                            <div>{label}</div>
-                            <MetricExplanationSheet metricLabel={label} />
-                          </td>
-                          <td className="px-4 py-2.5 text-right font-mono font-semibold" style={{ color: "var(--color-foreground)" }}>{value}</td>
-                        </tr>
-                      </Fragment>
-                    ));
-                  })()}
-                </tbody>
-              </table>
+        {/* Key Metrics — the SAME side-by-side panel the live game and practice
+            use, so every presentation of the metrics is uniform. This page used
+            to stack all sixteen in one column, which buried the comparison. */}
+        {research?.metrics && Object.keys(research.metrics as Record<string, string>).length > 0 && (() => {
+          const snapshot = (research.chartSnapshot ?? null) as {
+            asOf?: string;
+            series?: Record<string, { time: number; open: number; high: number; low: number; close: number }[]>;
+          } | null;
+          const hasSnapshot = Boolean(
+            snapshot?.series?.[game.companyATicker] || snapshot?.series?.[game.companyBTicker]
+          );
+          return (
+            <div className="card-glass p-6 mb-5 animate-fade-up delay-125">
+              <ResearchMetricsPanel
+                metrics={Object.entries(research.metrics as Record<string, string>)}
+                tickerA={game.companyATicker}
+                tickerB={game.companyBTicker}
+                companyAName={game.companyAName}
+                companyBName={game.companyBName}
+              />
+              <div className="grid grid-cols-2 gap-2 mt-3">
+                {[
+                  { ticker: game.companyATicker, color: "#009050" },
+                  { ticker: game.companyBTicker, color: "#1d4ed8" },
+                ].map((co) => (
+                  <button
+                    key={co.ticker}
+                    onClick={() => setChartTicker(co.ticker)}
+                    className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold transition-all active:scale-95"
+                    style={{ background: co.color + "18", color: co.color, border: `1px solid ${co.color}40` }}
+                  >
+                    <BarChart2 size={13} />
+                    {co.ticker} Chart
+                  </button>
+                ))}
+              </div>
+              <p className="text-[0.625rem] mt-2 text-center" style={{ color: "var(--color-subtle)" }}>
+                {hasSnapshot && snapshot?.asOf
+                  ? `Charts show prices up to ${snapshot.asOf} — what players saw before they picked.`
+                  : "Charts show current market prices; this game predates archived chart data."}
+              </p>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Validation question + answer */}
         {validationQ && (
@@ -328,6 +322,25 @@ export default function ArchiveGame() {
           </div>
         )}
       </div>
+
+      {/* Rendered at the top level so the sheet covers the full viewport on iOS. */}
+      {chartTicker && (() => {
+        const snap = (research?.chartSnapshot ?? null) as {
+          series?: Record<string, { time: number; open: number; high: number; low: number; close: number }[]>;
+        } | null;
+        const candles = snap?.series?.[chartTicker];
+        return (
+          <ChartSheet
+            ticker={chartTicker}
+            companyName={chartTicker === game.companyATicker ? game.companyAName : game.companyBName}
+            accentColor={chartTicker === game.companyATicker ? "#009050" : "#1d4ed8"}
+            // Archived candles when we have them; otherwise the live chart,
+            // which leaks nothing here because the result is on this page.
+            archivedCandles={candles && candles.length > 0 ? candles : undefined}
+            onClose={() => setChartTicker(null)}
+          />
+        );
+      })()}
     </PublicLayout>
   );
 }

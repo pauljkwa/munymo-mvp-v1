@@ -167,9 +167,13 @@ const gamesRouter = router({
           hindsightSpotlight: game.hindsightSpotlight ?? null,
           winner: game.winner ?? null,
           winnerName: game.winner === "A" ? game.companyAName : game.winner === "B" ? game.companyBName : null,
+          // The candles a live player saw on game day, so the archive page can
+          // show the same chart the game did. Published games only: the
+          // snapshot is taken at close, and there is no outcome left to leak.
+          chartSnapshot: research.chartSnapshot ?? null,
         };
       }
-      return { content: research.content, researchSummary: research.researchSummary ?? null, isSnapshot: false, metrics, hindsightSpotlight: null, winner: null, winnerName: null };
+      return { content: research.content, researchSummary: research.researchSummary ?? null, isSnapshot: false, metrics, hindsightSpotlight: null, winner: null, winnerName: null, chartSnapshot: null };
     }),
 
   getValidationQuestion: publicProcedure

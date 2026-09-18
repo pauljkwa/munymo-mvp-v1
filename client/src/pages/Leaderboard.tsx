@@ -39,7 +39,7 @@ function Avatar({ name, isMe, isBenchmark, size = 8 }: { name: string | null; is
 function BenchmarkPill() {
   return (
     <span
-      className="ml-2 text-[0.625rem] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full align-middle"
+      className="hidden sm:inline-block ml-2 text-[0.625rem] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full align-middle"
       style={{ background: "var(--color-surface-raised)", color: "var(--color-subtle)", border: "1px solid var(--color-border)" }}
     >
       benchmark
@@ -203,7 +203,14 @@ export default function Leaderboard() {
               </div>
             ) : (
               <div className="card-glass overflow-hidden animate-fade-up delay-100">
-                <table className="w-full">
+                <table className="w-full table-fixed">
+                  <colgroup>
+                    <col className={showPercentile ? "w-20 sm:w-28" : "w-12 sm:w-16"} />
+                    <col />
+                    <col className="w-20 sm:w-24" />
+                    <col className="hidden sm:table-column w-20" />
+                    <col className="hidden sm:table-column w-20" />
+                  </colgroup>
                   <thead>
                     <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
                       <th className={`text-left ${th}`} style={{ color: "var(--color-subtle)" }}>Rank</th>
@@ -243,7 +250,7 @@ export default function Leaderboard() {
                               )}
                             </div>
                           </td>
-                          <td className="px-3 sm:px-5 py-4">
+                          <td className="px-3 sm:px-5 py-4 overflow-hidden">
                             <div className="flex items-center gap-3 min-w-0">
                               <Avatar name={entry.userName} isMe={isMe} isBenchmark={entry.isBenchmark} />
                               <div className="min-w-0">
@@ -258,6 +265,9 @@ export default function Leaderboard() {
                                     </span>
                                   )}
                                   {entry.isBenchmark && <BenchmarkPill />}
+                                </p>
+                                <p className="sm:hidden text-[0.6875rem] truncate mt-0.5" style={{ color: "var(--color-subtle)" }}>
+                                  {entry.isBenchmark ? "Benchmark · " : ""}{entry.games} {entry.games === 1 ? "game" : "games"} · avg {formatAverageScore(entry.average)}
                                 </p>
                               </div>
                             </div>
@@ -302,7 +312,7 @@ export default function Leaderboard() {
                     <button
                       key={ps.season}
                       onClick={() => setSeasonKey(ps.season)}
-                      className="w-full flex items-center justify-between px-4 sm:px-5 py-3 text-left hover:opacity-80"
+                      className="w-full flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 px-4 sm:px-5 py-3 text-left hover:opacity-80"
                       style={{ borderBottom: i < season.pastSeasons.length - 1 ? "1px solid var(--color-border)" : undefined }}
                     >
                       <span className="text-sm font-medium" style={{ color: "var(--color-foreground)" }}>
@@ -387,7 +397,13 @@ export default function Leaderboard() {
               </div>
             ) : (
               <div className="card-glass overflow-hidden animate-fade-up delay-100">
-                <table className="w-full">
+                <table className="w-full table-fixed">
+                  <colgroup>
+                    <col className="w-12 sm:w-16" />
+                    <col />
+                    <col className="w-24 sm:w-28" />
+                    <col className="hidden sm:table-column w-28" />
+                  </colgroup>
                   <thead>
                     <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
                       <th className={`text-left ${th}`} style={{ color: "var(--color-subtle)" }}>Rank</th>
@@ -420,7 +436,7 @@ export default function Leaderboard() {
                               </span>
                             )}
                           </td>
-                          <td className="px-3 sm:px-5 py-4">
+                          <td className="px-3 sm:px-5 py-4 overflow-hidden">
                             <div className="flex items-center gap-3 min-w-0">
                               <Avatar name={entry.userName} isMe={isMe} isBenchmark={entry.isBenchmark} />
                               <div className="min-w-0">
@@ -435,6 +451,9 @@ export default function Leaderboard() {
                                     </span>
                                   )}
                                   {entry.isBenchmark && <BenchmarkPill />}
+                                </p>
+                                <p className="sm:hidden text-[0.6875rem] truncate mt-0.5" style={{ color: "var(--color-subtle)" }}>
+                                  {entry.isBenchmark ? "Benchmark · " : ""}{entry.gamesPlayed} of {entry.availableGames} games
                                 </p>
                               </div>
                             </div>
@@ -480,7 +499,13 @@ export default function Leaderboard() {
                   Players still working toward the {QUALIFY_GAMES}-game qualification threshold. Scores are not yet official.
                 </p>
                 <div className="card-glass overflow-hidden opacity-70">
-                  <table className="w-full">
+                  <table className="w-full table-fixed">
+                    <colgroup>
+                      <col className="w-12 sm:w-16" />
+                      <col />
+                      <col className="w-24 sm:w-28" />
+                      <col className="hidden sm:table-column w-24" />
+                    </colgroup>
                     <thead>
                       <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
                         <th className={`text-left ${th}`} style={{ color: "var(--color-subtle)" }}>Rank</th>
@@ -506,14 +531,19 @@ export default function Leaderboard() {
                                 {rank}
                               </span>
                             </td>
-                            <td className="px-3 sm:px-5 py-3">
+                            <td className="px-3 sm:px-5 py-3 overflow-hidden">
                               <div className="flex items-center gap-3 min-w-0">
                                 <Avatar name={entry.userName} isMe={isMe} isBenchmark={entry.isBenchmark} size={7} />
-                                <p className="text-sm truncate" style={{ color: isMe ? "var(--color-brand)" : "var(--color-foreground)" }}>
-                                  {entry.userName ?? "Anonymous"}
-                                  {isMe && <span className="ml-2 text-xs" style={{ color: "var(--color-brand)" }}>(you)</span>}
-                                  {entry.isBenchmark && <BenchmarkPill />}
-                                </p>
+                                <div className="min-w-0">
+                                  <p className="text-sm truncate" style={{ color: isMe ? "var(--color-brand)" : "var(--color-foreground)" }}>
+                                    {entry.userName ?? "Anonymous"}
+                                    {isMe && <span className="ml-2 text-xs" style={{ color: "var(--color-brand)" }}>(you)</span>}
+                                    {entry.isBenchmark && <BenchmarkPill />}
+                                  </p>
+                                  <p className="sm:hidden text-[0.6875rem] truncate mt-0.5" style={{ color: "var(--color-subtle)" }}>
+                                    {entry.gamesPlayed} / {QUALIFY_GAMES} games
+                                  </p>
+                                </div>
                               </div>
                             </td>
                             <td className="px-3 sm:px-5 py-3 text-right whitespace-nowrap">
