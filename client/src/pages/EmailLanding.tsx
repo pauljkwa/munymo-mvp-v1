@@ -59,8 +59,8 @@ const FAILURE_COPY: Record<Failure, { title: string; body: string }> = {
     body: "Use the link in the latest Munymo email, or sign in below to go to",
   },
   expired: {
-    title: "This link is more than a week old",
-    body: "For your security, email links stop working after seven days. Sign in below to go to",
+    title: "This link has expired",
+    body: "Emails sent before September 20 carried links that lasted one day. Newer ones last until the next email replaces them, seven days at most. Sign in below to go to",
   },
   invalid: {
     title: "This link is incomplete",
