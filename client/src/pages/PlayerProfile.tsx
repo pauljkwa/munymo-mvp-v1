@@ -295,7 +295,10 @@ export default function PlayerProfile() {
                     Email notifications
                   </p>
                   <p className="text-xs leading-relaxed" style={{ color: "var(--color-muted)" }}>
-                    Receive result emails and streak reminders
+                    Your backup channel. While push notifications are reaching you, results and
+                    reminders arrive there and we don't email you as well. If push ever stops
+                    working, the same messages come by email instead. Turn this off to never be
+                    emailed.
                   </p>
                 </div>
                 <button

@@ -30,3 +30,26 @@ describe("hashEndpoint", () => {
     expect(hash).toHaveLength(64);
   });
 });
+
+// ─── Push first, email as fallback ───────────────────────────────────────────
+import { reachedUserIds } from "./push";
+
+describe("reachedUserIds — who gets no email today", () => {
+  it("a user is reached when any one of their devices accepts the push", () => {
+    const subs = [{ userId: 258 }, { userId: 258 }, { userId: 258 }, { userId: 900 }];
+    expect(reachedUserIds(subs, ["expired", "error", "ok", "ok"]).sort()).toEqual([258, 900]);
+  });
+
+  it("a user whose only subscription bounced is NOT reached, so email still goes", () => {
+    expect(reachedUserIds([{ userId: 7 }], ["expired"])).toEqual([]);
+    expect(reachedUserIds([{ userId: 7 }], ["error"])).toEqual([]);
+  });
+
+  it("lists each reached user once", () => {
+    expect(reachedUserIds([{ userId: 1 }, { userId: 1 }], ["ok", "ok"])).toEqual([1]);
+  });
+
+  it("is empty when nothing was sent", () => {
+    expect(reachedUserIds([], [])).toEqual([]);
+  });
+});

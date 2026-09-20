@@ -994,11 +994,16 @@ async function streakAtRiskHandler(req: Request, res: Response) {
     }
 
     const allUsers = await getAllUsers();
+    const { sendPushToUsers } = await import("../push");
     let sent = 0;
+    let pushed = 0;
     let skipped = 0;
 
     for (const u of allUsers) {
-      if (!u.email || u.emailOptIn === false || u.deactivated) { skipped++; continue; }
+      if (u.deactivated) { skipped++; continue; }
+      const canPush = u.pushOptIn !== false;
+      const canEmail = Boolean(u.email) && u.emailOptIn !== false;
+      if (!canPush && !canEmail) { skipped++; continue; }
 
       const streak = await getStreakForUser(u.id);
       if (streak?.awayStatus === "away") { skipped++; continue; }
@@ -1016,6 +1021,29 @@ async function streakAtRiskHandler(req: Request, res: Response) {
       // intent and left the game half-finished. Emailing users who haven't
       // engaged at all would just be daily spam, so they're still skipped.
       if (!hasStreak && !pick?.gutSelection) { skipped++; continue; }
+
+      // Push first. These two reminders used to be email-only, so a player
+      // who relies on push never got the nudge that does the most retention
+      // work. A tap opens the app on today's game, signed in. Only if push
+      // reaches none of their devices do we fall back to email.
+      if (canPush) {
+        const minutes = Math.max(1, Math.round(msUntilLockout / 60000));
+        const pushResult = await sendPushToUsers([u.id], hasStreak
+          ? {
+              title: `Your ${streak?.currentStreak ?? 1}-day streak is at risk`,
+              body: `${game.companyATicker} vs ${game.companyBTicker} locks in about ${minutes} minutes. One pick keeps the chain going.`,
+              url: "/game",
+              tag: `munymo-streak-${game.id}`,
+            }
+          : {
+              title: `Finish your pick: ${game.companyATicker} vs ${game.companyBTicker}`,
+              body: `Your gut pick is in. Read the research and lock your final call — about ${minutes} minutes left.`,
+              url: "/game",
+              tag: `munymo-finish-${game.id}`,
+            });
+        if (pushResult.reachedUserIds.includes(u.id)) { pushed++; continue; }
+      }
+      if (!canEmail || !u.email) { skipped++; continue; }
 
       // Shared helper: good until used or until the next game's link replaces
       // it (see magicLink.ts) — not a flat TTL.
@@ -1052,8 +1080,8 @@ async function streakAtRiskHandler(req: Request, res: Response) {
       if (result.success) sent++; else skipped++;
     }
 
-    console.log(`[streak-at-risk] Sent: ${sent}, skipped: ${skipped}`);
-    return res.json({ ok: true, sent, skipped });
+    console.log(`[streak-at-risk] Pushed: ${pushed}, emailed: ${sent}, skipped: ${skipped}`);
+    return res.json({ ok: true, pushed, sent, skipped });
 
   } catch (err) {
     console.error("[streak-at-risk] Error:", err);

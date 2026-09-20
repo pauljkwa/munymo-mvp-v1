@@ -1068,7 +1068,24 @@ const adminRouter = router({
       // Notify all registered players that today's game is live
       try {
         const allUsers = await getAllUsers();
-        const players = allUsers.filter((u) => u.role !== "admin" && u.emailOptIn !== false);
+        // Push first, email only whoever push did not reach (see endOfDay).
+        let reachedByPush = new Set<number>();
+        try {
+          const { sendPushToUsers } = await import("./push");
+          const pushIds = allUsers.filter((u) => u.pushOptIn !== false && !u.deactivated).map((u) => u.id);
+          const pushResult = await sendPushToUsers(pushIds, {
+            title: `Today's game is live: ${game.companyATicker} vs ${game.companyBTicker}`,
+            body: `${game.companyAName} vs ${game.companyBName}. Make your pick before lockout!`,
+            url: `/game`,
+            tag: `munymo-game-${game.id}`,
+          });
+          reachedByPush = new Set(pushResult.reachedUserIds);
+        } catch (err) {
+          console.warn("[Push] Game-available push failed — falling back to email:", err);
+        }
+        const players = allUsers.filter(
+          (u) => u.role !== "admin" && u.emailOptIn !== false && !reachedByPush.has(u.id)
+        );
         const { subject, html } = buildGameAvailableEmail({
           companyAName: game.companyAName,
           companyATicker: game.companyATicker,
@@ -1542,6 +1559,32 @@ const adminRouter = router({
         // `game` and `winner` are always set together above, so this is safe.
         const closedWinner = winner as "A" | "B";
         const allUsers = await getAllUsers();
+
+        // ── 3a. PUSH FIRST. Push is the primary channel: a tap opens the
+        // installed app, already signed in, on the right page. Email is the
+        // fallback for whoever push did not reach today — never both, which
+        // was sending an app user a second copy that opens in Safari, signed
+        // out, and looked like a different Munymo (2026-09-20).
+        const reachedByPush = new Set<number>();
+        try {
+          const { sendPushToUsers } = await import("./push");
+          const optedInUserIds = allUsers.filter((u) => u.pushOptIn !== false && !u.deactivated).map((u) => u.id);
+          const winnerTicker = winner === "A" ? game.companyATicker : game.companyBTicker;
+          const loserTicker = winner === "A" ? game.companyBTicker : game.companyATicker;
+          const pushResult = await sendPushToUsers(optedInUserIds, {
+            title: `Results are in: ${winnerTicker} beats ${loserTicker}`,
+            body: input.resultSummary
+              ? input.resultSummary.slice(0, 120) + (input.resultSummary.length > 120 ? "…" : "")
+              : `See how the community voted and check your score.`,
+            url: `/game/${game.id}/result`,
+            tag: `munymo-result-${game.id}`,
+          });
+          for (const id of pushResult.reachedUserIds) reachedByPush.add(id);
+          console.log(`[Push] Result notifications: ${pushResult.sent} sent, ${pushResult.expired} expired, ${pushResult.errors} errors, ${reachedByPush.size} players reached`);
+        } catch (err) {
+          console.warn("[Push] End-of-day push notifications failed — everyone falls back to email:", err);
+        }
+
         try {
           const scoredMap = new Map(scoredPicks.map((s) => [s.userId, s]));
           // Build next-game teaser data from the resolved game — whichever of
@@ -1565,9 +1608,13 @@ const adminRouter = router({
             issue: { purpose: "play" | "result"; date: string }
           ) => createMagicLinkShared(clerkId, destination, ENV.clerkSecretKey, issue);
 
+          let emailsSkippedForPush = 0;
           for (const user of allUsers) {
             if (!user.email) continue;
             if (user.emailOptIn === false) continue;
+            // Reached by push a moment ago — no email. Checked before minting
+            // magic links, so no sign-in tokens are created for nothing.
+            if (reachedByPush.has(user.id)) { emailsSkippedForPush++; continue; }
             const scored = scoredMap.get(user.id);
             let subject: string;
             let html: string;
@@ -1623,28 +1670,9 @@ const adminRouter = router({
             );
             if (result.success) emailsSent++; else emailsFailed++;
           }
-          console.log(`[Email] End-of-day notifications: ${emailsSent} sent, ${emailsFailed} failed (${scoredPicks.length} players, ${allUsers.length - scoredPicks.length} non-players)`);
+          console.log(`[Email] End-of-day notifications: ${emailsSent} sent, ${emailsFailed} failed, ${emailsSkippedForPush} skipped (reached by push) (${scoredPicks.length} players, ${allUsers.length - scoredPicks.length} non-players)`);
         } catch (err) {
           console.warn("[Email] End-of-day result notifications failed:", err);
-        }
-
-        // ── 4. Send push notifications to all subscribed users (respecting pushOptIn) ──
-        try {
-          const { sendPushToUsers } = await import("./push");
-          const optedInUserIds = allUsers.filter((u) => u.pushOptIn !== false).map((u) => u.id);
-          const winnerTicker = winner === "A" ? game.companyATicker : game.companyBTicker;
-          const loserTicker = winner === "A" ? game.companyBTicker : game.companyATicker;
-          const pushResult = await sendPushToUsers(optedInUserIds, {
-            title: `Results are in: ${winnerTicker} beats ${loserTicker}`,
-            body: input.resultSummary
-              ? input.resultSummary.slice(0, 120) + (input.resultSummary.length > 120 ? "…" : "")
-              : `See how the community voted and check your score.`,
-            url: `/game/${game.id}/result`,
-            tag: `munymo-result-${game.id}`,
-          });
-          console.log(`[Push] Result notifications: ${pushResult.sent} sent, ${pushResult.expired} expired, ${pushResult.errors} errors`);
-        } catch (err) {
-          console.warn("[Push] End-of-day push notifications failed:", err);
         }
       }
 

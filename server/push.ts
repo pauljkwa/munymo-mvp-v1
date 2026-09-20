@@ -77,33 +77,66 @@ async function sendToSubscription(
   }
 }
 
+// ─── Who did a push actually reach? ──────────────────────────────────────────
+/**
+ * Push is the primary channel and email the fallback (2026-09-20): a player
+ * whose push was accepted by the push service gets no email for that
+ * notification; everyone else does. "Reached" means at least one of the
+ * player's devices accepted the message — a player with three dead
+ * subscriptions and one live one was reached; a player whose only
+ * subscription bounced was not, and falls back to email the same day.
+ *
+ * Pure so the rule is testable without a push service.
+ */
+export function reachedUserIds(
+  subs: Array<{ userId: number }>,
+  results: Array<"ok" | "expired" | "error">
+): number[] {
+  const reached = new Set<number>();
+  results.forEach((r, i) => {
+    if (r === "ok" && subs[i]) reached.add(subs[i].userId);
+  });
+  return Array.from(reached);
+}
+
+export interface PushSendResult {
+  sent: number;
+  expired: number;
+  errors: number;
+  /** Users with at least one device that accepted the push. */
+  reachedUserIds: number[];
+}
+
+const NOTHING_SENT: PushSendResult = { sent: 0, expired: 0, errors: 0, reachedUserIds: [] };
+
 // ─── Send to all subscriptions for a list of user IDs ────────────────────────
 
 export async function sendPushToUsers(
   userIds: number[],
   payload: PushPayload
-): Promise<{ sent: number; expired: number; errors: number }> {
+): Promise<PushSendResult> {
   if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
     console.warn("[push] VAPID keys not configured — skipping push");
-    return { sent: 0, expired: 0, errors: 0 };
+    return { ...NOTHING_SENT };
   }
 
-  if (userIds.length === 0) return { sent: 0, expired: 0, errors: 0 };
+  if (userIds.length === 0) return { ...NOTHING_SENT };
 
   // Fetch all subscriptions for these users
   const db = await getDb();
-  if (!db) return { sent: 0, expired: 0, errors: 0 };
+  if (!db) return { ...NOTHING_SENT };
   const subs = await db
     .select()
     .from(pushSubscriptions)
     .where(inArray(pushSubscriptions.userId, userIds));
 
-  if (subs.length === 0) return { sent: 0, expired: 0, errors: 0 };
+  if (subs.length === 0) return { ...NOTHING_SENT };
 
   let sent = 0;
   let expired = 0;
   let errors = 0;
   const expiredEndpointHashes: string[] = [];
+  const reached = new Set<number>();
 
   // Send in parallel (with a concurrency cap to avoid hammering push services)
   const BATCH = 50;
@@ -112,6 +145,7 @@ export async function sendPushToUsers(
     const results = await Promise.all(
       batch.map((sub: DBPushSub) => sendToSubscription(sub, payload))
     );
+    for (const id of reachedUserIds(batch, results)) reached.add(id);
     results.forEach((result: string, idx: number) => {
       if (result === "ok") sent++;
       else if (result === "expired") {
@@ -132,24 +166,24 @@ export async function sendPushToUsers(
     }
   }
 
-  console.log(`[push] Sent: ${sent}, Expired: ${expired}, Errors: ${errors}`);
-  return { sent, expired, errors };
+  console.log(`[push] Sent: ${sent}, Expired: ${expired}, Errors: ${errors}, Users reached: ${reached.size}`);
+  return { sent, expired, errors, reachedUserIds: Array.from(reached) };
 }
 
 // ─── Send to ALL subscribed users ─────────────────────────────────────────────
 
 export async function sendPushToAll(
   payload: PushPayload
-): Promise<{ sent: number; expired: number; errors: number }> {
+): Promise<PushSendResult> {
   if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
     console.warn("[push] VAPID keys not configured — skipping push");
-    return { sent: 0, expired: 0, errors: 0 };
+    return { ...NOTHING_SENT };
   }
 
   const db = await getDb();
-  if (!db) return { sent: 0, expired: 0, errors: 0 };
+  if (!db) return { ...NOTHING_SENT };
   const subs = await db.select().from(pushSubscriptions);
-  if (subs.length === 0) return { sent: 0, expired: 0, errors: 0 };
+  if (subs.length === 0) return { ...NOTHING_SENT };
 
   const userIds = Array.from(new Set(subs.map((s: DBPushSub) => s.userId))) as number[];
   return sendPushToUsers(userIds, payload);
