@@ -1017,10 +1017,13 @@ async function streakAtRiskHandler(req: Request, res: Response) {
       // engaged at all would just be daily spam, so they're still skipped.
       if (!hasStreak && !pick?.gutSelection) { skipped++; continue; }
 
-      // Shared helper: 24h TTL like every other magic link (this path used to
-      // use 2h) and it keeps Clerk's sign-in url rather than the token id.
+      // Shared helper: good until used or until the next game's link replaces
+      // it (see magicLink.ts) — not a flat TTL.
       const { createMagicLink } = await import("./magicLink");
-      const magicLink = await createMagicLink(u.clerkId, "/game", ENV.clerkSecretKey);
+      const magicLink = await createMagicLink(u.clerkId, "/game", ENV.clerkSecretKey, {
+        purpose: "play",
+        date: game.gameDate,
+      });
 
       const { subject, html } = hasStreak
         ? buildStreakAtRiskEmail({

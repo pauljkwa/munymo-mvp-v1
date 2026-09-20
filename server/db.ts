@@ -1406,3 +1406,27 @@ export async function getPlayerPickOutcomes(userId: number): Promise<PickOutcome
     winner: (r.winner as "A" | "B" | null) ?? null,
   }));
 }
+
+// ─── Magic link supersession ─────────────────────────────────────────────────
+/**
+ * The newest game date a magic link of this purpose could have been issued
+ * for. A "play" link invites to a game that has been activated (active, then
+ * locked, then published); a "result" link points at a published result. A
+ * link whose own date is older than this has been replaced by a newer email.
+ * Drafts and cancelled games never had emails, so they don't count.
+ */
+export async function getLatestGameDateForPurpose(purpose: "play" | "result"): Promise<string | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const statuses =
+    purpose === "play"
+      ? (["active", "locked", "result_published"] as const)
+      : (["result_published"] as const);
+  const rows = await db
+    .select({ gameDate: dailyGames.gameDate })
+    .from(dailyGames)
+    .where(inArray(dailyGames.status, [...statuses]))
+    .orderBy(desc(dailyGames.gameDate))
+    .limit(1);
+  return rows[0]?.gameDate ?? null;
+}

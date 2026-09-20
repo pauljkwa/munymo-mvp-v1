@@ -1,60 +1,71 @@
 /**
- * Magic Link Redirect Handler
+ * Magic Link Redirect Handler — GET /api/magic
  *
- * Email and push links point at:
- *   https://munymo.com/api/magic?u=<base64url clerk url>&exp=<unix>&to=/game
+ * Emailed links look like:
+ *   https://munymo.com/api/magic?to=/game&p=play&d=2026-09-21&exp=<unix>&t=<ticket>
  *
- * Flow:
- *   1. Past our own expiry stamp → friendly fallback page, no Clerk call
- *   2. Target missing or not an allowed host → friendly fallback
- *   3. Otherwise → forward to Clerk's sign-in url, which signs the user in and
- *      then lands them on /email-landing?to=...
+ * This endpoint applies Munymo's validity rules and then hands off to OUR
+ * landing page (never to Clerk's hosted sign-in):
  *
- * Clerk remains the authority on whether a token is actually still good: it is
- * single-use by design and enforces its own expiry. Our `exp` stamp only saves
- * a round trip for the common too-late case — see magicLink.ts for why this no
- * longer pre-checks the token against Clerk (that check could never succeed).
+ *   1. No ticket, or junk            → landing with r=invalid
+ *   2. Past the 7-day backstop       → landing with r=expired
+ *   3. A newer link has been issued  → landing with r=superseded
+ *   4. Otherwise                     → landing with the ticket in the fragment
+ *
+ * In every case the landing page first checks whether this browser is already
+ * signed in, and if so goes straight to the destination — so a superseded or
+ * used link is still a perfectly good link for someone who doesn't need
+ * signing in. See magicLink.ts for the full reasoning.
  */
 
 import type { Express } from "express";
-import { decodeTarget, isAllowedMagicTarget } from "./magicLink";
-
-const BASE_URL = "https://munymo.com";
+import {
+  buildLandingPath,
+  decodeTarget,
+  isAllowedMagicTarget,
+  isMagicPurpose,
+  isSuperseded,
+  safeDestination,
+  ticketFromClerkUrl,
+} from "./magicLink";
 
 export function registerMagicLinkRedirect(app: Express) {
   app.get("/api/magic", async (req, res) => {
-    const to = (req.query.to as string | undefined) || "/game";
-    // Only ever redirect internally to a path, never to a caller-supplied host.
-    const safeTo = to.startsWith("/") && !to.startsWith("//") ? to : "/game";
-    const landingUrl = `${BASE_URL}/email-landing?to=${encodeURIComponent(safeTo)}`;
+    const to = safeDestination(req.query.to as string | undefined);
+    // Never cache: the answer changes when a newer link is issued.
+    res.setHeader("Cache-Control", "no-store");
 
-    const encoded = req.query.u as string | undefined;
+    let ticket = typeof req.query.t === "string" ? req.query.t : null;
+
+    // Links sent between 2026-09-16 and 2026-09-20 carried Clerk's whole url,
+    // base64-encoded, as `u`. They are still in inboxes; read the ticket out.
+    if (!ticket && typeof req.query.u === "string") {
+      const legacy = decodeTarget(req.query.u);
+      if (legacy && isAllowedMagicTarget(legacy)) ticket = ticketFromClerkUrl(legacy);
+    }
+
+    if (!ticket) return res.redirect(buildLandingPath(to, { reason: "invalid" }));
+
     const exp = Number(req.query.exp);
-
-    // Links from before the 2026-09-16 rewrite carry `token=<id>` and cannot be
-    // honoured — the id alone is not enough to build a sign-in url. Send those
-    // to the fallback, which is what they already did in practice.
-    if (!encoded) {
-      return res.redirect(landingUrl);
-    }
-
     if (Number.isFinite(exp) && exp > 0 && Date.now() / 1000 > exp) {
-      return res.redirect(landingUrl);
+      return res.redirect(buildLandingPath(to, { reason: "expired" }));
     }
 
-    const target = decodeTarget(encoded);
-    if (!target || !isAllowedMagicTarget(target)) {
-      console.warn("[MagicLink] Rejected redirect target");
-      return res.redirect(landingUrl);
+    const purpose = req.query.p;
+    const issueDate = typeof req.query.d === "string" ? req.query.d : "";
+    if (isMagicPurpose(purpose) && issueDate) {
+      try {
+        const { getLatestGameDateForPurpose } = await import("../db");
+        const latest = await getLatestGameDateForPurpose(purpose);
+        if (isSuperseded(issueDate, latest)) {
+          return res.redirect(buildLandingPath(to, { reason: "superseded" }));
+        }
+      } catch (err) {
+        // A database hiccup must not strand someone holding a good link.
+        console.warn("[MagicLink] supersession check failed — honouring the link:", err);
+      }
     }
 
-    try {
-      const url = new URL(target);
-      // Clerk sends the user here once the ticket is accepted.
-      url.searchParams.set("redirect_url", landingUrl);
-      return res.redirect(url.toString());
-    } catch {
-      return res.redirect(landingUrl);
-    }
+    return res.redirect(buildLandingPath(to, { ticket }));
   });
 }

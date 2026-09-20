@@ -3,6 +3,19 @@
 
   <head>
     <meta charset="UTF-8" />
+    <!-- Magic links arrive as /email-landing#t=<sign-in ticket>. Move the ticket
+         into sessionStorage and clean the address bar FIRST, before analytics or
+         anything else can read the url. EmailLanding.tsx picks it up from there. -->
+    <script>
+      (function () {
+        try {
+          if (location.pathname !== "/email-landing" || !location.hash) return;
+          var m = location.hash.match(/[#&]t=([^&]+)/);
+          if (m) sessionStorage.setItem("munymo-magic-ticket", decodeURIComponent(m[1]));
+          history.replaceState(null, "", location.pathname + location.search);
+        } catch (e) {}
+      })();
+    </script>
     <!-- No maximum-scale/user-scalable: capping zoom blocks pinch-to-zoom on
          Android Chrome and fails WCAG 1.4.4. Readers must be able to zoom. -->
     <meta

@@ -10,7 +10,7 @@
  * iOS requirement: notifications only work when the app is installed as a PWA
  * (added to home screen). The hook detects this and surfaces a helpful message.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -112,6 +112,49 @@ export function usePushNotifications() {
     checkState();
   }, []);
 
+  // ─── Self-heal a lost subscription ───────────────────────────────────────────
+  // Browsers drop push subscriptions on their own — iOS especially: after an
+  // OS update, a service-worker replacement, or for no stated reason. The
+  // player's PREFERENCE lives on the account (`optIn`); the subscription is
+  // just plumbing. Paul found push "switched off" three times between June and
+  // September while the account said on and the old subscriptions were still
+  // in the database. So: if the account wants push, this device has already
+  // granted permission, and the subscription is simply missing, put it back
+  // without asking. No prompt appears because permission is already granted.
+  const healed = useRef(false);
+  useEffect(() => {
+    if (healed.current) return;
+    if (state !== "not_subscribed") return;
+    if (!statusData?.optIn || !vapidData?.key) return;
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    healed.current = true;
+    (async () => {
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const pushSub =
+          (await reg.pushManager.getSubscription()) ??
+          (await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(vapidData.key),
+          }));
+        const subJson = pushSub.toJSON();
+        await subscribeMutation.mutateAsync({
+          endpoint: pushSub.endpoint,
+          p256dh: subJson.keys?.p256dh ?? "",
+          auth: subJson.keys?.auth ?? "",
+          userAgent: navigator.userAgent.slice(0, 512),
+        });
+        setSubscription(pushSub);
+        setState("subscribed");
+        await refetchStatus();
+        console.info("[push] restored a missing subscription");
+      } catch (err) {
+        // Leave the toggle showing "off" so the player can turn it on by hand.
+        console.warn("[push] could not restore subscription:", err);
+      }
+    })();
+  }, [state, statusData?.optIn, vapidData?.key, subscribeMutation, refetchStatus]);
+
   // ─── Register service worker ─────────────────────────────────────────────────
 
   useEffect(() => {
@@ -194,5 +237,7 @@ export function usePushNotifications() {
     unsubscribe,
     isLoading: state === "loading" || subscribeMutation.isPending || unsubscribeMutation.isPending,
     serverSubscribed: statusData?.subscribed ?? false,
+    /** How many devices this account has push on for — shown where this browser can't hold one. */
+    serverDeviceCount: statusData?.count ?? 0,
   };
 }

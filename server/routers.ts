@@ -1559,8 +1559,11 @@ const adminRouter = router({
           // Shared with the streak/reminder emails — see server/_core/magicLink.ts.
           // It keeps Clerk's sign-in `url` (only returned at creation) rather
           // than the token id, which is what made every link report "expired".
-          const createMagicLink = (clerkId: string | null, destination: string) =>
-            createMagicLinkShared(clerkId, destination, ENV.clerkSecretKey);
+          const createMagicLink = (
+            clerkId: string | null,
+            destination: string,
+            issue: { purpose: "play" | "result"; date: string }
+          ) => createMagicLinkShared(clerkId, destination, ENV.clerkSecretKey, issue);
 
           for (const user of allUsers) {
             if (!user.email) continue;
@@ -1573,8 +1576,11 @@ const adminRouter = router({
             const resultDest = `/game/${game.id}/result`;
             const playDest   = `/game`;
             const [resultMagicLink, playMagicLink] = await Promise.all([
-              createMagicLink(user.clerkId, resultDest),
-              createMagicLink(user.clerkId, playDest),
+              // Each link names what it is for and which game, so it stays
+              // good until the NEXT result / next game's email replaces it —
+              // not for a flat 24 hours, which killed Friday's links by Sunday.
+              createMagicLink(user.clerkId, resultDest, { purpose: "result", date: game.gameDate }),
+              createMagicLink(user.clerkId, playDest, { purpose: "play", date: resolvedNextGame.gameDate }),
             ]);
 
             if (scored) {
@@ -2112,20 +2118,28 @@ const pushRouter = router({
             eq(pushSubscriptions.endpointHash, endpointHash)
           )
         );
+      // Switching push off is a decision about the account, not just this
+      // device — record it, so the self-healing re-subscribe on the next
+      // launch does not quietly turn notifications back on.
+      const { users } = await import("../drizzle/schema");
+      await db.update(users).set({ pushOptIn: false }).where(eq(users.id, ctx.user.id));
       return { ok: true };
     }),
 
   /** Check if this user has any active push subscriptions */
   status: protectedProcedure.query(async ({ ctx }) => {
     const db = await import("./db").then((m) => m.getDb());
-    if (!db) return { subscribed: false, count: 0 };
+    if (!db) return { subscribed: false, count: 0, optIn: ctx.user.pushOptIn !== false };
     const { pushSubscriptions } = await import("../drizzle/schema");
     const { eq } = await import("drizzle-orm");
     const subs = await db
       .select({ id: pushSubscriptions.id })
       .from(pushSubscriptions)
       .where(eq(pushSubscriptions.userId, ctx.user.id));
-    return { subscribed: subs.length > 0, count: subs.length };
+    // `optIn` is the ACCOUNT's preference and the source of truth; a device
+    // subscription is plumbing that browsers lose on their own. The client
+    // uses this to quietly re-create a subscription that has gone missing.
+    return { subscribed: subs.length > 0, count: subs.length, optIn: ctx.user.pushOptIn !== false };
   }),
 
   /** VAPID public key — needed by the browser to subscribe */

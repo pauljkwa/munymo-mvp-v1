@@ -20,7 +20,7 @@ interface NotificationSettingsProps {
 }
 
 export function NotificationSettings({ compact = false, className }: NotificationSettingsProps) {
-  const { state, error, subscribe, unsubscribe, isLoading } = usePushNotifications();
+  const { state, error, subscribe, unsubscribe, isLoading, serverSubscribed } = usePushNotifications();
 
   if (state === "loading") {
     return null;
@@ -40,6 +40,27 @@ export function NotificationSettings({ compact = false, className }: Notificatio
   // ─── iOS not installed ───────────────────────────────────────────────────────
   if (state === "needs_install") {
     if (compact) return null;
+    // Safari on iPhone can never hold a push subscription — only the Home
+    // Screen app can. If the account already has one, saying "Add to Home
+    // Screen first" reads as "your notifications got switched off", which is
+    // exactly what it looked like after opening an email link in Safari.
+    if (serverSubscribed) {
+      return (
+        <div className={cn("rounded-lg border border-emerald-200 bg-emerald-50 p-4", className)}>
+          <div className="flex items-start gap-3">
+            <Smartphone className="h-5 w-5 text-emerald-700 mt-0.5 shrink-0" />
+            <div>
+              <p className="font-medium text-emerald-900 text-sm">Push notifications are on</p>
+              <p className="text-emerald-800 text-sm mt-1">
+                They're delivered to the Munymo app on your Home Screen. You're viewing Munymo in
+                Safari right now, which iPhone doesn't allow to receive them — nothing has been
+                switched off. To change the setting, open the app from your Home Screen.
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className={cn("rounded-lg border border-amber-200 bg-amber-50 p-4", className)}>
         <div className="flex items-start gap-3">
