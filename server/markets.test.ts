@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   MARKET_CODES,
   MAX_MARKET_PICKS,
+  describeMarketVote,
   joinMarketLabels,
   marketLabel,
   normalizeMarketPicks,
@@ -24,6 +25,15 @@ describe("market survey — options", () => {
     expect(joinMarketLabels(["AU"])).toBe("Australia");
     expect(joinMarketLabels(["AU", "IN"])).toBe("Australia and India");
     expect(joinMarketLabels(["AU", "IN", "JP"])).toBe("Australia, India and Japan");
+  });
+});
+
+describe("market survey — a vote reads back with its first choice named", () => {
+  it("says which market is the first choice and which are extras", () => {
+    expect(describeMarketVote(["AU"])).toBe("Australia");
+    expect(describeMarketVote(["AU", "IN"])).toBe("Australia first, plus India");
+    expect(describeMarketVote(["AU", "IN", "JP"])).toBe("Australia first, plus India and Japan");
+    expect(describeMarketVote([])).toBe("");
   });
 });
 

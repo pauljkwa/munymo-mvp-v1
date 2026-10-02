@@ -28,8 +28,10 @@ export const MARKET_CODES = MARKET_OPTIONS.map((m) => m.code) as [
   ...MarketCode[],
 ];
 
-/** A voter ranks up to this many markets. Capped so the tally keeps its shape:
- *  with no limit people tick everything and the first-choice signal drowns. */
+/** A voter names one first choice plus up to two more they would also play.
+ *  Capped so the tally keeps its shape: with no limit people tick everything.
+ *  The first choice is ASKED FOR EXPLICITLY in the UI — it is never inferred
+ *  from tap order, which just rewards whatever sits first in the list. */
 export const MAX_MARKET_PICKS = 3;
 
 export function marketLabel(code: string): string {
@@ -41,6 +43,18 @@ export function joinMarketLabels(codes: readonly string[]): string {
   const labels = codes.map(marketLabel);
   if (labels.length <= 1) return labels[0] ?? "";
   return `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
+}
+
+/**
+ * How a recorded vote reads back to the voter: the first code is their stated
+ * first choice, the rest are markets they would also play (unranked).
+ * "Australia" / "Australia first, plus India" / "Australia first, plus India and Japan".
+ */
+export function describeMarketVote(codes: readonly string[]): string {
+  if (codes.length === 0) return "";
+  const [first, ...others] = codes;
+  if (others.length === 0) return marketLabel(first);
+  return `${marketLabel(first)} first, plus ${joinMarketLabels(others)}`;
 }
 
 /**
