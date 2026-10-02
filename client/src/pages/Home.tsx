@@ -6,6 +6,7 @@ import { Link } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
 import MunymoLogo from "@/components/MunymoLogo";
 import { usePageMeta } from "@/hooks/usePageMeta";
+import MarketVote from "@/components/MarketVote";
 import {
   Accordion,
   AccordionContent,
@@ -655,19 +656,20 @@ export default function Home() {
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {[
               {
+                icon: Globe,
+                iconColor: "var(--color-warning)",
+                iconBg: "var(--color-warning-muted)",
+                vote: true, // renders the "which market would you play?" survey
+                title: "More Markets",
+                body: "Munymo is starting with the US stock market, to prove the concept during the beta. Parallel daily games for other countries' markets will follow, so players outside the US can play the market they know best. Which countries come first will be decided by where our players are and what they tell us in player surveys.",
+                tag: "Coming",
+              },
+              {
                 icon: TrendingUp,
                 iconColor: "var(--color-info)",
                 iconBg: "var(--color-info-muted)",
                 title: "MunyIQ",
                 body: "One honest score built from your whole track record, including whether you are improving. It needs many games from many players before it means anything, so it comes later. Every game you play now counts toward it.",
-                tag: "Coming",
-              },
-              {
-                icon: Globe,
-                iconColor: "var(--color-warning)",
-                iconBg: "var(--color-warning-muted)",
-                title: "More Markets",
-                body: "Munymo is starting with the US stock market, to prove the concept during the beta. Parallel daily games for other countries' markets will follow, so players outside the US can play the market they know best. Which countries come first will be decided by where our players are and what they tell us in player surveys.",
                 tag: "Coming",
               },
               {
@@ -697,8 +699,9 @@ export default function Home() {
             ].map((item, i) => (
               <div
                 key={item.title}
-                // The first card (MunyIQ, longest copy) spans two columns so
-                // five cards fill the grid with no orphan.
+                // The first card (More Markets: longest copy plus the vote
+                // button) spans two columns so five cards fill the grid with
+                // no orphan.
                 className={`card-glass p-7 shadow-card animate-fade-up group ${i === 0 ? "sm:col-span-2" : ""}`}
                 style={{ animationDelay: `${i * 75}ms` }}
               >
@@ -725,6 +728,7 @@ export default function Home() {
                 <p className="text-sm leading-relaxed" style={{ color: "var(--color-muted)" }}>
                   {item.body}
                 </p>
+                {"vote" in item && item.vote && <MarketVote />}
               </div>
             ))}
           </div>

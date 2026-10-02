@@ -19,6 +19,12 @@ export default function PrivacyPolicy() {
           data is what powers your profile, the leaderboard, and — in time — your MunyIQ score.
         </p>
         <p>
+          If you vote in our market survey, we record the countries you chose, the country your
+          visit came from, and a random identifier stored in your browser so that one browser
+          counts once. You do not need an account to vote, and the vote is linked to your account
+          only if you are signed in when you cast it.
+        </p>
+        <p>
           We also collect standard server logs: IP addresses, browser type, pages visited, and
           timestamps. This is routine infrastructure data used to keep the platform running and to
           diagnose problems when they occur.

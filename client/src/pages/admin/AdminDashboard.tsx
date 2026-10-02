@@ -13,6 +13,7 @@ import {
   ExternalLink,
   Bell,
   Bot,
+  Globe,
 } from "lucide-react";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
@@ -27,6 +28,7 @@ export default function AdminDashboard() {
   const { user } = useAuth();
   const { data: games, isLoading } = trpc.admin.listAllGames.useQuery({ limit: 20, offset: 0 });
   const { data: clickStats } = trpc.admin.outboundClickStats.useQuery();
+  const { data: marketVotes } = trpc.admin.marketVoteStats.useQuery();
 
   const resetMyPick = trpc.admin.resetPlayerPick.useMutation({
     onSuccess: () => toast.success("Your pick has been reset — you can replay the game."),
@@ -111,6 +113,57 @@ export default function AdminDashboard() {
                   </div>
                 ))}
               </div>
+            )}
+          </div>
+        )}
+
+        {/* Market survey — landing page "which market would you play?" votes.
+            Always shown (even at zero) so it is obvious the survey is wired up. */}
+        {marketVotes && (
+          <div className="card-glass p-4 mb-6">
+            <div className="flex items-center gap-2 mb-3">
+              <Globe size={15} style={{ color: "var(--color-brand)" }} />
+              <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-subtle)" }}>
+                Market survey
+              </span>
+            </div>
+            <div className="flex items-baseline gap-2 mb-1">
+              <span className="font-display text-2xl tabular-nums" style={{ color: "var(--color-foreground)" }}>
+                {marketVotes.totalVoters.toLocaleString()}
+              </span>
+              <span className="text-sm" style={{ color: "var(--color-muted)" }}>
+                {marketVotes.totalVoters === 1 ? "voter" : "voters"}
+              </span>
+            </div>
+            <p className="text-xs mb-3" style={{ color: "var(--color-subtle)" }}>
+              {marketVotes.multiPickVoters.toLocaleString()} picked more than one market — the appetite for multiple play.
+            </p>
+            {marketVotes.byMarket.length > 0 && (
+              <div className="flex flex-col gap-1.5 mb-3">
+                <div className="flex items-center justify-between text-xs" style={{ color: "var(--color-subtle)" }}>
+                  <span>Market</span>
+                  <span>1st choice · any choice</span>
+                </div>
+                {marketVotes.byMarket.map((m) => (
+                  <div key={m.code} className="flex items-center justify-between text-sm">
+                    <span style={{ color: "var(--color-muted)" }}>{m.label}</span>
+                    <span className="tabular-nums font-medium" style={{ color: "var(--color-foreground)" }}>
+                      {m.first.toLocaleString()} · {m.mentions.toLocaleString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {marketVotes.byVisitorCountry.length > 0 && (
+              <p className="text-xs" style={{ color: "var(--color-subtle)" }}>
+                Voters came from:{" "}
+                {marketVotes.byVisitorCountry.map((c) => `${c.country} (${c.voters})`).join(", ")}
+              </p>
+            )}
+            {marketVotes.otherTexts.length > 0 && (
+              <p className="text-xs mt-1" style={{ color: "var(--color-subtle)" }}>
+                "Other" answers: {marketVotes.otherTexts.join(", ")}
+              </p>
             )}
           </div>
         )}

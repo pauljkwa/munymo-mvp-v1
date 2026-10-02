@@ -599,3 +599,44 @@ export const practicePicks = mysqlTable(
 
 export type PracticePick = typeof practicePicks.$inferSelect;
 export type InsertPracticePick = typeof practicePicks.$inferInsert;
+
+// ─── Market Votes ─────────────────────────────────────────────────────────────
+
+/**
+ * The landing page's "which market would you play?" survey (Road Ahead card).
+ * One row per voter; voting again replaces the row.
+ *
+ * Voters rank up to three markets. `firstChoice` decides which country's game
+ * to launch next; second/third choices measure appetite for playing several
+ * markets at once. Market codes are country codes from shared/markets.ts
+ * (plus "OTHER"), stored as plain strings so adding an option never needs a
+ * migration.
+ *
+ * Open to anonymous visitors on purpose: the people most worth hearing from
+ * are the ones who have NOT joined because their market is missing.
+ * `voterKey` is "user:<id>" for a signed-in player or "anon:<random id from
+ * the visitor's browser>". `visitorCountry` is Cloudflare's two-letter country
+ * for the request — the "where our players are" number — never an IP address.
+ */
+export const marketVotes = mysqlTable(
+  "market_votes",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    voterKey: varchar("voterKey", { length: 80 }).notNull(),
+    userId: int("userId"),
+    firstChoice: varchar("firstChoice", { length: 16 }).notNull(),
+    secondChoice: varchar("secondChoice", { length: 16 }),
+    thirdChoice: varchar("thirdChoice", { length: 16 }),
+    // Free text when "OTHER" is among the picks
+    otherText: varchar("otherText", { length: 120 }),
+    visitorCountry: varchar("visitorCountry", { length: 2 }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  (table) => ({
+    voterUnique: uniqueIndex("market_votes_voter_unique").on(table.voterKey),
+  })
+);
+
+export type MarketVote = typeof marketVotes.$inferSelect;
+export type InsertMarketVote = typeof marketVotes.$inferInsert;

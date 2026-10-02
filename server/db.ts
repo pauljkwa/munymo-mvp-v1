@@ -9,6 +9,7 @@ import {
   gameResearch,
   leaderboardStats,
   lessonProgress,
+  marketVotes,
   metricExplanations,
   outboundClicks,
   playerPicks,
@@ -17,6 +18,7 @@ import {
   streakRecords,
   users,
   validationQuestions,
+  type InsertMarketVote,
   type InsertOutboundClick,
   type InsertPracticePick,
   type ChartSnapshot,
@@ -25,6 +27,7 @@ import { ENV } from "./_core/env";
 import { BENCHMARK_BOT_ID, HIDDEN_BOT_IDS, LEADERBOARD_QUALIFICATION_GAMES, TESTER_BOT_IDS } from "@shared/const";
 import { rankSeasonStandings, type SeasonRow } from "@shared/leaderboard";
 import type { PickOutcome } from "@shared/insight";
+import { tallyMarketVotes, type MarketVoteTally } from "@shared/markets";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -194,6 +197,9 @@ export async function eraseUserPersonalData(userId: number): Promise<void> {
   if (!db) throw new Error("Database unavailable — erasure aborted");
   await db.update(users).set(ERASED_USER_FIELDS).where(eq(users.id, userId));
   await db.delete(pushSubscriptions).where(eq(pushSubscriptions.userId, userId));
+  // A signed-in vote is keyed "user:<id>", which would keep pointing at the
+  // erased account. Losing one survey answer is harmless; keeping the link is not.
+  await db.delete(marketVotes).where(eq(marketVotes.userId, userId));
 }
 
 export async function getAllUsers() {
@@ -1007,6 +1013,49 @@ export async function recordOutboundClick(
   const db = await getDb();
   if (!db) return;
   await db.insert(outboundClicks).values(data);
+}
+
+// ─── Market Votes ─────────────────────────────────────────────────────────────
+
+/**
+ * Records (or replaces) one voter's market survey answer. Unlike the click
+ * logger above this THROWS when the database is unreachable: the visitor is
+ * told their vote "has been recorded", so it must not be silently dropped.
+ */
+export async function recordMarketVote(
+  data: Omit<InsertMarketVote, "id" | "createdAt" | "updatedAt">
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable — vote not recorded");
+  await db
+    .insert(marketVotes)
+    .values(data)
+    .onDuplicateKeyUpdate({
+      set: {
+        userId: data.userId ?? null,
+        firstChoice: data.firstChoice,
+        secondChoice: data.secondChoice ?? null,
+        thirdChoice: data.thirdChoice ?? null,
+        otherText: data.otherText ?? null,
+        visitorCountry: data.visitorCountry ?? null,
+      },
+    });
+}
+
+/** Survey tally for the admin dashboard. Aggregated in shared/markets.ts. */
+export async function getMarketVoteStats(): Promise<MarketVoteTally> {
+  const db = await getDb();
+  if (!db) return tallyMarketVotes([]);
+  const rows = await db
+    .select({
+      firstChoice: marketVotes.firstChoice,
+      secondChoice: marketVotes.secondChoice,
+      thirdChoice: marketVotes.thirdChoice,
+      visitorCountry: marketVotes.visitorCountry,
+      otherText: marketVotes.otherText,
+    })
+    .from(marketVotes);
+  return tallyMarketVotes(rows);
 }
 
 /**

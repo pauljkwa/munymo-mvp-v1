@@ -91,6 +91,8 @@ import {
   countPublishedGameDaysBetween,
   recordOutboundClick,
   getOutboundClickStats,
+  recordMarketVote,
+  getMarketVoteStats,
   getLessonProgressForUser,
   markLessonComplete,
   getSeasonStandings,
@@ -98,6 +100,12 @@ import {
   getPlayerPickOutcomes,
 } from "./db";
 import { ALL_LESSON_IDS } from "@shared/lessonIds";
+import {
+  MARKET_CODES,
+  MAX_MARKET_PICKS,
+  normalizeMarketPicks,
+  resolveVoterKey,
+} from "@shared/markets";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1012,6 +1020,10 @@ const adminRouter = router({
   // breakdown. Ammunition for "we sent you N thousand readers" partnership pitches.
   outboundClickStats: adminProcedure.query(async () => {
     return getOutboundClickStats();
+  }),
+
+  marketVoteStats: adminProcedure.query(async () => {
+    return getMarketVoteStats();
   }),
 
   // Fire-and-forget trigger for the full Claude curation agent — the identical
@@ -2215,6 +2227,93 @@ const feedbackRouter = router({
     }),
 });
 
+// ─── Markets Router ───────────────────────────────────────────────────────────
+
+// The survey is open to anonymous visitors, so cap how often one address can
+// write. In-memory is fine for the same reason as the feedback cooldown: a
+// single Railway instance, and losing the window on restart is harmless.
+const VOTE_WINDOW_MS = 60 * 60_000;
+const VOTE_MAX_PER_WINDOW = 10;
+const voteHits = new Map<string, number[]>();
+
+function voteAllowed(address: string, now = Date.now()): boolean {
+  const recent = (voteHits.get(address) ?? []).filter((t) => now - t < VOTE_WINDOW_MS);
+  if (recent.length >= VOTE_MAX_PER_WINDOW) {
+    voteHits.set(address, recent);
+    return false;
+  }
+  recent.push(now);
+  voteHits.set(address, recent);
+  // Keep the map from growing without bound on a long-lived process.
+  if (voteHits.size > 5000) {
+    voteHits.forEach((times, key) => {
+      if (times.every((t) => now - t >= VOTE_WINDOW_MS)) voteHits.delete(key);
+    });
+  }
+  return true;
+}
+
+function headerValue(v: string | string[] | undefined): string | undefined {
+  return Array.isArray(v) ? v[0] : v;
+}
+
+const marketsRouter = router({
+  // Landing page "which market would you play?" survey. Public: the visitors
+  // most worth hearing from have not signed up because their market is missing.
+  vote: publicProcedure
+    .input(
+      z.object({
+        markets: z.array(z.enum(MARKET_CODES)).min(1).max(MAX_MARKET_PICKS),
+        otherText: z.string().trim().max(120).optional(),
+        anonKey: z.string().max(64).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const voterKey = resolveVoterKey(ctx.user?.id, input.anonKey);
+      if (!voterKey) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Your vote couldn't be recorded — please try again." });
+      }
+
+      const address =
+        headerValue(ctx.req.headers["cf-connecting-ip"]) ?? ctx.req.ip ?? "unknown";
+      if (!voteAllowed(address)) {
+        throw new TRPCError({
+          code: "TOO_MANY_REQUESTS",
+          message: "That's a lot of votes from one place — please try again later.",
+        });
+      }
+
+      // Cloudflare's country for the request. "XX" (unknown) and "T1" (Tor)
+      // are not countries; store null rather than a misleading code.
+      const cfCountry = headerValue(ctx.req.headers["cf-ipcountry"])?.toUpperCase();
+      const visitorCountry =
+        cfCountry && /^[A-Z]{2}$/.test(cfCountry) && cfCountry !== "XX" && cfCountry !== "T1"
+          ? cfCountry
+          : null;
+
+      const picks = normalizeMarketPicks(input.markets);
+      try {
+        await recordMarketVote({
+          voterKey,
+          userId: ctx.user?.id ?? null,
+          firstChoice: picks[0],
+          secondChoice: picks[1] ?? null,
+          thirdChoice: picks[2] ?? null,
+          otherText: picks.includes("OTHER") ? input.otherText || null : null,
+          visitorCountry,
+        });
+      } catch (err) {
+        console.error("[markets.vote] failed to record vote:", err);
+        // Be honest rather than show a "recorded" pop-up for a lost vote.
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Your vote couldn't be recorded right now — please try again shortly.",
+        });
+      }
+      return { ok: true, markets: picks } as const;
+    }),
+});
+
 // ─── App Router ───────────────────────────────────────────────────────────────
 export const appRouter = router({
   system: systemRouter,
@@ -2237,6 +2336,7 @@ export const appRouter = router({
   push: pushRouter,
   referral: referralRouter,
   feedback: feedbackRouter,
+  markets: marketsRouter,
   learn: learnRouter,
 });
 export type AppRouter = typeof appRouter;
