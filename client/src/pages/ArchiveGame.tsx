@@ -1,4 +1,5 @@
 import { trpc } from "@/lib/trpc";
+import MoByline from "@/components/MoByline";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { withReferralParams } from "@/lib/utils";
 import { useParams } from "wouter";
@@ -123,6 +124,7 @@ export default function ArchiveGame() {
                 )}
               </p>
             </div>
+            <MoByline className="-mt-2 mb-4" />
             {game.pairingRationale && (
               <div className="mb-4">
                 <p className="text-xs font-semibold mb-1" style={{ color: "var(--color-subtle)" }}>
@@ -248,6 +250,7 @@ export default function ArchiveGame() {
             <div className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "var(--color-muted)" }}>
               {research.hindsightSpotlight}
             </div>
+            <MoByline className="mt-3" />
           </div>
         )}
 

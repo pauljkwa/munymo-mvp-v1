@@ -1,4 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import MoByline from "@/components/MoByline";
 import PerfectScoreConfetti from "@/components/PerfectScoreConfetti";
 import MoreToPlay from "@/components/MoreToPlay";
 import ShareResultButton from "@/components/ShareResultButton";
@@ -522,6 +523,7 @@ export default function GameResult() {
             <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "var(--color-foreground)" }}>
               {game.hindsightSpotlight}
             </p>
+            <MoByline className="mt-3" />
           </div>
         )}
 

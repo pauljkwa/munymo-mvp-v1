@@ -141,7 +141,7 @@ const FAQ_ITEMS = [
   },
   {
     q: "Who writes the research?",
-    a: "An AI research agent, every trading day, from live sources. After the close it reads the day's financial news, picks tomorrow's pairing, gathers both companies' metrics and writes the brief, the validation question and the next day's Hindsight Spotlight. Every pairing is tied to a real, credited article that you can open from the game page, and the results are settled from published open and close prices, not from anything the agent writes. It is not reviewed by a human before it goes live, which is why Munymo is honest about what it is: a training brief for a game, not analysis you should act on. If you spot an error, the feedback form goes straight to the founder.",
+    a: "Mo does. Mo is Munymo's AI research agent. Every trading day, after the close, Mo reads the day's financial news, picks tomorrow's pairing, gathers both companies' metrics and writes the brief, the validation question and the next day's Hindsight Spotlight. Every pairing is tied to a real, credited article that you can open from the game page, and the results are settled from published open and close prices, not from anything Mo writes. Mo's work is not reviewed by a human before it goes live, which is why Munymo is honest about what it is: a training brief for a game, not analysis you should act on. If you spot an error, the feedback form goes straight to the founder.",
   },
   {
     q: "What is MunyIQ?",
@@ -464,7 +464,7 @@ export default function Home() {
                   icon: BookOpen,
                   step: "02",
                   title: "Read the Research",
-                  body: "Charts, financial metrics, and a plain-English brief researched fresh each day by Munymo's AI research agent from live, credited sources.",
+                  body: "Charts, financial metrics, and a plain-English brief researched fresh each day by Mo, Munymo's AI research agent, from live, credited sources.",
                 },
                 {
                   icon: TrendingUp,

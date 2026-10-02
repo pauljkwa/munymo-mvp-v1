@@ -36,7 +36,7 @@ export default function Disclaimer() {
         </p>
         <p>
           The daily matchup selection, research brief, metrics, validation question, result summary
-          and Hindsight Spotlight are produced by an automated AI research agent working from
+          and Hindsight Spotlight are produced by Mo, Munymo's automated AI research agent, working from
           publicly available news and market data, and are published without prior human review.
           Every pairing is attributed to a credited source article, and game results are settled from
           published open and close prices independently of the written content. AI-generated content

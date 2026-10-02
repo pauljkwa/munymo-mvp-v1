@@ -1,4 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import MoByline from "@/components/MoByline";
 import { SignInButton } from "@clerk/clerk-react";
 import { trpc } from "@/lib/trpc";
 import { withReferralParams } from "@/lib/utils";
@@ -457,7 +458,10 @@ export default function DailyGame() {
             <div className="card-glass p-6 mb-4">
               <div className="flex items-center gap-3 mb-4">
                 <BookOpen size={20} style={{ color: "var(--color-brand)" }} />
-                <h3 style={{ color: "var(--color-foreground)" }}>Research</h3>
+                <div>
+                  <h3 style={{ color: "var(--color-foreground)" }}>Research</h3>
+                  <MoByline />
+                </div>
               </div>
               {game.pairingRationale && (
                 <div className="mb-5">
@@ -975,6 +979,7 @@ export default function DailyGame() {
                 >
                   {research.hindsightSpotlight}
                 </div>
+                <MoByline className="mt-3" />
               </div>
             )}
 
