@@ -573,8 +573,8 @@ export default function PlayerProfile() {
                   Coming Soon — Premium
                 </p>
                 <p className="text-xs leading-relaxed mb-3" style={{ color: "var(--color-muted)" }}>
-                  Premium membership will unlock MunyIQ scoring, extended game history, advanced
-                  analytics, and priority access to new features as they launch.
+                  Premium membership will unlock MunyIQ scoring, advanced analytics, and priority
+                  access to new features as they launch.
                 </p>
                 <button
                   className="flex items-center gap-2 text-xs font-semibold px-4 py-2 rounded-lg"

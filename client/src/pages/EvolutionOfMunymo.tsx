@@ -315,11 +315,10 @@ export default function EvolutionOfMunymo() {
             score is statistically robust, not just numerically interesting.
           </p>
           <p>
-            The tiered credential system — Sapphire, Emerald, Ruby, Diamond — is designed to give
-            MunyIQ meaning beyond the platform. A Diamond MunyIQ of 140+ will represent something
-            genuinely rare: a player who has demonstrated, over hundreds of games, that their
-            analytical judgement is in the top fraction of a percent of all participants. That is
-            a credential worth having, and worth displaying.
+            The aim is to give MunyIQ meaning beyond the platform. A high MunyIQ should represent
+            something genuinely rare: a player who has demonstrated, over hundreds of games, that
+            their analytical judgment holds up. That is a credential worth having, and worth
+            displaying.
           </p>
           <p>
             The IQ framing is deliberate. Financial intelligence is a real thing — it is measurable,
@@ -369,9 +368,8 @@ export default function EvolutionOfMunymo() {
           <p>
             MunyIQ is the next major milestone. When it launches, it will transform Munymo from a
             game into something closer to a credential — a verifiable, portable measure of financial
-            analytical ability. The tiered card system (Sapphire through Diamond) will give that
-            credential a visual identity that players can share and that means something to anyone
-            who understands what it represents.
+            analytical ability that players can share and that means something to anyone who
+            understands what it represents.
           </p>
           <p>
             Beyond MunyIQ, the Research Hub will grow into a structured learning resource — not

@@ -476,8 +476,8 @@ export function buildWelcomeEmail(data: WelcomeData): { subject: string; html: s
     <p style="margin:0 0 28px 0;font-size:15px;color:${TEXT_MUTED};line-height:1.6;">
       You're now a <strong style="color:${TEXT_MAIN};">founding beta tester</strong>.
       Your founding-member status is recorded from <strong style="color:${TEXT_MAIN};">${data.joinDate}</strong> —
-      when MunyIQ launches, players who were here first will have the deepest
-      prediction history and the founding badge to show for it.
+      when paid membership launches, founding members get their first year free,
+      and the players who were here first will have the longest track record.
     </p>
 
     <table width="100%" cellpadding="0" cellspacing="0" style="background-color:${BG_SUBTLE};border:1px solid ${BORDER};border-radius:8px;margin:0 0 24px 0;">

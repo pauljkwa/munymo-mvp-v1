@@ -853,8 +853,8 @@ export default function Demo() {
                   Ready for the real thing?
                 </h3>
                 <p className="text-sm mb-5" style={{ color: "var(--color-muted)" }}>
-                  This was a demo — nothing was saved. In the live game, your picks are scored,
-                  tracked on the leaderboard, and contribute to your MunyIQ rating.
+                  This was a demo — nothing was saved. In the live game, your picks are scored
+                  and tracked on the leaderboard.
                 </p>
                 <Link href="/game" className="btn-brand inline-flex">
                   Play Today's Game <ArrowRight size={16} />

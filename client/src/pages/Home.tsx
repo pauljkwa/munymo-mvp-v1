@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { SignUpButton } from "@clerk/clerk-react";
 import { trpc } from "@/lib/trpc";
@@ -23,7 +23,6 @@ import {
   Smartphone,
   Users,
   Award,
-  Sparkles,
   BarChart2,
   CheckCircle2,
   ChevronRight,
@@ -144,83 +143,11 @@ const FAQ_ITEMS = [
   },
   {
     q: "What is MunyIQ?",
-    a: "MunyIQ is Munymo's upcoming financial intelligence score — a single number built from your full track record: instinct accuracy, research engagement, prediction accuracy, consistency, and — most important of all — improvement over time. That last one is the learned metric: it measures whether you're actually getting better, which is the whole point. MunyIQ needs a meaningful sample of games before it can be calculated, which is by design: a credential is only worth having if it can't be lucked into. Tiered cards from Sapphire to Diamond will mark the milestones.",
+    a: "MunyIQ is Munymo's upcoming financial intelligence score — a single number built from your full track record: instinct accuracy, research engagement, prediction accuracy, consistency, and — most important of all — improvement over time. That last one is the learned metric: it measures whether you're actually getting better, which is the whole point. MunyIQ needs a meaningful sample of games before it can be calculated, which is by design: a credential is only worth having if it can't be lucked into.",
   },
   {
     q: "What does it cost?",
-    a: "Munymo is free to play during the beta. Founding members — the players who join now — keep their join date on record and will be recognized when MunyIQ and premium features launch later.",
-  },
-];
-
-// ─── MunyIQ card data ─────────────────────────────────────────────────────────
-const MUNYIQ_CARDS = [
-  {
-    tier: "Sapphire",
-    score: 112,
-    scoreDisplay: "112",
-    name: "Richard Citizen",
-    memberSince: "Jan 2025",
-    validUntil: "Dec 2026",
-    instinct: "72%",
-    research: "88%",
-    consistency: "A+",
-    description:
-      "Consistent engagement and reliable prediction accuracy. A MunyIQ above 100 places you in the upper half of all participants.",
-    scoreRange: "100 – 119",
-    img: "https://d2xsxph8kpxj0f.cloudfront.net/110945286/eKLqbcXcmD3p6GhwsMA3tE/munyiq-card-sapphire-v2-i8oSTMtX32anHab7t8qL8P.webp",
-    accentColor: "#2563eb",
-    glowColor: "rgba(37,99,235,0.15)",
-  },
-  {
-    tier: "Emerald",
-    score: 127,
-    scoreDisplay: "127",
-    name: "Alexandra Mercer",
-    memberSince: "Mar 2025",
-    validUntil: "Feb 2027",
-    instinct: "79%",
-    research: "91%",
-    consistency: "A",
-    description:
-      "Instincts and research habits measurably above average. Emerald status is a meaningful signal of superior financial reasoning.",
-    scoreRange: "120 – 129",
-    img: "https://d2xsxph8kpxj0f.cloudfront.net/110945286/eKLqbcXcmD3p6GhwsMA3tE/munyiq-card-emerald-v2-9hdxL4mXhcEwHfx9ZdvutS.webp",
-    accentColor: "#059669",
-    glowColor: "rgba(5,150,105,0.15)",
-  },
-  {
-    tier: "Ruby",
-    score: 138,
-    scoreDisplay: "138",
-    name: "James Thornton",
-    memberSince: "Jun 2025",
-    validUntil: "May 2027",
-    instinct: "84%",
-    research: "95%",
-    consistency: "A+",
-    description:
-      "Ruby holders operate at the level of gifted analysts — top 2% of all participants.",
-    scoreRange: "130 – 139",
-    img: "https://d2xsxph8kpxj0f.cloudfront.net/110945286/eKLqbcXcmD3p6GhwsMA3tE/munyiq-card-ruby-v2-dAsHLuGRJ6QN5i7YdXbQen.webp",
-    accentColor: "#dc2626",
-    glowColor: "rgba(220,38,38,0.15)",
-  },
-  {
-    tier: "Diamond",
-    score: 147,
-    scoreDisplay: "147",
-    name: "Victoria Ashford",
-    memberSince: "Sep 2024",
-    validUntil: "Aug 2026",
-    instinct: "93%",
-    research: "99%",
-    consistency: "S",
-    description:
-      "Diamond is genius-level. A MunyIQ of 140+ places you among fewer than 0.5% of all participants.",
-    scoreRange: "140 – 200",
-    img: "https://d2xsxph8kpxj0f.cloudfront.net/110945286/eKLqbcXcmD3p6GhwsMA3tE/munyiq-card-diamond-v2-ZgzStMMuBgYsgnMFBXpURJ.webp",
-    accentColor: "#6366f1",
-    glowColor: "rgba(99,102,241,0.15)",
+    a: "Munymo is free to play. The daily game, the research, the archive of past games, and every lesson available today will always be free. Later we will add an optional low-cost membership with additional features, which is how we will cover running costs. It will include every advanced lesson module we add in future; players who prefer not to join will be able to buy those modules one at a time. Nothing that is free today will be taken away. Founding members — the players who join during the beta — get their first year of membership free when it launches.",
   },
 ];
 
@@ -235,8 +162,6 @@ export default function Home() {
   const { likelyAuthenticated, user } = useAuth();
   const isAdmin = user?.role === "admin";
   const { data: todayGame, isLoading: todayGameLoading } = trpc.games.getToday.useQuery();
-  const [activeCard, setActiveCard] = useState(0);
-  const touchStartX = useRef<number | null>(null);
   const [bannerDismissed, setBannerDismissed] = useState(() => {
     try { return sessionStorage.getItem("munymo_beta_banner_dismissed") === "1"; } catch { return false; }
   });
@@ -248,32 +173,6 @@ export default function Home() {
 
   // Admins always see the banner and beta section — never dismissed, never hidden
   const showBanner = isAdmin || !bannerDismissed;
-
-  // Auto-cycle MunyIQ cards
-  useEffect(() => {
-    const t = setInterval(() => {
-      setActiveCard((p) => (p + 1) % MUNYIQ_CARDS.length);
-    }, 3500);
-    return () => clearInterval(t);
-  }, []);
-
-  const card = MUNYIQ_CARDS[activeCard];
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
-  };
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartX.current === null) return;
-    const delta = e.changedTouches[0].clientX - touchStartX.current;
-    if (Math.abs(delta) > 40) {
-      setActiveCard((p) =>
-        delta < 0
-          ? (p + 1) % MUNYIQ_CARDS.length
-          : (p - 1 + MUNYIQ_CARDS.length) % MUNYIQ_CARDS.length
-      );
-    }
-    touchStartX.current = null;
-  };
 
   return (
     <PublicLayout>
@@ -734,118 +633,6 @@ export default function Home() {
       </section>
 
       {/* ══════════════════════════════════════════════════════════════════════
-          SECTION 4 — MUNYIQ TEASER
-      ══════════════════════════════════════════════════════════════════════ */}
-      <section className="py-24 border-b" style={{ borderColor: "var(--color-border)" }}>
-        <div className="container">
-          <div className="grid lg:grid-cols-2 gap-16 items-center">
-
-            {/* Card carousel */}
-            <div
-              className="relative flex flex-col items-center select-none"
-              onTouchStart={handleTouchStart}
-              onTouchEnd={handleTouchEnd}
-            >
-              {/* Glow */}
-              <div
-                className="absolute inset-0 rounded-3xl blur-3xl opacity-40 transition-all duration-700 pointer-events-none"
-                style={{ background: card.glowColor, transform: "scale(0.75)" }}
-              />
-              <img
-                src={card.img}
-                alt={`MunyIQ ${card.tier} Tier Card`}
-                className="relative w-full max-w-md rounded-2xl transition-all duration-500"
-                style={{
-                  boxShadow: `0 0 48px ${card.glowColor}, 0 24px 48px rgba(0,0,0,0.14)`,
-                }}
-              />
-              {/* Tier dots */}
-              <div className="flex items-center justify-center gap-3 mt-8">
-                {MUNYIQ_CARDS.map((c, i) => (
-                  <button
-                    key={c.tier}
-                    onClick={() => setActiveCard(i)}
-                    className="rounded-full transition-all duration-300"
-                    style={{
-                      width: i === activeCard ? "1.5rem" : "0.5rem",
-                      height: "0.5rem",
-                      background: i === activeCard ? card.accentColor : "var(--color-border-strong)",
-                    }}
-                    aria-label={`${c.tier} tier`}
-                  />
-                ))}
-              </div>
-            </div>
-
-            {/* Copy */}
-            <div>
-              <div
-                className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest mb-5"
-                style={{
-                  background: "var(--color-gold-muted)",
-                  color: "var(--color-gold)",
-                  border: "1px solid oklch(0.58 0.16 155 / 0.2)",
-                }}
-              >
-                <Sparkles size={11} />
-                Coming Soon
-              </div>
-
-              <h2 className="font-display mb-4" style={{ color: "var(--color-foreground)" }}>
-                Your game history becomes{" "}
-                <span className="text-gradient-gold">your credential.</span>
-              </h2>
-
-              <p className="text-base leading-relaxed mb-6" style={{ color: "var(--color-muted)" }}>
-                As Munymo grows, your prediction record will power{" "}
-                <strong style={{ color: "var(--color-foreground)" }}>MunyIQ</strong> — a composite
-                score of instinct accuracy, research engagement, and consistency over time.
-              </p>
-              <p className="text-base leading-relaxed mb-8" style={{ color: "var(--color-muted)" }}>
-                Earn a card. Share it. Prove it.
-              </p>
-
-              {/* Tier list — compact */}
-              <div className="space-y-2">
-                {[
-                  { range: "100 – 119", label: "Sapphire", color: "#2563eb" },
-                  { range: "120 – 129", label: "Emerald", color: "#059669" },
-                  { range: "130 – 139", label: "Ruby", color: "#dc2626" },
-                  { range: "140+", label: "Diamond", color: "#6366f1" },
-                ].map((row) => (
-                  <div
-                    key={row.range}
-                    className="flex items-center justify-between px-4 py-2.5 rounded-lg"
-                    style={{
-                      background: `${row.color}10`,
-                      border: `1px solid ${row.color}25`,
-                    }}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <span
-                        className="w-2 h-2 rounded-full flex-shrink-0"
-                        style={{ background: row.color }}
-                      />
-                      <span className="text-sm font-semibold" style={{ color: row.color }}>
-                        {row.label}
-                      </span>
-                    </div>
-                    <span className="text-xs font-mono" style={{ color: "var(--color-muted)" }}>
-                      {row.range}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              <p className="text-xs mt-6 leading-relaxed" style={{ color: "var(--color-subtle)" }}>
-                Players who join now will have the deepest prediction history when MunyIQ launches — and the most credible credentials.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ══════════════════════════════════════════════════════════════════════
           SECTION 5 — ROAD AHEAD (icon + title + one line)
       ══════════════════════════════════════════════════════════════════════ */}
       <section
@@ -864,14 +651,22 @@ export default function Home() {
             </h2>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className="grid sm:grid-cols-2 gap-6">
             {[
+              {
+                icon: TrendingUp,
+                iconColor: "var(--color-info)",
+                iconBg: "var(--color-info-muted)",
+                title: "MunyIQ",
+                body: "One honest score built from your whole track record, including whether you are improving. It needs many games from many players before it means anything, so it comes later. Every game you play now counts toward it.",
+                tag: "Coming",
+              },
               {
                 icon: Award,
                 iconColor: "var(--color-gold)",
                 iconBg: "var(--color-gold-muted)",
                 title: "Certificates of Achievement",
-                body: "Digitally verifiable credentials for leaderboard qualification, streak records, and tier attainment — designed for CVs and LinkedIn.",
+                body: "Digitally verifiable credentials for leaderboard qualification and streak records — designed for CVs and LinkedIn.",
                 tag: "Coming",
               },
               {
@@ -975,14 +770,14 @@ export default function Home() {
                     iconColor: "oklch(0.50 0.16 65)",
                     iconBg: "oklch(0.62 0.16 65 / 0.12)",
                     title: "Founding Member Status",
-                    body: "Your join date is recorded permanently. When MunyIQ launches, founding members will be recognised with an exclusive badge.",
+                    body: "Your join date is recorded permanently. When paid membership launches, founding members get their first year free.",
                   },
                   {
                     icon: Zap,
                     iconColor: "oklch(0.35 0.10 160)",
                     iconBg: "oklch(0.35 0.10 160 / 0.10)",
-                    title: "Deepest Prediction History",
-                    body: "MunyIQ is built on your track record. Players who join now will have the most credible, data-rich credentials when it launches.",
+                    title: "Longest Track Record",
+                    body: "Every game you play is recorded. When MunyIQ arrives, the players who joined early will have the longest track record behind their score.",
                   },
                   {
                     icon: Gift,
