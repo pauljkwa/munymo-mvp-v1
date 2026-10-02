@@ -817,7 +817,7 @@ The landing page was rebuilt in Phase 12 and is working exactly as intended. Do 
 3. **How It Works** — four-step process
 4. **80/20 Scoring explainer** — with streak, leaderboard, and integrity sub-cards
 5. ~~MunyIQ teaser carousel~~ — **removed 2026-10-02** (overclaimed a wishlist feature; do not restore gemstone cards or score bands to public copy)
-6. **Road Ahead teaser cards** — MunyIQ (text only, modest), Certificates of Achievement, Head-to-Head Challenges, Native Mobile Apps
+6. **Road Ahead teaser cards** — MunyIQ (text only, modest), More Markets (added 2026-10-02; **naming rule (Paul): parallel games are named by COUNTRY, not by exchange, since some countries have several exchanges**; US market first to prove the concept in beta, next exchanges chosen by player country numbers + surveys; never "soon"; says "US stock market" NOT "NASDAQ" because games routinely use NYSE-listed companies), Certificates of Achievement, Head-to-Head Challenges, Native Mobile Apps
 7. **Founding Beta recruitment section** — personal invitation tone
 8. **Final CTA** — unauthenticated users see sign-up prompt
 
