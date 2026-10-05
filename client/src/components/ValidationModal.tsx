@@ -12,7 +12,8 @@ import { CheckCircle2, XCircle, Timer, Loader2, ArrowRight } from "lucide-react"
  * a duplicated layout.
  */
 export interface ValidationModalProps {
-  phase: "confirm" | "question" | "result";
+  /** "reveal": a pause before the verdict, used after a guest creates an account. */
+  phase: "confirm" | "question" | "reveal" | "result";
   question: {
     questionType: string;
     questionText: string;
@@ -25,6 +26,8 @@ export interface ValidationModalProps {
   onClose: () => void;
   /** Signed-out visitor: their pick is saved in the browser, not yet locked in. */
   guest?: boolean;
+  /** Reveal phase: show the verdict. */
+  onReveal?: () => void;
 }
 
 export function ValidationModal({
@@ -36,6 +39,7 @@ export function ValidationModal({
   result,
   onClose,
   guest = false,
+  onReveal,
 }: ValidationModalProps) {
   const [selectedAnswer, setSelectedAnswer] = useState<string>("");
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -147,6 +151,30 @@ export function ValidationModal({
         className="w-full max-w-md rounded-2xl p-8 shadow-2xl transition-colors duration-500"
         style={{ background: bgColor, color: textColor }}
       >
+        {/* ── Phase: Reveal ── A guest answered before creating an account.
+            Paul, 2026-10-05: don't throw them straight into a big red or
+            green screen; give them a moment to choose to look. */}
+        {phase === "reveal" && (
+          <>
+            <div className="flex items-center gap-3 mb-5">
+              <CheckCircle2 size={28} style={{ color: "var(--color-success)" }} />
+              <h3 className="font-display text-xl" style={{ color: "var(--color-foreground)" }}>
+                You're in!
+              </h3>
+            </div>
+            <p className="text-sm mb-2" style={{ color: "var(--color-muted)" }}>
+              Your account is set up and your pick is locked in.
+            </p>
+            <p className="text-sm mb-6" style={{ color: "var(--color-foreground)" }}>
+              Ready to find out if you got the research question right?
+            </p>
+            <button className="btn-brand w-full justify-center" onClick={onReveal}>
+              Show me
+              <ArrowRight size={16} />
+            </button>
+          </>
+        )}
+
         {/* ── Phase: Confirm ── */}
         {phase === "confirm" && (
           <>

@@ -25,8 +25,14 @@ export function IosInstallSheet({ open, onOpenChange }: { open: boolean; onOpenC
         </SheetHeader>
 
         <ol className="px-4 space-y-3 text-sm" style={{ color: "var(--color-foreground)" }}>
+          {/* Newer Safari (iOS 26) tucks Share inside the ••• menu; older
+              versions show it on the bottom bar. Paul hit the first case on
+              2026-10-05, so lead with it and mention the other. */}
           <Step n={1}>
-            Tap <ShareIcon /> at the bottom of Safari
+            Tap <strong>•••</strong> at the bottom right of Safari, then tap <strong>Share</strong> <ShareIcon />
+            <span className="block text-xs mt-0.5" style={{ color: "var(--color-muted)" }}>
+              On some iPhones the Share button <ShareIcon /> is right on the bottom bar.
+            </span>
           </Step>
           <Step n={2}>
             Tap <strong>Add to Home Screen</strong>, then <strong>Add</strong>

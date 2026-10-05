@@ -143,7 +143,7 @@ export default function DailyGame() {
   const [chartColor, setChartColor] = useState("#009050");
 
   // Validation modal state
-  const [modalPhase, setModalPhase] = useState<"confirm" | "question" | "result" | null>(null);
+  const [modalPhase, setModalPhase] = useState<"confirm" | "question" | "reveal" | "result" | null>(null);
   const [validationResult, setValidationResult] = useState<{ isCorrect: boolean; correctAnswer?: string } | null>(null);
 
   // Sync step with existing pick on load
@@ -231,7 +231,7 @@ export default function DailyGame() {
       setJustConverted(true);
       if (quizCorrect !== undefined) {
         setValidationResult({ isCorrect: quizCorrect });
-        setModalPhase("result");
+        setModalPhase("reveal");
       } else if (failure) {
         toast.error(failure.message);
       } else {
@@ -395,6 +395,7 @@ export default function DailyGame() {
           result={validationResult}
           onClose={handleCloseModal}
           guest={isGuest}
+          onReveal={() => setModalPhase("result")}
         />
       )}
 
