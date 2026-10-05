@@ -970,12 +970,21 @@ If a new Manus chat has zero connections, the first priority before any code wor
 
 ## 26. What to Build Next (Priority Order)
 
-### Open to-do list (kept current — last updated 2026-10-05)
+### Open to-do list (kept current — last updated 2026-10-05, discussions block added)
 
 The numbered list below this block is historical (mid-2026) and mostly shipped. These are the live open items:
 
 | To-do | Notes |
 |-------|-------|
+| **DISCUSSIONS, not tasks: fixing "the poor third" of the learning design** (opened 2026-10-05) | The mechanics review (`references/wsj-critic-article-2026-10-05.md`) found Munymo well made as a habit product but only two-thirds of a learning product: the score rewards luck, the debrief explains noise, the decision is one bit deep, and nothing learned is asked again. **Nothing below is approved and nothing gets built until its discussion is closed.** Full agenda, options, Fable's lean and the counter-argument for each, and a decisions log: `references/scoring-and-learning-discussions-2026-10-05.md`. Paul asked for these to be conversations that end in agreement, not a list of what Fable says goes. |
+| Discussion 1: what should the score reward? | Being right today, or deciding well? Sets the principle for the rest. Touches every stored score, the 80/20 copy, MunyIQ. **Have this one first.** |
+| Discussion 2: confidence on the final pick | Should a player say how sure they are and be scored on calibration? Fixes three weaknesses at once but adds a step and needs a new column (schema approval). |
+| Discussion 3: what the quiz tests, and the timer | Reading check or understanding? Comparative questions vs the risk of a disputable answer key written by Mo; keep or soften the speed bonus. |
+| Discussion 4: results too close to call | What the debrief says, and whether the result card labels a photo finish. Fable's lean leaves Decision 6 untouched. |
+| Discussion 5: lessons inside the game | Concept of the day, spaced review, a concept record on the dashboard. Tension with the five-minute promise. |
+| Discussion 6: what makes a player feel they are improving | Waits on 2 and 5. Includes whether an expert track belongs in the product. |
+| Discussion 7: a faster first payoff for newcomers | Offer a practice game while a guest waits for the close? |
+| Discussion 8: judging changes without players; what happens to history | Replay the archive and simulate players under each candidate rule. **Fable can start this prep now; it informs 1 and 2.** |
 | **Weekly Search Console health report** (added 2026-10-02) | Scheduled job: confirm the sitemap was read recently, sample ~12 URLs across page types for index status, pull the week's impressions/clicks, send Paul a short summary. Read-only via the local `gsc` connector. Do NOT schedule sitemap resubmission: the sitemap is dynamic and Google already re-reads it about daily. |
 | ~~IndexNow ping for Bing on each new game~~ | **Done 2026-10-05.** `server/_core/indexNow.ts`: `publishGameResult` POSTs the new `/research/:id` URL to api.indexnow.org (fire-and-forget, production only). Key file `client/public/4569fbf8fd2541c3d44bcd2274b3dea8.txt` (public by design). A one-off backfill of all 116 sitemap URLs was accepted (HTTP 202) on 2026-10-05. Bing Webmaster Tools is set up in Paul's account (munymo.com verified, sitemap submitted 2026-10-05); check its IndexNow report after a few days. Never use Google's Indexing API. |
 | ~~Links 1: footer link on Paul's own sites~~ | **Done 2026-10-02.** newremotes.com.au and healthhertz.com both link to https://munymo.com in their footers; verified in the raw page HTML. newremotes also links to healthhertz. Munymo links back to neither, on purpose. |
