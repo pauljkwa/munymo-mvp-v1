@@ -21,6 +21,8 @@ export interface GuestPick {
   final?: Side;
   validationAnswer?: string;
   answerTimeMs?: number;
+  /** The guest was already shown right/wrong (guests get the verdict at once). */
+  quizCorrect?: boolean;
   savedAt: number;
 }
 
@@ -52,6 +54,7 @@ export function readGuestPick(gameId: number, storage = browserStorage()): Guest
       final: isSide(p.final) ? p.final : undefined,
       validationAnswer: typeof p.validationAnswer === "string" && p.validationAnswer ? p.validationAnswer : undefined,
       answerTimeMs: typeof p.answerTimeMs === "number" ? p.answerTimeMs : undefined,
+      quizCorrect: typeof p.quizCorrect === "boolean" ? p.quizCorrect : undefined,
       savedAt: typeof p.savedAt === "number" ? p.savedAt : Date.now(),
     };
   } catch {
@@ -73,6 +76,23 @@ export function clearGuestPick(gameId: number, storage = browserStorage()): void
   } catch {
     /* nothing to clean up if storage is unavailable */
   }
+}
+
+/** Every stored guest pick, newest first. */
+export function listGuestPicks(storage = browserStorage()): GuestPick[] {
+  if (!storage) return [];
+  const picks: GuestPick[] = [];
+  try {
+    for (let i = 0; i < storage.length; i++) {
+      const key = storage.key(i);
+      if (!key?.startsWith(KEY_PREFIX)) continue;
+      const pick = readGuestPick(Number(key.slice(KEY_PREFIX.length)), storage);
+      if (pick) picks.push(pick);
+    }
+  } catch {
+    /* best effort */
+  }
+  return picks.sort((a, b) => b.savedAt - a.savedAt);
 }
 
 /** Remove picks for other games once they're more than a week old. */

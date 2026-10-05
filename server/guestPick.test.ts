@@ -78,3 +78,31 @@ describe("planReplay — what to submit after sign-in", () => {
     expect(planReplay(full, { gutSelection: "B" })).toEqual([]);
   });
 });
+
+import { listGuestPicks } from "@/lib/guestPick";
+import { buildResultReminderIcs, newYorkTimeToUtc } from "@/lib/calendar";
+
+describe("listGuestPicks", () => {
+  it("lists stored picks newest first and keeps the quiz verdict", () => {
+    const s = memoryStorage();
+    writeGuestPick({ gameId: 1, gut: "A", savedAt: 10 }, s);
+    writeGuestPick({ gameId: 2, gut: "B", final: "B", validationAnswer: "No", quizCorrect: true, savedAt: 20 }, s);
+    const picks = listGuestPicks(s);
+    expect(picks.map((p) => p.gameId)).toEqual([2, 1]);
+    expect(picks[0].quizCorrect).toBe(true);
+  });
+});
+
+describe("result reminder calendar file", () => {
+  it("converts New York time to UTC across daylight saving", () => {
+    expect(newYorkTimeToUtc("2026-10-05", 17).toISOString()).toBe("2026-10-05T21:00:00.000Z"); // EDT
+    expect(newYorkTimeToUtc("2026-12-07", 17).toISOString()).toBe("2026-12-07T22:00:00.000Z"); // EST
+  });
+
+  it("sets the reminder for 5pm New York on the game day", () => {
+    const ics = buildResultReminderIcs("2026-10-05", "WDC vs STX", new Date("2026-10-05T12:00:00Z"));
+    expect(ics).toContain("DTSTART:20261005T210000Z");
+    expect(ics).toContain("URL:https://munymo.com/game");
+    expect(ics.startsWith("BEGIN:VCALENDAR")).toBe(true);
+  });
+});

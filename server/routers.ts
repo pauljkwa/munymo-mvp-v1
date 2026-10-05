@@ -211,6 +211,26 @@ const gamesRouter = router({
       };
     }),
 
+  /**
+   * Guest play: right/wrong for a signed-out visitor's quiz answer, straight
+   * away (Paul, 2026-10-05: the guest game should be complete). Returns only
+   * isCorrect, never the correct answer, and only while the game is open.
+   * Known trade-off: anyone can probe it, so a determined player could learn
+   * the answer before answering on an account. Accepted for a free game with
+   * no prizes; the answer-time component still rewards answering first-hand.
+   */
+  checkGuestAnswer: publicProcedure
+    .input(z.object({ gameId: z.number(), answer: z.string().min(1).max(256) }))
+    .mutation(async ({ input }) => {
+      const game = await getGameById(input.gameId);
+      if (!game || (game.status !== "active" && game.status !== "locked")) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "This game is closed" });
+      }
+      const q = await getValidationQuestion(input.gameId);
+      if (!q) throw new TRPCError({ code: "NOT_FOUND", message: "No question for this game" });
+      return { isCorrect: q.correctAnswer === input.answer };
+    }),
+
   list: publicProcedure
     .input(z.object({ limit: z.number().min(1).max(50).default(20), offset: z.number().default(0) }))
     .query(async ({ input }) => {

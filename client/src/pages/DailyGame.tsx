@@ -23,6 +23,7 @@ import {
   type GuestPick,
   type ReplayStep,
   clearGuestPick,
+  listGuestPicks,
   planReplay,
   pruneGuestPicks,
   readGuestPick,
@@ -45,7 +46,9 @@ import {
   X as XIcon,
   ExternalLink,
   GraduationCap,
+  CalendarPlus,
 } from "lucide-react";
+import { downloadResultReminder } from "@/lib/calendar";
 
 const ALL_LESSONS_FLAT = ALL_LEVELS.flatMap((level) => level.lessons);
 
@@ -65,7 +68,13 @@ export default function DailyGame() {
   // flashes the guest branch, and a new visitor can play at once even if
   // Clerk is slow or blocked.
   const isGuest = !isAuthenticated && !likelyAuthenticated;
-  const { data: game, isLoading } = trpc.games.getToday.useQuery();
+  // A guest who keeps the tab open after picking gets the result without
+  // reloading: once the result publishes, getToday moves on to the next game
+  // and the "Your last pick" card shows how they did.
+  const [guestWaiting, setGuestWaiting] = useState(false);
+  const { data: game, isLoading } = trpc.games.getToday.useQuery(undefined, {
+    refetchInterval: guestWaiting ? 2 * 60 * 1000 : false,
+  });
   const { data: recentPublished } = trpc.games.listArchive.useQuery(
     { limit: 1, offset: 0 },
     { staleTime: 5 * 60 * 1000 }
@@ -154,6 +163,10 @@ export default function DailyGame() {
 
   // ── Guest play ──
   const [guestPick, setGuestPick] = useState<GuestPick | null>(null);
+  const [lastGuestPick, setLastGuestPick] = useState<GuestPick | null>(null);
+  useEffect(() => {
+    setGuestWaiting(isGuest && Boolean(guestPick?.final));
+  }, [isGuest, guestPick?.final]);
   const saveGuestPick = (next: GuestPick) => {
     writeGuestPick(next);
     setGuestPick(next);
@@ -165,7 +178,16 @@ export default function DailyGame() {
     pruneGuestPicks(game.id);
     const stored = readGuestPick(game.id);
     setGuestPick(stored);
-    if (!isGuest || !stored) return;
+    setLastGuestPick(listGuestPicks().find((p) => p.gameId !== game.id && p.final) ?? null);
+    if (!isGuest) return;
+    if (!stored) {
+      // A new game arrived while the tab was open (the old one published):
+      // start the guest fresh on it.
+      setStep("gut");
+      setGutSelection(null);
+      setFinalSelection(null);
+      return;
+    }
     setGutSelection(stored.gut);
     if (stored.final) {
       setFinalSelection(stored.final);
@@ -229,13 +251,14 @@ export default function DailyGame() {
       }
       trackEvent("guest_converted");
       setJustConverted(true);
-      if (quizCorrect !== undefined) {
+      if (quizCorrect !== undefined && stored.quizCorrect === undefined) {
+        // Answered before guests were shown the verdict: pause, then reveal.
         setValidationResult({ isCorrect: quizCorrect });
         setModalPhase("reveal");
       } else if (failure) {
         toast.error(failure.message);
       } else {
-        toast.success("Your pick is locked in.");
+        toast.success("You're in! Your pick is locked in and will be scored at the close.");
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -297,10 +320,12 @@ export default function DailyGame() {
     },
   });
 
+  const checkGuestAnswer = trpc.games.checkGuestAnswer.useMutation();
+
   const handleCloseModal = () => {
     setModalPhase(null);
     setStep("submitted");
-    toast.success("All done — your picks are locked in!");
+    toast.success(isGuest ? "All done! Come back after the close to see if you were right." : "All done — your picks are locked in!");
   };
 
   if (isLoading) {
@@ -382,16 +407,29 @@ export default function DailyGame() {
           onSubmitAnswer={(answer, timeMs) => {
             if (!game.id) return;
             if (isGuest && guestPick) {
-              // Kept for after sign-up; the verdict is withheld until then, so
-              // there is no way to learn the answer without an account.
-              saveGuestPick({ ...guestPick, validationAnswer: answer, answerTimeMs: timeMs });
-              setModalPhase(null);
-              setStep("submitted");
+              // Guests get the verdict straight away (2026-10-05); the answer
+              // and time are kept so they count if the guest creates an account.
+              const withAnswer = { ...guestPick, validationAnswer: answer, answerTimeMs: timeMs };
+              checkGuestAnswer.mutate(
+                { gameId: game.id, answer },
+                {
+                  onSuccess: ({ isCorrect }) => {
+                    saveGuestPick({ ...withAnswer, quizCorrect: isCorrect });
+                    setValidationResult({ isCorrect });
+                    setModalPhase("result");
+                  },
+                  onError: () => {
+                    saveGuestPick(withAnswer);
+                    setModalPhase(null);
+                    setStep("submitted");
+                  },
+                }
+              );
               return;
             }
             submitValidation.mutate({ gameId: game.id, answer, answerTimeMs: timeMs });
           }}
-          isSubmitting={submitValidation.isPending}
+          isSubmitting={submitValidation.isPending || checkGuestAnswer.isPending}
           result={validationResult}
           onClose={handleCloseModal}
           guest={isGuest}
@@ -400,6 +438,8 @@ export default function DailyGame() {
       )}
 
       <div className="container py-10 max-w-3xl mx-auto">
+        {isGuest && lastGuestPick && <LastGuestPickCard pick={lastGuestPick} />}
+
         {/* Header */}
         <div className="mb-8 animate-fade-up">
           <div className="flex items-center justify-between flex-wrap gap-3 mb-2">
@@ -918,7 +958,8 @@ export default function DailyGame() {
           <GuestAskCard
             pickName={(guestPick?.final ?? finalSelection) === "A" ? game.companyAName : game.companyBName}
             pickSide={guestPick?.final ?? finalSelection}
-            hasQuizAnswer={Boolean(guestPick?.validationAnswer)}
+            quizCorrect={guestPick?.quizCorrect}
+            onRemind={() => downloadResultReminder(game.gameDate, `${game.companyATicker} vs ${game.companyBTicker}`)}
             canAnswerQuiz={Boolean(validationQ) && !guestPick?.validationAnswer && !isLocked}
             onAnswerQuiz={() => setModalPhase("confirm")}
             status={game.status}
@@ -1323,34 +1364,28 @@ function LockoutCountdown({ lockoutTime }: { lockoutTime: Date }) {
 
 // ─── Guest Ask Card ───────────────────────────────────────────────────────────
 
-/**
- * What a signed-out visitor sees once their picks are made. Wording approved
- * by Paul on 2026-10-05: say what the account is for, that it's free and
- * reversible, and never present skipping the account as an option.
- */
-function GuestAskCard({
-  pickName,
-  pickSide,
-  hasQuizAnswer,
-  canAnswerQuiz,
-  onAnswerQuiz,
-  status,
-  winner,
-}: {
-  pickName: string;
-  pickSide: "A" | "B" | null;
-  hasQuizAnswer: boolean;
-  canAnswerQuiz: boolean;
-  onAnswerQuiz: () => void;
-  status: string;
-  winner: "A" | "B" | null;
-}) {
-  const isOpen = status === "active";
-  useEffect(() => {
-    if (isOpen) trackEvent("guest_ask_shown");
-  }, [isOpen]);
+/** Why a free account is worth having. Every item is live today. */
+function AccountBenefits() {
+  const items = [
+    "Get your result sent to you the moment it lands",
+    "Keep your score and build a daily streak",
+    "Climb the monthly leaderboard",
+    "See how your gut compares with your research over time",
+  ];
+  return (
+    <ul className="text-sm text-left space-y-1.5 mb-5 mx-auto max-w-sm" style={{ color: "var(--color-foreground)" }}>
+      {items.map((t) => (
+        <li key={t} className="flex items-start gap-2">
+          <CheckCircle2 size={15} className="shrink-0 mt-0.5" style={{ color: "var(--color-success)" }} />
+          <span>{t}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
-  const createButton = (label: string) => (
+function CreateAccountButton({ label }: { label: string }) {
+  return (
     <SignUpButton mode="modal">
       <button className="btn-brand w-full justify-center">
         {label}
@@ -1358,25 +1393,42 @@ function GuestAskCard({
       </button>
     </SignUpButton>
   );
+}
 
-  // The game moved on before they created an account: this pick can't count.
-  if (!isOpen) {
-    const published = status === "result_published" && winner && pickSide;
-    return (
-      <div className="card-glass p-6 text-center animate-scale-in" style={{ borderColor: "var(--color-brand)" }}>
-        <p className="text-sm mb-1" style={{ color: "var(--color-muted)" }}>Your pick</p>
-        <h3 className="mb-3" style={{ color: "var(--color-foreground)" }}>{pickName}</h3>
-        <p className="text-sm mb-5" style={{ color: "var(--color-muted)" }}>
-          {published
-            ? pickSide === winner
-              ? `You picked ${pickName}, and ${pickName} won.`
-              : `You picked ${pickName}, but the other company came out ahead.`
-            : "Today's game locked before you created an account, so this pick can't be scored."}
-        </p>
-        {createButton(published ? "Create a free account to keep score from tomorrow" : "Create a free account so tomorrow's game counts")}
-      </div>
-    );
-  }
+const NO_CATCH =
+  "Free, with no card and no catch. You can turn notifications off or delete the account anytime from your profile.";
+
+/**
+ * What a signed-out visitor sees once their picks are made. The guest game is
+ * complete (2026-10-05): quiz verdict at once, result on return. The account
+ * is pitched on what it adds, never as a gate, and skipping it is never
+ * offered as an option (Paul's rule).
+ */
+function GuestAskCard({
+  pickName,
+  pickSide,
+  quizCorrect,
+  canAnswerQuiz,
+  onAnswerQuiz,
+  onRemind,
+  status,
+  winner,
+}: {
+  pickName: string;
+  pickSide: "A" | "B" | null;
+  quizCorrect?: boolean;
+  canAnswerQuiz: boolean;
+  onAnswerQuiz: () => void;
+  onRemind: () => void;
+  status: string;
+  winner: "A" | "B" | null;
+}) {
+  const isOpen = status === "active" || status === "locked";
+  useEffect(() => {
+    trackEvent("guest_ask_shown");
+  }, []);
+
+  const published = status === "result_published" && winner && pickSide;
 
   return (
     <div
@@ -1384,33 +1436,92 @@ function GuestAskCard({
       style={{ borderColor: "var(--color-brand)", boxShadow: "0 0 0 1px var(--color-brand)" }}
     >
       <p className="text-sm mb-1" style={{ color: "var(--color-muted)" }}>Your pick</p>
-      <h3 className="mb-3" style={{ color: "var(--color-foreground)" }}>{pickName}</h3>
-      <p className="mb-2" style={{ color: "var(--color-foreground)" }}>
-        Create a free account to lock in your pick, and we'll let you know at the close if you were right.
-      </p>
-      {hasQuizAnswer && (
-        <p className="text-sm mb-2" style={{ color: "var(--color-muted)" }}>
-          Your quiz answer is saved too. You'll see if you got it right as soon as you're in.
+      <h3 className="mb-2" style={{ color: "var(--color-foreground)" }}>{pickName}</h3>
+      {quizCorrect !== undefined && (
+        <p className="text-sm mb-3" style={{ color: quizCorrect ? "var(--color-success)" : "var(--color-error)" }}>
+          {quizCorrect ? "✓ Research question: correct" : "✗ Research question: incorrect"}
         </p>
       )}
-      <div className="mt-5 mb-4">{createButton("Create a free account")}</div>
-      <p className="text-xs mb-4" style={{ color: "var(--color-subtle)" }}>
-        Free, with no card and no catch. The account is where the game keeps your picks and your
-        score. You can turn notifications off or delete the account anytime from your profile.
-      </p>
-      {canAnswerQuiz && (
-        <button className="btn-ghost text-sm w-full justify-center mb-2" onClick={onAnswerQuiz}>
-          Answer the research quiz first
-        </button>
+
+      {published ? (
+        <p className="mb-5" style={{ color: "var(--color-foreground)" }}>
+          {pickSide === winner ? `You were right: ${pickName} came out ahead.` : `Not this time: the other company came out ahead.`}
+        </p>
+      ) : (
+        <>
+          <p className="text-sm mb-4" style={{ color: "var(--color-muted)" }}>
+            Results usually land within an hour of the US market close (4pm New York time). Come back then to see if you were right.
+          </p>
+          {isOpen && (
+            <button className="btn-ghost text-sm w-full justify-center mb-5" onClick={onRemind}>
+              <CalendarPlus size={15} /> Remind me at the close
+            </button>
+          )}
+        </>
       )}
-      <p className="text-sm" style={{ color: "var(--color-muted)" }}>
-        Already have an account?{" "}
-        <SignInButton mode="modal">
-          <button className="underline font-semibold" style={{ color: "var(--color-brand)" }}>
-            Sign in
+
+      <div className="pt-5 border-t" style={{ borderColor: "var(--color-border)" }}>
+        <p className="font-semibold mb-3" style={{ color: "var(--color-foreground)" }}>
+          Make it count with a free account
+        </p>
+        <AccountBenefits />
+        <div className="mb-3">
+          <CreateAccountButton label={isOpen ? "Create a free account" : "Create a free account for tomorrow's game"} />
+        </div>
+        <p className="text-xs mb-4" style={{ color: "var(--color-subtle)" }}>{NO_CATCH}</p>
+        {canAnswerQuiz && (
+          <button className="btn-ghost text-sm w-full justify-center mb-2" onClick={onAnswerQuiz}>
+            Answer the research question first
           </button>
-        </SignInButton>
+        )}
+        <p className="text-sm" style={{ color: "var(--color-muted)" }}>
+          Already have an account?{" "}
+          <SignInButton mode="modal">
+            <button className="underline font-semibold" style={{ color: "var(--color-brand)" }}>
+              Sign in
+            </button>
+          </SignInButton>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Last Guest Pick ──────────────────────────────────────────────────────────
+
+/**
+ * Once a result publishes, /game moves on to the next matchup, so a guest
+ * returning after the close would otherwise never see how they did. This
+ * card shows their most recent previous pick once that game has a result.
+ */
+function LastGuestPickCard({ pick }: { pick: GuestPick }) {
+  const { data: game } = trpc.games.getById.useQuery({ id: pick.gameId });
+  if (!game || game.status !== "result_published" || !game.winner || !pick.final) return null;
+  const pickName = pick.final === "A" ? game.companyAName : game.companyBName;
+  const right = pick.final === game.winner;
+  return (
+    <div
+      className="card-glass p-5 mb-6 animate-fade-up"
+      style={{ borderColor: right ? "var(--color-success)" : "var(--color-border)" }}
+    >
+      <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--color-brand)" }}>
+        Your last pick: {game.companyATicker} vs {game.companyBTicker}
       </p>
+      <p className="font-semibold mb-1" style={{ color: "var(--color-foreground)" }}>
+        {right ? `✓ You were right: ${pickName} came out ahead.` : `✗ Not this time: you picked ${pickName}.`}
+      </p>
+      {pick.quizCorrect !== undefined && (
+        <p className="text-sm mb-2" style={{ color: "var(--color-muted)" }}>
+          Research question: {pick.quizCorrect ? "correct" : "incorrect"}.
+        </p>
+      )}
+      <Link href={`/game/${game.id}/result`} className="text-sm font-semibold inline-flex items-center gap-1 mb-4" style={{ color: "var(--color-brand)" }}>
+        See the full result and Hindsight Spotlight <ArrowRight size={13} />
+      </Link>
+      <p className="text-sm mb-3" style={{ color: "var(--color-muted)" }}>
+        With a free account, today's game counts toward your score and streak, and we'll send you the result.
+      </p>
+      <CreateAccountButton label="Create a free account" />
     </div>
   );
 }

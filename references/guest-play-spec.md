@@ -1,5 +1,7 @@
 # Guest Play: Today's Game Without an Account
 
+> **Revision 2026-10-05 (later): the guest game is now COMPLETE.** Paul chose to stop holding anything back from guests: the quiz verdict shows at once (public `games.checkGuestAnswer`, returns only isCorrect; the answer-probing trade-off is accepted), "Remind me at the close" downloads a calendar file (5pm New York on the game day, `client/src/lib/calendar.ts`), an open tab re-checks every 2 minutes, and a "Your last pick" card on /game shows a returning guest's previous result, because /game moves on to the next matchup once a result publishes. The account is pitched on what it adds ("Make it count with a free account": result sent to you, score and streak, monthly leaderboard, gut vs research over time) with the same no-catch small print, and the guest path is never offered as a choice. Paul: "that doesn't mean we should hold off on the selling points." The quiz-withholding and "lock in your pick" sections below are superseded. IP-address tracking was considered and rejected: shared school, office and home IPs collide, mobile IPs change, and an IP is personal data.
+
 **Date:** 2026-10-05. **Status: decisions 1 and 2 settled 2026-10-05 (quiz option A, with plain no-trap wording); the ask-card wording is awaiting Paul's sign-off.** Decided in principle 2026-10-02 (see memory `guest-play-plan`). Written by Fable as the spec. Small enough that Fable can build it directly once approved.
 
 ## Why
