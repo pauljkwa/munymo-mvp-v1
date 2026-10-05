@@ -16,12 +16,13 @@ It also makes Munymo eligible for the daily-game directories Dle Hunt and The Dl
 4. **Research quiz (the timed validation question).** Same modal and timer. Their answer and time are kept, but the right/wrong verdict is **not** shown yet (see "The quiz" below).
 5. **The ask.** In place of the "Picks Submitted" card, a guest sees:
    > **Your pick: Company B**
-   > Create a free account to lock in your pick and find out at the close if you were right.
+   > Create a free account to lock in your pick, and we'll let you know at the close if you were right.
+   > Your quiz answer is saved too. You'll see if you got it right as soon as you're in.
    > [Create a free account] (primary)
-   > Free, with no card and no catch. The account is simply where the game keeps your picks and your score, and you can delete it anytime from your profile.
+   > Free, with no card and no catch. The account is where the game keeps your picks and your score. You can turn notifications off or delete the account anytime from your profile.
    > Already have an account? Sign in (small link)
 
-   The second line is Paul's, verbatim (2026-10-02). The reassurance line was approved on 2026-10-05 after Paul rejected an earlier draft, which said the pick "stays on this device only and isn't scored or ranked". That read as an invitation to skip the account. The rule: say what the account is for and that it's free and reversible, and never offer the guest path as a choice. "Delete it anytime" is true: the "Delete Account Permanently" option on /profile has existed since 2026-07-16.
+   The second line is Paul's 2026-10-02 line with his approved 2026-10-05 tweak ("we'll let you know" instead of "find out"). It's true for everyone because the results email is on by default and push takes over once enabled. Never name a channel there. The reassurance line was approved on 2026-10-05 after Paul rejected an earlier draft, which said the pick "stays on this device only and isn't scored or ranked". That read as an invitation to skip the account. The rule: say what the account is for and that it's free and reversible, and never offer the guest path as a choice. "Delete it anytime" is true: the "Delete Account Permanently" option on /profile has existed since 2026-07-16.
 6. **They create an account** (Clerk modal, as now). The page then submits their picks automatically, shows the quiz verdict and the normal "Picks Submitted" card, and from there they're an ordinary player.
 7. **They don't create an account.** If they come back on the same device later that day, they're returned to step 5 with their pick shown. Once the result is published, they see the normal result panel plus one line: "You picked Company B, and Company B won. Create a free account to keep score from tomorrow." No points, no rank, no streak.
 
@@ -127,6 +128,6 @@ There are no custom analytics events yet. Add four Google Analytics events (`gta
 ## Decisions for Paul
 
 1. **Quiz: A**, decided 2026-10-05 (answer now, verdict after creating an account; plainly no trap).
-2. **Ask card wording:** step 5, settled 2026-10-05 except Paul's line versus "we'll let you know at the close". Default: keep Paul's line verbatim.
+2. **Ask card wording:** step 5, settled 2026-10-05 (Paul chose the "we'll let you know at the close" tweak).
 3. **Setup asks replace the housekeeping screen** (decided 2026-10-05), including the iPhone home screen sheet.
 4. **Go-ahead to build.** No schema change and no new secrets.
