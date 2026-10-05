@@ -1,5 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
-import { SignInButton } from "@clerk/clerk-react";
+import { SignUpButton } from "@clerk/clerk-react";
 import { trpc } from "@/lib/trpc";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import PublicLayout from "@/components/PublicLayout";
@@ -248,11 +248,11 @@ function LessonView({ lessonId }: { lessonId: string }) {
 
           {answered && !isAuthenticated && (
             <div className="text-center">
-              <SignInButton mode="modal">
+              <SignUpButton mode="modal">
                 <button className="btn-brand" type="button">
-                  Sign in to save your progress
+                  Create a free account to save your progress
                 </button>
-              </SignInButton>
+              </SignUpButton>
             </div>
           )}
 

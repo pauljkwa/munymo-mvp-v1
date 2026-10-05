@@ -310,12 +310,12 @@ export default function Home() {
                     <ArrowRight size={16} />
                   </Link>
                 ) : (
-                  <SignUpButton mode="modal">
-                    <button className="btn-gold text-sm px-7 py-3">
-                      Start Playing — It's Free
-                      <ArrowRight size={16} />
-                    </button>
-                  </SignUpButton>
+                  // Straight into today's game: no account needed to play
+                  // (guest play, 2026-10-05). The ask comes after the pick.
+                  <Link href="/game" className="btn-gold text-sm px-7 py-3">
+                    Start Playing — It's Free
+                    <ArrowRight size={16} />
+                  </Link>
                 )}
                 <Link href="/demo" className="btn-ghost text-sm px-6 py-3">
                   See How It Works
@@ -952,12 +952,10 @@ export default function Home() {
                 <p className="mb-8 text-sm leading-relaxed" style={{ color: "var(--color-muted)" }}>
                   Free to play. No financial knowledge required. Just curiosity.
                 </p>
-                <SignUpButton mode="modal">
-                  <button className="btn-gold text-sm px-8 py-3">
-                    Start Playing Free
-                    <ArrowRight size={16} />
-                  </button>
-                </SignUpButton>
+                <Link href="/game" className="btn-gold text-sm px-8 py-3">
+                  Start Playing Free
+                  <ArrowRight size={16} />
+                </Link>
               </div>
             </div>
           </div>

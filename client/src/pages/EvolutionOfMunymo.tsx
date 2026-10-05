@@ -1,6 +1,5 @@
 import PublicLayout from "@/components/PublicLayout";
 import { Link } from "wouter";
-import { SignInButton } from "@clerk/clerk-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 
 function Section({ id, label, title, children }: {
@@ -401,11 +400,9 @@ export default function EvolutionOfMunymo() {
               Play Today's Game
             </Link>
           ) : (
-            <SignInButton mode="modal">
-              <button className="btn-gold text-sm px-8 py-3">
-                Start Playing Free
-              </button>
-            </SignInButton>
+            <Link href="/game" className="btn-gold text-sm px-8 py-3">
+              Start Playing Free
+            </Link>
           )}
         </div>
 
