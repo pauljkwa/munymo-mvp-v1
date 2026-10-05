@@ -97,7 +97,7 @@ function HeroMatchupUnavailable() {
 const FAQ_ITEMS = [
   {
     q: "What exactly is Munymo?",
-    a: "Munymo is a daily stock market training game. Each US trading day we publish one matchup between two well-known companies in the same sector, and you predict which one will post the bigger percentage move from the opening bell to the close. There's no real money involved — the goal is to build genuine market intuition through daily practice, feedback, and a track record you can watch improve.",
+    a: "Munymo is a free daily stock analysis game. Each US trading day we publish one matchup between two well-known companies in the same sector, and you predict which one will post the bigger percentage move from the opening bell to the close. There's no real money involved — the goal is to build genuine market intuition through daily practice, feedback, and a track record you can watch improve.",
   },
   {
     q: "Is Munymo like Wordle for the stock market?",
@@ -251,8 +251,10 @@ export default function Home() {
                 }}
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
-                <span className="sm:hidden">Daily Training Game</span>
-                <span className="hidden sm:inline">Daily Stock Market Training Game</span>
+                {/* Tagline chosen by Paul 2026-10-05: "analysis" reads as
+                    education. Page titles keep "stock market game" for search. */}
+                <span className="sm:hidden">Daily Stock Analysis Game</span>
+                <span className="hidden sm:inline">The Free Daily Stock Analysis Game</span>
               </div>
 
               {/* Hook */}

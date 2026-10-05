@@ -1,7 +1,7 @@
 {
   "name": "Munymo",
   "short_name": "Munymo",
-  "description": "A free daily stock market prediction game.",
+  "description": "The free daily stock analysis game.",
   "start_url": "/game",
   "scope": "/",
   "display": "standalone",

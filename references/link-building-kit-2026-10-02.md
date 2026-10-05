@@ -16,7 +16,8 @@ added by Paul and verified live on 2026-10-02 (both present in the raw page HTML
 **URL:** https://munymo.com
 
 **One-line tagline (under 60 characters):**
-The free daily stock market prediction game
+The free daily stock analysis game
+(Paul's choice 2026-10-05, replacing "The free daily stock market prediction game". Listings submitted before then still carry the old line; update them when convenient. Search-facing page titles deliberately keep "stock market game".)
 
 **Short description (about 160 characters):**
 One matchup between two real companies every US trading day. Make a gut pick, read the research, lock in your prediction, and see who was right at the close.
