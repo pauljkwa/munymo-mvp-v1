@@ -99,7 +99,9 @@ Paul, 2026-10-05: the step must say why, "so they know it isn't just attempting 
 > Apple only allows notifications on iPhone from apps saved to the home screen. It's not an app store download, just a shortcut, and you can remove it like any other icon.
 > (1) Tap the Share button [square-with-arrow icon] at the bottom of Safari. (2) Tap **Add to Home Screen**. (3) Open Munymo from your home screen. We'll ask about notifications there.
 
-**Open check before building:** whether iOS keeps the player signed in when opening the home-screen app. Our own 2026-09-20 finding was that Safari and the home-screen app don't share storage. If that holds, step 3 must say "and sign in once more". Verify on Paul's iPhone first.
+**Checked 2026-10-05 on Paul's iPhone:** the home-screen app opens straight to today's game but **asks you to sign in again**, because Safari and the home-screen app don't share sign-ins. Step 3 therefore reads: "(3) Open Munymo from your home screen and sign in once more. We'll ask about notifications there." Picks are already saved to the account by then, so nothing is lost.
+
+**The "ask there" must actually happen.** When the installed app is opened on iPhone and this device has no notification subscription, `/game` shows the notification card at the top on first open, whatever step the game is at. Today's `ResultReminderPrompt` only shows on the research step, so someone who already finished their picks in Safari would never see it in the app. The card is the same component, shown earlier in standalone mode. It's suppressed if the player already chose "No thanks".
 
 **Android and computers never see card 3.** They get notifications without installing, so asking would be exactly the "real estate" grab Paul wants to avoid. The heading then says "Two quick things".
 
@@ -142,4 +144,4 @@ There are no custom analytics events yet. Add four Google Analytics events (`gta
 1. **Quiz: A, decided 2026-10-05.** Condition: it must be plainly obvious that the account isn't a trap. On the ask card, under the quiz result placeholder: "Your quiz answer is saved. Create a free account to see if you got it right."
 2. **Ask card wording:** revised in step 5. Awaiting approval.
 3. **Housekeeping screen:** added 2026-10-05 at Paul's request (section above). Approve the layout and wording.
-4. **Go-ahead to build.** No schema change and no new secrets. The iPhone sign-in check happens first.
+4. **Go-ahead to build.** No schema change and no new secrets. iPhone sign-in check done 2026-10-05 (sign in again is required).
