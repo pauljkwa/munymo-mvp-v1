@@ -106,17 +106,16 @@ Not yet checked: Peerlist Launchpad (needs a public personal profile), Indie Hac
 
 ## Links 3: daily-game directories — BLOCKED for now
 
-Dle Hunt (https://dlehunt.com/submit) and The Dles (form: https://tally.so/r/mOKOea) both
-require that a game is free AND playable with no account. Munymo's daily game shows
-"Sign in to Play", so both would very likely reject it. Do not submit until there is a way
-to play today's matchup without signing in. Dailydle's criteria were not confirmed.
+**Updated 2026-10-05: guest play is live**, so today's game is now free AND playable with no account.
 
-Product idea this raises (needs Paul's decision, not built): let a signed-out visitor play
-today's game as a guest, and ask them to sign up only to save the score and start a streak.
-That would qualify Munymo for these directories and would likely lift sign-ups on its own.
+**Dle Hunt (https://dlehunt.com/submit): ready to submit.** Submitting needs a Dle Hunt account (Google, Discord or email); Paul signs in, then Claude can fill the form in Chrome. The site's criteria: free in the browser, playable without an account, a bite-size puzzle played once a day. No AI-content rule is stated. **Category: Higher/Lower** (it's offered, and "which of these two companies does better today" is exactly a higher/lower game); fall back to Other.
+- Name: Munymo
+- URL: https://munymo.com/game (straight into today's game, no sign-up wall)
+- Tagline: The free daily stock market prediction game
+- Description (daily-game audience): One new matchup every US trading day: two real companies, one question, which will do better today? Make a gut pick, read a short research brief, lock in your final pick, then come back after the market closes to see if you were right. Free, about five minutes, no real money, and no account needed to play.
+- Icon: `references/munymo-listing-icon-square.png`; screenshots: `references/listing-screenshots-mobile/`.
 
-When it does qualify: category "Other" on Dle Hunt (or "Trivia" if "Other" is not offered);
-use the tagline and medium description above.
+**The Dles (form: https://tally.so/r/mOKOea): DO NOT SUBMIT without Paul's decision.** The form states "Games with content produced by Generative AI will not be added." Munymo's matchup selection and research brief are written by Mo, an AI agent, and we disclose that everywhere (an audit P0). Submitting would mean either hiding that, which we never do, or a near-certain rejection. Recommendation: skip it.
 
 ---
 
