@@ -63,54 +63,39 @@ We must **not** add a public "check my answer" endpoint. A guest could use it to
 | Signed-in player | Completely unchanged. |
 | Guest clears browser data | Pick is gone. Not mentioned in the copy on purpose (see step 5). |
 
-## The housekeeping screen (every new account)
+## Setup asks: one at a time, when each one matters
 
-Paul, 2026-10-05: "immediately after creating the account, the user should be shown a screen that announces 'there's just a little more housekeeping we need to do'... choose a username, accept or deny push notifications and instructions regarding homescreen installation. Keeping it all as simple to understand and follow as humanly possible."
+**History:** Paul first asked for a "little housekeeping" screen straight after sign-up (name, notifications, home screen). On 2026-10-05 he asked whether that made things complicated for a new player, and agreed to replace it with asks timed to the moment each one matters. Reasoning: the result isn't available for hours, the results email is on by default (so nobody misses their result), and a leaderboard name only matters once they're on the leaderboard. **No extra screen at sign-up.**
 
-This applies to **every** new account, not only converted guests. Today nobody is ever asked for a name (the leaderboard shows an abbreviated real name, "Paul K"), and push is only offered by a card on the game page or on /profile.
+| When | What they see |
+|---|---|
+| Straight after creating the account | Back in the game: "✓ Your pick is locked in. Quiz: correct! Results at 4pm New York time. We'll email you." On Android or a computer, one optional small button: "Or get a notification instead" (browser permission box). On iPhone: "Or get a notification instead" opens the **home screen sheet** (below). |
+| Their first published result | On the result panel: "You scored 72 and you're on this month's leaderboard as **Paul K**." Buttons [Keep it] [Change name] (inline box). Either choice saves `users.displayName`, so it never asks again. |
+| Second visit, iPhone in Safari, no subscription | One dismissible card: "Want results as a notification instead of email?" Tapping it opens the **home screen sheet**. Shown once; dismissal remembered. |
+| First open of the installed app on iPhone | Notification card at the top of `/game` whatever the step ("Turn on notifications" / "No thanks"). Today's `ResultReminderPrompt` only shows on the research step, so it must also show here in standalone mode. |
 
-**Route:** `/welcome`. A new account lands here straight after sign-up. A converted guest's picks are replayed first (lockout is the deadline that matters), then the guest lands here. One screen, three numbered cards, one button at the bottom.
+### The home screen sheet (one component, used everywhere on iPhone)
 
-> **Just a little housekeeping**
-> Three quick things, then you're back to your game.
+Paul, 2026-10-05: the profile has a push toggle, and an iPhone user who turns it on in Safari "should be informed and prompted to do the homescreen install or it won't work and they will wonder why and think it's a fault".
+
+**Today** the profile shows no toggle at all in iPhone Safari. It shows an amber paragraph, "Add to Home Screen first", with no button. That reads as broken or blocked. **Change:** in iPhone Safari the profile shows the same **Enable** button as everywhere else. Tapping it, or any "get a notification instead" link, slides up one bottom sheet:
+
+> **One step first: add Munymo to your home screen**
+> Apple only lets iPhone apps send notifications once they're on your home screen. It's a shortcut, not an App Store download, and you can delete it like any other icon.
 >
-> ✓ *Your pick is locked in: Company B. Quiz: correct.* (converted guests only)
+> **1** Tap [Share icon] at the bottom of Safari
+> **2** Tap **Add to Home Screen**, then **Add**
+> **3** Open Munymo from your home screen and sign in once more
+> **4** Tap **Turn on notifications** when we ask
 >
-> **1. Your name on the leaderboard**
-> [ Paul K ] (prefilled, editable)
-> This is what other players see. You can change it anytime.
->
-> **2. Get your result the moment it lands** (the card changes by device, see below)
->
-> **3. Add Munymo to your home screen, if you want notifications** (iPhone and iPad only)
->
-> [ All done, back to my game ]
+> Until then, we'll keep emailing your results.
+> [Got it]
 
-**Card 2 by device**
-
-- **Android, computer, or an iPhone with Munymo already on the home screen:** buttons [Turn on notifications] and [No thanks]. The first opens the browser's own permission box. After either choice the card collapses to a single line ("Notifications on" or "No notifications. We'll email your results instead").
-- **iPhone or iPad in Safari, not installed:** "On iPhone, notifications need step 3 first. Until then, we'll email your results." No button.
-
-**Card 3: iPhone and iPad in Safari only**
-
-Paul, 2026-10-05: the step must say why, "so they know it isn't just attempting to get some real estate on their screen". So card 3 appears **only where installing is required for notifications** (iPhone and iPad not yet installed) and leads with the reason:
-
-> **3. Add Munymo to your home screen, if you want notifications**
-> Apple only allows notifications on iPhone from apps saved to the home screen. It's not an app store download, just a shortcut, and you can remove it like any other icon.
-> (1) Tap the Share button [square-with-arrow icon] at the bottom of Safari. (2) Tap **Add to Home Screen**. (3) Open Munymo from your home screen. We'll ask about notifications there.
-
-**Checked 2026-10-05 on Paul's iPhone:** the home-screen app opens straight to today's game but **asks you to sign in again**, because Safari and the home-screen app don't share sign-ins. Step 3 therefore reads: "(3) Open Munymo from your home screen and sign in once more. We'll ask about notifications there." Picks are already saved to the account by then, so nothing is lost.
-
-**The "ask there" must actually happen.** When the installed app is opened on iPhone and this device has no notification subscription, `/game` shows the notification card at the top on first open, whatever step the game is at. Today's `ResultReminderPrompt` only shows on the research step, so someone who already finished their picks in Safari would never see it in the app. The card is the same component, shown earlier in standalone mode. It's suppressed if the player already chose "No thanks".
-
-**Android and computers never see card 3.** They get notifications without installing, so asking would be exactly the "real estate" grab Paul wants to avoid. The heading then says "Two quick things".
-
-**Rules**
-
-- Nothing on this screen is required. "All done" works with every card untouched, and the name box keeps its prefilled value.
-- **How we know it's done, without a schema change:** pressing "All done" saves the name box to `users.displayName` (even unchanged). A player with a `displayName` is never sent to `/welcome` again. Existing players without a displayName will see it once on their next visit, which is a reasonable moment to pick a name.
-- The push choice goes through the existing `usePushNotifications` hook. "No thanks" sets the existing dismissal flag, so the game-page reminder card doesn't ask again.
-- Name: 1-32 characters, trimmed. Profanity or impersonation filtering isn't in scope at our size. The admin player list can already edit names.
+- The Share icon is drawn inline (the real square-with-arrow glyph). Step 2 says "you may need to scroll down", because iOS hides the option below the fold on some versions.
+- Step 3's "sign in once more" was confirmed on Paul's iPhone on 2026-10-05: Safari and the home-screen app don't share sign-ins.
+- If the account already has push on a home-screen device, keep today's green "Push notifications are on… delivered to the Munymo app on your Home Screen" message instead of the sheet. It already handles that case correctly.
+- Android and computers never see the sheet. Enable goes straight to the browser's permission box.
+- The sheet is a pure presentational component (`IosInstallSheet`), opened from the profile, the post-sign-up line and the second-visit card.
 
 **Related fix (ship with this or before it):** `server/_core/context.ts` falls back to the player's **email address** as `users.name` when Clerk has no first or last name. `abbreviatePlayerName` then leaves a one-word value unchanged, so the leaderboard can show an email address. Change the fallback to "Player", never the email.
 
@@ -141,7 +126,7 @@ There are no custom analytics events yet. Add four Google Analytics events (`gta
 
 ## Decisions for Paul
 
-1. **Quiz: A, decided 2026-10-05.** Condition: it must be plainly obvious that the account isn't a trap. On the ask card, under the quiz result placeholder: "Your quiz answer is saved. Create a free account to see if you got it right."
-2. **Ask card wording:** revised in step 5. Awaiting approval.
-3. **Housekeeping screen:** added 2026-10-05 at Paul's request (section above). Approve the layout and wording.
-4. **Go-ahead to build.** No schema change and no new secrets. iPhone sign-in check done 2026-10-05 (sign in again is required).
+1. **Quiz: A**, decided 2026-10-05 (answer now, verdict after creating an account; plainly no trap).
+2. **Ask card wording:** step 5, settled 2026-10-05 except Paul's line versus "we'll let you know at the close". Default: keep Paul's line verbatim.
+3. **Setup asks replace the housekeeping screen** (decided 2026-10-05), including the iPhone home screen sheet.
+4. **Go-ahead to build.** No schema change and no new secrets.
