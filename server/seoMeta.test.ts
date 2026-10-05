@@ -285,3 +285,24 @@ describe("stripUnconfiguredAnalytics", () => {
     expect(stripUnconfiguredAnalytics(html)).toBe(html);
   });
 });
+
+import { buildIndexNowPayload, INDEXNOW_KEY } from "./_core/indexNow";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
+describe("IndexNow payload", () => {
+  it("submits only munymo.com urls, once each, with the hosted key", () => {
+    const p = buildIndexNowPayload([
+      "https://munymo.com/research/1",
+      "https://munymo.com/research/1",
+      "https://evil.example/research/2",
+    ]);
+    expect(p.urlList).toEqual(["https://munymo.com/research/1"]);
+    expect(p.keyLocation).toBe(`https://munymo.com/${INDEXNOW_KEY}.txt`);
+  });
+
+  it("the key file served from client/public matches the key", () => {
+    const file = readFileSync(path.resolve(__dirname, "../client/public", `${INDEXNOW_KEY}.txt`), "utf8");
+    expect(file.trim()).toBe(INDEXNOW_KEY);
+  });
+});

@@ -101,6 +101,7 @@ import {
   publicPlayerName,
 } from "./db";
 import { ALL_LESSON_IDS } from "@shared/lessonIds";
+import { pingIndexNow } from "./_core/indexNow";
 import {
   MARKET_CODES,
   MAX_MARKET_PICKS,
@@ -1010,6 +1011,9 @@ async function closeAndScoreGame(
     resultCommentary: opts.resultCommentary,
     publishedAt: new Date(),
   });
+
+  // 8. Announce the new archive page to Bing (IndexNow). Fire-and-forget.
+  void pingIndexNow([`https://munymo.com/research/${gameId}`]);
 
   return { scoredPicks, winner, settlementWarnings: settlement.warnings };
 }
