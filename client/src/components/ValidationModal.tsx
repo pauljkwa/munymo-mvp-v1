@@ -23,6 +23,8 @@ export interface ValidationModalProps {
   isSubmitting: boolean;
   result: { isCorrect: boolean; correctAnswer?: string } | null;
   onClose: () => void;
+  /** Signed-out visitor: their pick is saved in the browser, not yet locked in. */
+  guest?: boolean;
 }
 
 export function ValidationModal({
@@ -33,6 +35,7 @@ export function ValidationModal({
   isSubmitting,
   result,
   onClose,
+  guest = false,
 }: ValidationModalProps) {
   const [selectedAnswer, setSelectedAnswer] = useState<string>("");
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -154,7 +157,7 @@ export function ValidationModal({
               </h3>
             </div>
             <p className="text-sm mb-2" style={{ color: "var(--color-muted)" }}>
-              Your final company selection has been locked in.
+              {guest ? "Your final pick is saved." : "Your final company selection has been locked in."}
             </p>
             <div
               className="rounded-xl p-4 mb-6"

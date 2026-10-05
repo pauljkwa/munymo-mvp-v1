@@ -1,6 +1,6 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import MoByline from "@/components/MoByline";
-import { SignInButton } from "@clerk/clerk-react";
+import { SignInButton, SignUpButton } from "@clerk/clerk-react";
 import { trpc } from "@/lib/trpc";
 import { withReferralParams } from "@/lib/utils";
 import { useState, useEffect, useRef } from "react";
@@ -16,6 +16,18 @@ import { toast } from "sonner";
 import { ValidationModal } from "@/components/ValidationModal";
 import ResultReminderPrompt from "@/components/ResultReminderPrompt";
 import MoreToPlay from "@/components/MoreToPlay";
+import LeaderboardNamePrompt from "@/components/LeaderboardNamePrompt";
+import { isStandalone } from "@/hooks/usePushNotifications";
+import { trackEvent } from "@/lib/analytics";
+import {
+  type GuestPick,
+  type ReplayStep,
+  clearGuestPick,
+  planReplay,
+  pruneGuestPicks,
+  readGuestPick,
+  writeGuestPick,
+} from "@/lib/guestPick";
 import {
   Brain,
   BookOpen,
@@ -46,7 +58,13 @@ type GameStep = "gut" | "research" | "final" | "submitted";
 
 export default function DailyGame() {
   usePageMeta({ title: "Today's Game | Munymo" });
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, likelyAuthenticated } = useAuth();
+  // Guest play (references/guest-play-spec.md): a signed-out visitor plays
+  // today's game with picks held in their browser. likelyAuthenticated uses
+  // the stored sign-in hint until Clerk loads, so a returning player never
+  // flashes the guest branch, and a new visitor can play at once even if
+  // Clerk is slow or blocked.
+  const isGuest = !isAuthenticated && !likelyAuthenticated;
   const { data: game, isLoading } = trpc.games.getToday.useQuery();
   const { data: recentPublished } = trpc.games.listArchive.useQuery(
     { limit: 1, offset: 0 },
@@ -133,6 +151,95 @@ export default function DailyGame() {
     if (myPick?.finalSelection) setStep("submitted");
     else if (myPick?.gutSelection) setStep("research");
   }, [myPick]);
+
+  // ── Guest play ──
+  const [guestPick, setGuestPick] = useState<GuestPick | null>(null);
+  const saveGuestPick = (next: GuestPick) => {
+    writeGuestPick(next);
+    setGuestPick(next);
+  };
+
+  // Restore a returning guest to where they left off.
+  useEffect(() => {
+    if (!game?.id) return;
+    pruneGuestPicks(game.id);
+    const stored = readGuestPick(game.id);
+    setGuestPick(stored);
+    if (!isGuest || !stored) return;
+    setGutSelection(stored.gut);
+    if (stored.final) {
+      setFinalSelection(stored.final);
+      setStep("submitted");
+    } else {
+      setStep("research");
+    }
+  }, [game?.id, isGuest]);
+
+  // On sign-in, submit the guest's stored picks through the normal protected
+  // mutations, so lockout and scoring stay server-enforced. The account's own
+  // pick always wins (planReplay).
+  const utils = trpc.useUtils();
+  const replayGut = trpc.picks.submitGut.useMutation();
+  const replayFinal = trpc.picks.submitFinal.useMutation();
+  const replayValidation = trpc.picks.submitValidation.useMutation();
+  const replayStarted = useRef(false);
+  const [justConverted, setJustConverted] = useState(false);
+
+  useEffect(() => {
+    if (!isAuthenticated || isLoadingPick || !game?.id || replayStarted.current) return;
+    const stored = readGuestPick(game.id);
+    if (!stored) return;
+    replayStarted.current = true;
+    const gameId = game.id;
+    const steps = planReplay(stored, myPick);
+    if (steps.length === 0) {
+      clearGuestPick(gameId);
+      setGuestPick(null);
+      return;
+    }
+    (async () => {
+      const done: ReplayStep[] = [];
+      let quizCorrect: boolean | undefined;
+      let failure: { message: string } | undefined;
+      try {
+        for (const stepName of steps) {
+          if (stepName === "gut") await replayGut.mutateAsync({ gameId, selection: stored.gut });
+          if (stepName === "final" && stored.final) await replayFinal.mutateAsync({ gameId, selection: stored.final });
+          if (stepName === "validation" && stored.validationAnswer) {
+            const r = await replayValidation.mutateAsync({
+              gameId,
+              answer: stored.validationAnswer,
+              answerTimeMs: stored.answerTimeMs ?? 0,
+            });
+            quizCorrect = r.isCorrect;
+          }
+          done.push(stepName);
+        }
+      } catch (e) {
+        failure = e as { message: string };
+      }
+      clearGuestPick(gameId);
+      setGuestPick(null);
+      await utils.picks.getMyPick.invalidate({ gameId });
+      if (done.length === 0) {
+        // Locked while they were deciding. A locked game with no pick sends
+        // them on to /practice via the existing missed-game redirect.
+        toast.error("Today's game locked before your pick could be saved. Your account is ready, so tomorrow's game counts.", { duration: 10000 });
+        return;
+      }
+      trackEvent("guest_converted");
+      setJustConverted(true);
+      if (quizCorrect !== undefined) {
+        setValidationResult({ isCorrect: quizCorrect });
+        setModalPhase("result");
+      } else if (failure) {
+        toast.error(failure.message);
+      } else {
+        toast.success("Your pick is locked in.");
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, isLoadingPick, game?.id, myPick]);
 
   /**
    * Someone who arrives after lockout with no pick can't play today at all —
@@ -274,11 +381,20 @@ export default function DailyGame() {
           onOpenQuestion={() => setModalPhase("question")}
           onSubmitAnswer={(answer, timeMs) => {
             if (!game.id) return;
+            if (isGuest && guestPick) {
+              // Kept for after sign-up; the verdict is withheld until then, so
+              // there is no way to learn the answer without an account.
+              saveGuestPick({ ...guestPick, validationAnswer: answer, answerTimeMs: timeMs });
+              setModalPhase(null);
+              setStep("submitted");
+              return;
+            }
             submitValidation.mutate({ gameId: game.id, answer, answerTimeMs: timeMs });
           }}
           isSubmitting={submitValidation.isPending}
           result={validationResult}
           onClose={handleCloseModal}
+          guest={isGuest}
         />
       )}
 
@@ -324,6 +440,11 @@ export default function DailyGame() {
             </p>
           )}
         </div>
+
+        {/* Installed iPhone/Android app: offer notifications on open, whatever
+            the step. Someone who finished their picks in Safari and then
+            installed would otherwise never be asked inside the app. */}
+        {isAuthenticated && step !== "research" && isStandalone() && <ResultReminderPrompt />}
 
         {/* Progress steps */}
         <div className="flex items-center gap-2 mb-8 animate-fade-up delay-75">
@@ -422,29 +543,27 @@ export default function DailyGame() {
               Before reading any research, pick the company you instinctively believe will
               outperform today. Your raw, unfiltered intuition.
             </p>
-            {isAuthenticated ? (
-              <button
-                className="btn-brand w-full justify-center"
-                disabled={!gutSelection || submitGut.isPending}
-                onClick={() => {
-                  if (!gutSelection || !game.id) return;
-                  submitGut.mutate({ gameId: game.id, selection: gutSelection });
-                }}
-              >
-                {submitGut.isPending ? (
-                  <Loader2 size={16} className="animate-spin" />
-                ) : (
-                  <>Confirm Gut Selection <ArrowRight size={16} /></>
-                )}
-              </button>
-            ) : (
-              <SignInButton mode="modal">
-                <button className="btn-brand w-full justify-center">
-                  Sign in to Play
-                  <ArrowRight size={16} />
-                </button>
-              </SignInButton>
-            )}
+            <button
+              className="btn-brand w-full justify-center"
+              disabled={!gutSelection || submitGut.isPending || (!isAuthenticated && !isGuest)}
+              onClick={() => {
+                if (!gutSelection || !game.id) return;
+                if (isGuest) {
+                  saveGuestPick({ gameId: game.id, gut: gutSelection, savedAt: Date.now() });
+                  trackEvent("guest_gut_pick");
+                  setStep("research");
+                  toast.success("Gut selection saved — now read the research.");
+                  return;
+                }
+                submitGut.mutate({ gameId: game.id, selection: gutSelection });
+              }}
+            >
+              {submitGut.isPending ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <>Confirm Gut Selection <ArrowRight size={16} /></>
+              )}
+            </button>
           </div>
         )}
 
@@ -454,7 +573,7 @@ export default function DailyGame() {
             {/* Asked here, right after the gut pick, because that is when the
                 player has something riding on the result and is most likely to
                 say yes — not on a settings page they may never open. */}
-            <ResultReminderPrompt />
+            {isAuthenticated && <ResultReminderPrompt />}
             <div className="card-glass p-6 mb-4">
               <div className="flex items-center gap-3 mb-4">
                 <BookOpen size={20} style={{ color: "var(--color-brand)" }} />
@@ -770,6 +889,17 @@ export default function DailyGame() {
               disabled={!finalSelection || submitFinal.isPending}
               onClick={() => {
                 if (!finalSelection || !game.id) return;
+                if (isGuest) {
+                  saveGuestPick({
+                    ...(guestPick ?? { gameId: game.id, gut: gutSelection ?? finalSelection, savedAt: Date.now() }),
+                    final: finalSelection,
+                    savedAt: Date.now(),
+                  });
+                  trackEvent("guest_final_pick");
+                  if (validationQ) setModalPhase("confirm");
+                  else setStep("submitted");
+                  return;
+                }
                 submitFinal.mutate({ gameId: game.id, selection: finalSelection });
               }}
             >
@@ -783,7 +913,19 @@ export default function DailyGame() {
         )}
 
         {/* ── Submitted ── */}
-        {step === "submitted" && !wasAutoSubmitted && (
+        {step === "submitted" && isGuest && (
+          <GuestAskCard
+            pickName={(guestPick?.final ?? finalSelection) === "A" ? game.companyAName : game.companyBName}
+            pickSide={guestPick?.final ?? finalSelection}
+            hasQuizAnswer={Boolean(guestPick?.validationAnswer)}
+            canAnswerQuiz={Boolean(validationQ) && !guestPick?.validationAnswer && !isLocked}
+            onAnswerQuiz={() => setModalPhase("confirm")}
+            status={game.status}
+            winner={game.winner ?? null}
+          />
+        )}
+
+        {step === "submitted" && !isGuest && !wasAutoSubmitted && (
           <div
             className="card-glass p-6 text-center animate-scale-in"
             style={{
@@ -801,6 +943,7 @@ export default function DailyGame() {
             </h3>
             <p className="text-sm mb-5" style={{ color: "var(--color-muted)" }}>
               Your final selection is locked in. Results will be published after the game closes.
+              {justConverted && " We'll email you when they're in."}
             </p>
             {validationQ && !myPick?.validationAnswer ? (
               <button
@@ -820,10 +963,16 @@ export default function DailyGame() {
         {/* Nothing live left to play today. Previously this screen ended at
             "results will be published after the game closes" — accurate, and a
             dead end for the seven hours between lockout and the close. */}
+        {justConverted && step === "submitted" && (
+          <div className="mt-4">
+            <ResultReminderPrompt />
+          </div>
+        )}
+
         {(step === "submitted" || isLocked) && <MoreToPlay />}
 
         {/* ── Auto-submitted (gut pick was submitted by cron at lockout) ── */}
-        {(step === "submitted" && wasAutoSubmitted) && (
+        {(step === "submitted" && !isGuest && wasAutoSubmitted) && (
           <div
             className="card-glass p-6 animate-scale-in"
             style={{ borderColor: "var(--color-warning)", boxShadow: "0 0 0 1px var(--color-warning)" }}
@@ -889,12 +1038,21 @@ export default function DailyGame() {
             <p className="text-sm" style={{ color: "var(--color-muted)" }}>
               The submission window has closed. You did not submit a pick for today's game.
             </p>
+            {isGuest && (
+              <SignUpButton mode="modal">
+                <button className="btn-brand w-full justify-center mt-5">
+                  Create a free account so tomorrow's game counts
+                  <ArrowRight size={16} />
+                </button>
+              </SignUpButton>
+            )}
           </div>
         )}
 
         {/* ── Result + Hindsight Spotlight (shown when result_published) ── */}
         {game.status === "result_published" && (
           <div className="space-y-4 mt-4 animate-fade-up">
+            <LeaderboardNamePrompt gameId={game.id} />
             {/* Winner announcement + performance */}
             {game.winner && (() => {
               const perfA = game.companyAPerf != null ? parseFloat(String(game.companyAPerf)) : null;
@@ -1159,5 +1317,99 @@ function LockoutCountdown({ lockoutTime }: { lockoutTime: Date }) {
         )}
       </div>
     </>
+  );
+}
+
+// ─── Guest Ask Card ───────────────────────────────────────────────────────────
+
+/**
+ * What a signed-out visitor sees once their picks are made. Wording approved
+ * by Paul on 2026-10-05: say what the account is for, that it's free and
+ * reversible, and never present skipping the account as an option.
+ */
+function GuestAskCard({
+  pickName,
+  pickSide,
+  hasQuizAnswer,
+  canAnswerQuiz,
+  onAnswerQuiz,
+  status,
+  winner,
+}: {
+  pickName: string;
+  pickSide: "A" | "B" | null;
+  hasQuizAnswer: boolean;
+  canAnswerQuiz: boolean;
+  onAnswerQuiz: () => void;
+  status: string;
+  winner: "A" | "B" | null;
+}) {
+  const isOpen = status === "active";
+  useEffect(() => {
+    if (isOpen) trackEvent("guest_ask_shown");
+  }, [isOpen]);
+
+  const createButton = (label: string) => (
+    <SignUpButton mode="modal">
+      <button className="btn-brand w-full justify-center">
+        {label}
+        <ArrowRight size={16} />
+      </button>
+    </SignUpButton>
+  );
+
+  // The game moved on before they created an account: this pick can't count.
+  if (!isOpen) {
+    const published = status === "result_published" && winner && pickSide;
+    return (
+      <div className="card-glass p-6 text-center animate-scale-in" style={{ borderColor: "var(--color-brand)" }}>
+        <p className="text-sm mb-1" style={{ color: "var(--color-muted)" }}>Your pick</p>
+        <h3 className="mb-3" style={{ color: "var(--color-foreground)" }}>{pickName}</h3>
+        <p className="text-sm mb-5" style={{ color: "var(--color-muted)" }}>
+          {published
+            ? pickSide === winner
+              ? `You picked ${pickName}, and ${pickName} won.`
+              : `You picked ${pickName}, but the other company came out ahead.`
+            : "Today's game locked before you created an account, so this pick can't be scored."}
+        </p>
+        {createButton(published ? "Create a free account to keep score from tomorrow" : "Create a free account so tomorrow's game counts")}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="card-glass p-6 text-center animate-scale-in"
+      style={{ borderColor: "var(--color-brand)", boxShadow: "0 0 0 1px var(--color-brand)" }}
+    >
+      <p className="text-sm mb-1" style={{ color: "var(--color-muted)" }}>Your pick</p>
+      <h3 className="mb-3" style={{ color: "var(--color-foreground)" }}>{pickName}</h3>
+      <p className="mb-2" style={{ color: "var(--color-foreground)" }}>
+        Create a free account to lock in your pick, and we'll let you know at the close if you were right.
+      </p>
+      {hasQuizAnswer && (
+        <p className="text-sm mb-2" style={{ color: "var(--color-muted)" }}>
+          Your quiz answer is saved too. You'll see if you got it right as soon as you're in.
+        </p>
+      )}
+      <div className="mt-5 mb-4">{createButton("Create a free account")}</div>
+      <p className="text-xs mb-4" style={{ color: "var(--color-subtle)" }}>
+        Free, with no card and no catch. The account is where the game keeps your picks and your
+        score. You can turn notifications off or delete the account anytime from your profile.
+      </p>
+      {canAnswerQuiz && (
+        <button className="btn-ghost text-sm w-full justify-center mb-2" onClick={onAnswerQuiz}>
+          Answer the research quiz first
+        </button>
+      )}
+      <p className="text-sm" style={{ color: "var(--color-muted)" }}>
+        Already have an account?{" "}
+        <SignInButton mode="modal">
+          <button className="underline font-semibold" style={{ color: "var(--color-brand)" }}>
+            Sign in
+          </button>
+        </SignInButton>
+      </p>
+    </div>
   );
 }

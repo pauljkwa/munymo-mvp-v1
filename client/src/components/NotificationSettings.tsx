@@ -12,6 +12,8 @@ import { Bell, BellOff, BellRing, Smartphone, AlertCircle, CheckCircle2 } from "
 import { Button } from "@/components/ui/button";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { cn } from "@/lib/utils";
+import { useState } from "react";
+import { IosInstallSheet } from "@/components/IosInstallSheet";
 
 interface NotificationSettingsProps {
   /** Compact mode for embedding in nav/profile menus */
@@ -61,21 +63,9 @@ export function NotificationSettings({ compact = false, className }: Notificatio
         </div>
       );
     }
-    return (
-      <div className={cn("rounded-lg border border-amber-200 bg-amber-50 p-4", className)}>
-        <div className="flex items-start gap-3">
-          <Smartphone className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
-          <div>
-            <p className="font-medium text-amber-900 text-sm">Add to Home Screen first</p>
-            <p className="text-amber-700 text-sm mt-1">
-              To receive push notifications on iPhone, you need to add Munymo to your Home Screen.
-              Tap the share icon in Safari, then choose <strong>Add to Home Screen</strong>. Then
-              open the app from your Home Screen and enable notifications here.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
+    // Same Enable button as every other device, so nothing looks blocked or
+    // broken; tapping it explains why iPhone needs the home screen first.
+    return <IosEnableRow className={className} />;
   }
 
   // ─── Permission denied ───────────────────────────────────────────────────────
@@ -229,5 +219,34 @@ export function NotificationBell({ className }: { className?: string }) {
         <Bell className="h-5 w-5" />
       )}
     </button>
+  );
+}
+
+/** iPhone Safari: the normal Enable row, opening the home screen sheet. */
+function IosEnableRow({ className }: { className?: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className={cn("flex items-center justify-between gap-4", className)}>
+      <div className="flex items-center gap-3">
+        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-muted">
+          <Bell className="h-4 w-4 text-muted-foreground" />
+        </div>
+        <div>
+          <p className="font-medium text-sm">Push notifications</p>
+          <p className="text-xs text-muted-foreground">
+            Get notified when results are in and new games go live.
+          </p>
+        </div>
+      </div>
+      <Button
+        size="sm"
+        onClick={() => setOpen(true)}
+        className="bg-[#009050] hover:bg-[#007a42] text-white shrink-0"
+      >
+        <Bell className="h-3.5 w-3.5 mr-1.5" />
+        Enable
+      </Button>
+      <IosInstallSheet open={open} onOpenChange={setOpen} />
+    </div>
   );
 }

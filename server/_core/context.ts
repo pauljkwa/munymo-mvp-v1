@@ -66,10 +66,11 @@ export async function createContext(
       if (clerk) {
         const clerkUser = await clerk.users.getUser(clerkUserId);
         const email = clerkUser.emailAddresses[0]?.emailAddress ?? null;
+        // Never fall back to the email address: users.name feeds the public
+        // leaderboard, and a one-word value is shown unabbreviated there.
         const name =
           [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ") ||
           clerkUser.username ||
-          email ||
           "Player";
         const loginMethod =
           clerkUser.externalAccounts[0]?.provider ?? "email";

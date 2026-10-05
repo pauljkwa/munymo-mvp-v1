@@ -396,6 +396,11 @@ describe("abbreviatePlayerName — first name + last initial", () => {
 });
 
 describe("publicPlayerName — leaderboard shows the chosen display name", () => {
+  it("never publishes an email address stored as the name", () => {
+    expect(publicPlayerName({ displayName: null, name: "jane@example.com" })).toBe("Player");
+    expect(publicPlayerName({ displayName: "Jane", name: "jane@example.com" })).toBe("Jane");
+  });
+
   it("prefers the chosen display name over the real name", () => {
     expect(publicPlayerName({ displayName: "MarketMaven", name: "Jane Q. Smith" })).toBe(
       "MarketMaven"

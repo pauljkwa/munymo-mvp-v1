@@ -43,7 +43,7 @@ function isIOS(): boolean {
 }
 
 /** Detect if running as an installed PWA (standalone mode) */
-function isStandalone(): boolean {
+export function isStandalone(): boolean {
   return (
     window.matchMedia("(display-mode: standalone)").matches ||
     (window.navigator as any).standalone === true

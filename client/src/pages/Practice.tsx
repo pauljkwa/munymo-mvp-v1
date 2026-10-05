@@ -43,7 +43,7 @@ export default function Practice() {
             Practice with past matchups
           </h1>
           <p className="text-sm mb-6" style={{ color: "var(--color-muted)" }}>
-            Sign in to play completed games from the archive — the full loop, start to
+            Create a free account to play completed games from the archive — the full loop, start to
             finish, without waiting for the market to close.
           </p>
           <Link href="/game" className="btn-gold text-sm px-6 py-3">

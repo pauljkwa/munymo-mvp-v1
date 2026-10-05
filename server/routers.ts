@@ -98,6 +98,7 @@ import {
   getSeasonStandings,
   getSeasonKeys,
   getPlayerPickOutcomes,
+  publicPlayerName,
 } from "./db";
 import { ALL_LESSON_IDS } from "@shared/lessonIds";
 import {
@@ -1820,7 +1821,10 @@ const dashboardRouter = router({
   /** Get the current user's full profile including dashboard fields */
   getProfile: protectedProcedure.query(async ({ ctx }) => {
     const profile = await getUserById(ctx.user.id);
-    return profile ?? null;
+    if (!profile) return null;
+    // publicName: what other players see on the leaderboard, so the "your
+    // name on the leaderboard" prompt can show it before they choose one.
+    return { ...profile, publicName: publicPlayerName(profile) };
   }),
 
   /** Update the user's custom display name (max 64 chars) */

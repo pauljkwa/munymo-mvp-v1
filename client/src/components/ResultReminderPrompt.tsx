@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Bell, X, Loader2, Smartphone } from "lucide-react";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
+import { IosInstallSheet } from "@/components/IosInstallSheet";
 import { toast } from "sonner";
 
 /**
@@ -32,6 +33,7 @@ function wasDismissed(): boolean {
 export default function ResultReminderPrompt() {
   const { state, subscribe, isLoading, serverSubscribed } = usePushNotifications();
   const [dismissed, setDismissed] = useState(wasDismissed);
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   function dismiss() {
     setDismissed(true);
@@ -48,7 +50,7 @@ export default function ResultReminderPrompt() {
   if (state === "unsupported" || state === "permission_denied") return null;
 
   // iOS can only receive push once the site is installed to the home screen,
-  // so there is no button to offer — just the one instruction that unblocks it.
+  // so the button opens the sheet that explains why and how.
   const iosNeedsInstall = state === "needs_install";
 
   return (
@@ -62,15 +64,21 @@ export default function ResultReminderPrompt() {
 
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium mb-1" style={{ color: "var(--color-foreground)" }}>
-          Want to know how you did?
+          {iosNeedsInstall ? "Want results as a notification instead of email?" : "Want to know how you did?"}
         </p>
         <p className="text-xs mb-3" style={{ color: "var(--color-muted)" }}>
           {iosNeedsInstall
-            ? "Add Munymo to your home screen (Share → Add to Home Screen), then turn on notifications to get the result when the market closes."
+            ? "On iPhone this takes one quick step first."
             : "Today's result lands after the market closes. We can ping you when it does — and remind you before your pick locks."}
         </p>
 
-        {!iosNeedsInstall && (
+        <div className="flex items-center gap-3">
+        {iosNeedsInstall ? (
+          <button className="btn-gold text-xs py-1.5 px-3" onClick={() => setSheetOpen(true)}>
+            <Smartphone size={13} />
+            Show me how
+          </button>
+        ) : (
           <button
             className="btn-gold text-xs py-1.5 px-3"
             disabled={isLoading}
@@ -85,10 +93,15 @@ export default function ResultReminderPrompt() {
             }}
           >
             {isLoading ? <Loader2 size={13} className="animate-spin" /> : <Bell size={13} />}
-            Notify me
+            Turn on notifications
           </button>
         )}
+          <button className="text-xs underline" style={{ color: "var(--color-subtle)" }} onClick={dismiss}>
+            No thanks
+          </button>
+        </div>
       </div>
+      <IosInstallSheet open={sheetOpen} onOpenChange={setSheetOpen} />
 
       <button
         onClick={dismiss}

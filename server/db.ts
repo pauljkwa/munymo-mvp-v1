@@ -635,7 +635,11 @@ export function abbreviatePlayerName(name: string | null): string | null {
  * (the header, /dashboard, /profile) is deliberately NOT abbreviated.
  */
 export function publicPlayerName(row: { displayName: string | null; name: string | null }) {
-  return row.displayName ?? abbreviatePlayerName(row.name);
+  if (row.displayName) return row.displayName;
+  // Accounts created before 2026-10-05 could have their email address stored
+  // as `name` (the old first-sign-in fallback). Never publish it.
+  if (row.name?.includes("@")) return "Player";
+  return abbreviatePlayerName(row.name);
 }
 
 export async function getLeaderboard() {

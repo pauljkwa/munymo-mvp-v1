@@ -8,6 +8,7 @@ import { LEADERBOARD_QUALIFICATION_GAMES } from "@shared/const";
 import { trpc } from "@/lib/trpc";
 import { useParams } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
+import LeaderboardNamePrompt from "@/components/LeaderboardNamePrompt";
 import { Link } from "wouter";
 import {
   Trophy,
@@ -131,6 +132,8 @@ export default function GameResult() {
             defeated <span className="font-semibold">{loserTicker}</span>
           </p>
         </div>
+
+        <LeaderboardNamePrompt gameId={gameId} className="mb-6" />
 
         {/* ── Performance comparison ── */}
         {(game.companyAPerf != null || game.companyBPerf != null) && (() => {
