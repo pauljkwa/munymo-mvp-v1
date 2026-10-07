@@ -7,6 +7,7 @@ import PublicLayout from "@/components/PublicLayout";
 import MunymoLogo from "@/components/MunymoLogo";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import MarketVote from "@/components/MarketVote";
+import { SCORE_WEIGHTS } from "@shared/const";
 import {
   Accordion,
   AccordionContent,
@@ -105,15 +106,15 @@ const FAQ_ITEMS = [
   },
   {
     q: "How does a game day work?",
-    a: "Each game takes about five minutes. First you make a gut pick on instinct alone. Then you read the day's research brief — a balanced, plain-English rundown of both companies. Finally you lock in your scored prediction and answer one quick question that checks you actually read the research. After the market closes, results are published and your score is updated.",
+    a: "Each game takes about five minutes. First you make a gut pick on instinct alone. Then you read the day's research brief — a balanced, plain-English rundown of both companies. Then you name the highlighted metric behind your pick, lock in your scored prediction with a confidence level, and answer one untimed question that checks you actually read the research. After the market closes, results are published and your score is updated.",
   },
   {
     q: "Why do I pick twice — once before the research and once after?",
-    a: "The first pick captures your raw instinct before any information can influence it. Comparing your gut picks with your final picks over time reveals something no course can teach you: whether research genuinely improves your judgment, and in which direction. The gut pick is also your safety net: it registers you as in the game, so if life pulls you away before you finish, it's automatically submitted as your final pick at lockout — your streak stays alive — and the validation question is held for you to answer any time before the result is published after the close, so its 20 points aren't lost.",
+    a: `The first pick captures your raw instinct before any information can influence it. Comparing your gut picks with your final picks over time reveals something no course can teach you: whether research genuinely improves your judgment, and in which direction. The gut pick is also your safety net: it registers you as in the game, so if life pulls you away before you finish, it's automatically submitted as your final pick at lockout — your streak stays alive — and the reading check is held for you to answer any time before the result is published after the close, so its ${SCORE_WEIGHTS.check} points aren't lost. The reason and confidence points need a final pick you make yourself.`,
   },
   {
     q: "How does scoring work?",
-    a: "A perfect day is 100 points: 80 for a correct final prediction and 20 for correctly answering the validation question about the day's research. The split is deliberate — the prediction is the harder, more consequential skill, while the validation points reward the habit of reading carefully. All scores are calculated on our servers after results are published, so no score can be gamed or disputed.",
+    a: `A perfect day is 100 points. The call is ${SCORE_WEIGHTS.call}: did your final pick win? Your reason is ${SCORE_WEIGHTS.reason}: name the highlighted metric behind your pick and which company it favors, and the points are yours when your pick agrees with your reason. Confidence is ${SCORE_WEIGHTS.conf}: Toss-up, Leaning or Confident, scored on a published table where honesty pays. The reading check is ${SCORE_WEIGHTS.check}: one question that needs both columns of the research panel. There is no timer. All scores are calculated on our servers after results are published, so no score can be gamed or disputed.`,
   },
   {
     q: "Do I need trading or investing experience to play?",
@@ -471,8 +472,8 @@ export default function Home() {
                 {
                   icon: TrendingUp,
                   step: "03",
-                  title: "Final Pick + Quiz",
-                  body: "Lock in your call. Answer one timed question from the research.",
+                  title: "Reason, Pick + Check",
+                  body: "Name your reason, lock in your call and how sure you are, then answer one untimed question from the research.",
                 },
                 {
                   icon: Trophy,
@@ -541,44 +542,35 @@ export default function Home() {
             {/* Score display */}
             <div>
               <p className="section-label mb-4">The Score</p>
-              <div className="flex items-end gap-6 mb-8">
-                <div>
-                  <div
-                    className="font-display font-black leading-none mb-1"
-                    style={{
-                      fontSize: "clamp(4rem, 10vw, 6rem)",
-                      color: "var(--color-gold)",
-                    }}
-                  >
-                    80
+              <div className="grid grid-cols-2 gap-x-6 gap-y-6 mb-8">
+                {[
+                  { n: SCORE_WEIGHTS.call, label: "The call", color: "var(--color-gold)" },
+                  { n: SCORE_WEIGHTS.reason, label: "Your reason", color: "var(--color-brand)" },
+                  { n: SCORE_WEIGHTS.conf, label: "Confidence", color: "var(--color-brand)" },
+                  { n: SCORE_WEIGHTS.check, label: "Reading check", color: "var(--color-brand)" },
+                ].map((c) => (
+                  <div key={c.label}>
+                    <div
+                      className="font-display font-black leading-none mb-1"
+                      style={{ fontSize: "clamp(3rem, 8vw, 4.5rem)", color: c.color }}
+                    >
+                      {c.n}
+                    </div>
+                    <p className="text-sm font-semibold" style={{ color: "var(--color-muted)" }}>
+                      {c.label}
+                    </p>
                   </div>
-                  <p className="text-sm font-semibold" style={{ color: "var(--color-muted)" }}>
-                    Correct prediction
-                  </p>
-                </div>
-                <div
-                  className="text-3xl font-display font-bold pb-8"
-                  style={{ color: "var(--color-border-strong)" }}
-                >
-                  +
-                </div>
-                <div>
-                  <div
-                    className="font-display font-black leading-none mb-1"
-                    style={{
-                      fontSize: "clamp(4rem, 10vw, 6rem)",
-                      color: "var(--color-brand)",
-                    }}
-                  >
-                    20
-                  </div>
-                  <p className="text-sm font-semibold" style={{ color: "var(--color-muted)" }}>
-                    Validation question
-                  </p>
-                </div>
+                ))}
               </div>
+              <p className="text-sm leading-relaxed mb-3" style={{ color: "var(--color-muted)" }}>
+                <strong>The call.</strong> Did your final pick win?{" "}
+                <strong>Your reason.</strong> Name the highlighted metric behind your pick and which company it
+                favors; the points are yours when your pick agrees with your reason.{" "}
+                <strong>Confidence.</strong> Toss-up, Leaning or Confident, scored on a published table where
+                honesty pays. <strong>Reading check.</strong> One question that needs both columns of the panel.
+                No timer.
+              </p>
               <p className="text-sm leading-relaxed" style={{ color: "var(--color-muted)" }}>
-                Answer the validation question faster and score closer to the full 20 pts.
                 Scores are calculated server-side after market close.{" "}
                 <span style={{ color: "var(--color-foreground)", fontWeight: 600 }}>
                   No manipulation possible.

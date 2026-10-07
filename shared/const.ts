@@ -33,3 +33,55 @@ export const HIDDEN_BOT_IDS: number[] = TESTER_BOT_IDS.filter((id) => id !== BEN
 
 /** Below this many players a "Top N%" figure reads as a joke, so the UI shows rank only. */
 export const PERCENTILE_MIN_PLAYERS = 20;
+
+// ─── Scoring v2 (Paul's decision 2026-10-07; see references/scoring-homework-findings-2026-10-07.md) ───
+
+/**
+ * The four components of a daily score. Deliberately a single adjustable
+ * object: Paul intends to ask beta testers about the weighting, so nothing
+ * else in the code may carry its own copy of these numbers. They must sum
+ * to 100 (asserted in server/scoring.ts).
+ *
+ *   call    — final pick matches the open-to-close winner
+ *   reason  — "your reason": one of Mo's four highlighted metrics plus the
+ *             company the player says it favors; marked on consistency with
+ *             the final pick, never against the market result
+ *   conf    — confidence on the final pick, via the published table below
+ *   check   — reading check: the validation question, right or wrong, untimed
+ */
+export const SCORE_WEIGHTS = { call: 40, reason: 25, conf: 20, check: 15 } as const;
+
+export type ConfidenceLevel = "tossup" | "leaning" | "confident";
+
+/**
+ * Confidence table as fractions of SCORE_WEIGHTS.conf: [if right, if wrong].
+ * At 20 points: Toss-up 14/14, Leaning 18/10, Confident 20/4. Shaped so that
+ * honesty is the best policy (Toss-up wins below ~62% sure, Confident above
+ * ~75%) and a toss-up day never punishes saying so. Coin Flip declares tossup.
+ */
+export const CONFIDENCE_TABLE: Record<ConfidenceLevel, readonly [number, number]> = {
+  tossup: [0.7, 0.7],
+  leaning: [0.9, 0.5],
+  confident: [1.0, 0.2],
+};
+
+export const CONFIDENCE_LABELS: Record<ConfidenceLevel, string> = {
+  tossup: "Toss-up",
+  leaning: "Leaning",
+  confident: "Confident",
+};
+
+/** Label the player picks when their reason is the price chart rather than a metric. */
+export const PRICE_TREND_LABEL = "Price trend";
+
+/** Exactly this many metrics are highlighted each day for the "your reason" step. */
+export const HIGHLIGHTED_METRIC_COUNT = 4;
+
+/**
+ * Day classification by the distance between the two open-to-close moves,
+ * in percentage points. Chosen from the archive (77 games to 2026-10-06):
+ * median margin 1.30, 16% of days inside 0.25, 29% inside 0.5.
+ */
+export const DAY_KIND_COIN_TOSS_MARGIN_PCT_POINTS = 0.25;
+export const DAY_KIND_CLEAR_MARGIN_PCT_POINTS = 1.0;
+export type DayKind = "coin_toss" | "clear" | "decisive";

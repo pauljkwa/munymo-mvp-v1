@@ -5,7 +5,14 @@ import PerfectScoreConfetti from "@/components/PerfectScoreConfetti";
 import MoreToPlay from "@/components/MoreToPlay";
 import ShareResultButton from "@/components/ShareResultButton";
 import { computeMilestones } from "@shared/milestones";
-import { LEADERBOARD_QUALIFICATION_GAMES } from "@shared/const";
+import {
+  LEADERBOARD_QUALIFICATION_GAMES,
+  SCORE_WEIGHTS,
+  CONFIDENCE_TABLE,
+  CONFIDENCE_LABELS,
+  DAY_KIND_COIN_TOSS_MARGIN_PCT_POINTS,
+  type ConfidenceLevel,
+} from "@shared/const";
 import { trpc } from "@/lib/trpc";
 import { useParams } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
@@ -91,6 +98,36 @@ export default function GameResult() {
   const gutPctB    = gutPctA !== null ? 100 - gutPctA : null;
   const finalPctB  = finalPctA !== null ? 100 - finalPctA : null;
 
+  // Scoring v2: a game staged with highlighted metrics, or any score row that
+  // carries v2 components. Everything else shows the legacy two-line breakdown.
+  const isV2 =
+    game.highlightedMetrics != null ||
+    game.dayKind != null ||
+    (myScore?.reasonScore ?? 0) > 0 ||
+    (myScore?.confidenceScore ?? 0) > 0;
+
+  // Which confidence level the player chose, recovered from the points it
+  // scored (the published table makes each right/wrong value unique per level
+  // except Toss-up, which pays the same either way).
+  const confidenceLevelChosen: ConfidenceLevel | null = (() => {
+    const pts = myScore?.confidenceScore ?? 0;
+    if (!pts) return null;
+    for (const level of Object.keys(CONFIDENCE_TABLE) as ConfidenceLevel[]) {
+      const [right, wrong] = CONFIDENCE_TABLE[level];
+      const expected = Math.round(SCORE_WEIGHTS.conf * (finalCorrect ? right : wrong));
+      if (expected === pts) return level;
+    }
+    return null;
+  })();
+
+  const perfANum = game.companyAPerf != null ? parseFloat(String(game.companyAPerf)) : null;
+  const perfBNum = game.companyBPerf != null ? parseFloat(String(game.companyBPerf)) : null;
+  const marginPts =
+    perfANum != null && perfBNum != null && !Number.isNaN(perfANum) && !Number.isNaN(perfBNum)
+      ? Math.abs(perfANum - perfBNum)
+      : null;
+  const dayKind = game.dayKind ?? null;
+
   const scoreColour =
     !myScore ? "var(--color-subtle)"
     : myScore.totalScore >= 80 ? "var(--color-success)"
@@ -99,9 +136,9 @@ export default function GameResult() {
 
   return (
     <PublicLayout>
-      {/* Reserved for a genuine perfect game: correct prediction AND a correct
-          validation answer inside the 15s window. Anything less gets nothing,
-          which is what keeps it feeling earned. */}
+      {/* Reserved for a genuine perfect game (100 points: every component at
+          its maximum). Anything less gets nothing, which is what keeps it
+          feeling earned. */}
       {myScore?.totalScore === 100 && <PerfectScoreConfetti />}
       <div className="container py-10 max-w-3xl mx-auto">
         <Link href="/game" className="btn-ghost text-sm mb-6 inline-flex">
@@ -291,9 +328,18 @@ export default function GameResult() {
                 {myScore?.totalScore ?? "—"}
               </p>
               {myScore && (
-                <p className="text-xs mt-1" style={{ color: "var(--color-subtle)" }}>
-                  {myScore.predictionScore} prediction + {myScore.validationScore} validation
-                </p>
+                isV2 ? (
+                  <div className="text-xs mt-2 space-y-0.5 text-left" style={{ color: "var(--color-subtle)" }}>
+                    <p className="flex justify-between"><span>The call</span><span>{myScore.predictionScore} / {SCORE_WEIGHTS.call}</span></p>
+                    <p className="flex justify-between"><span>Your reason</span><span>{myScore.reasonScore} / {SCORE_WEIGHTS.reason}</span></p>
+                    <p className="flex justify-between"><span>Confidence</span><span>{myScore.confidenceScore} / {SCORE_WEIGHTS.conf}</span></p>
+                    <p className="flex justify-between"><span>Reading check</span><span>{myScore.validationScore} / {SCORE_WEIGHTS.check}</span></p>
+                  </div>
+                ) : (
+                  <p className="text-xs mt-1" style={{ color: "var(--color-subtle)" }}>
+                    {myScore.predictionScore} prediction + {myScore.validationScore} validation
+                  </p>
+                )
               )}
             </div>
           </div>
@@ -325,6 +371,8 @@ export default function GameResult() {
                   gutCorrect={myPick.gutSelection ? gutCorrect : null}
                   finalCorrect={finalCorrect}
                   validationScore={myScore.validationScore}
+                  v2={isV2}
+                  confidenceLabel={confidenceLevelChosen ? CONFIDENCE_LABELS[confidenceLevelChosen] : null}
                   validationAnswered={Boolean(myPick.validationAnswer)}
                   totalScore={myScore.totalScore}
                   currentStreak={myStreak.currentStreak}
@@ -386,7 +434,7 @@ export default function GameResult() {
         {validationQ && myPick?.validationAnswer && (
           <div className="card-glass p-5 mb-6 animate-fade-up delay-100">
             <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--color-brand)" }}>
-              Validation Question
+              {isV2 ? "Reading Check" : "Validation Question"}
             </p>
             <p className="text-sm font-medium mb-3" style={{ color: "var(--color-foreground)" }}>
               {validationQ.questionText}
@@ -509,6 +557,22 @@ export default function GameResult() {
             <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "var(--color-muted)" }}>
               {game.resultSummary || game.resultCommentary}
             </p>
+          </div>
+        )}
+
+        {/* ── Day kind (scoring v2) ── */}
+        {dayKind && (
+          <div className="flex justify-center mb-3 animate-fade-up delay-200">
+            <span
+              className="rounded-full px-3 py-1 text-xs font-semibold"
+              style={{ background: "var(--color-gold-muted)", color: "var(--color-gold)", border: "1px solid var(--color-gold)" }}
+            >
+              {dayKind === "coin_toss"
+                ? `Coin toss · ${(marginPts ?? DAY_KIND_COIN_TOSS_MARGIN_PCT_POINTS).toFixed(2)} pts apart`
+                : dayKind === "clear"
+                ? "Clear"
+                : "Decisive"}
+            </span>
           </div>
         )}
 

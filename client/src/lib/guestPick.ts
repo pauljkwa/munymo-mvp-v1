@@ -19,6 +19,10 @@ export interface GuestPick {
   gameId: number;
   gut: Side;
   final?: Side;
+  /** Scoring v2: the highlighted metric the guest named as their reason. */
+  reasonMetric?: string;
+  reasonSide?: Side;
+  confidence?: "tossup" | "leaning" | "confident";
   validationAnswer?: string;
   answerTimeMs?: number;
   /** The guest was already shown right/wrong (guests get the verdict at once). */
@@ -52,6 +56,9 @@ export function readGuestPick(gameId: number, storage = browserStorage()): Guest
       gameId,
       gut: p.gut,
       final: isSide(p.final) ? p.final : undefined,
+      reasonMetric: typeof p.reasonMetric === "string" && p.reasonMetric ? p.reasonMetric : undefined,
+      reasonSide: isSide(p.reasonSide) ? p.reasonSide : undefined,
+      confidence: p.confidence === "tossup" || p.confidence === "leaning" || p.confidence === "confident" ? p.confidence : undefined,
       validationAnswer: typeof p.validationAnswer === "string" && p.validationAnswer ? p.validationAnswer : undefined,
       answerTimeMs: typeof p.answerTimeMs === "number" ? p.answerTimeMs : undefined,
       quizCorrect: typeof p.quizCorrect === "boolean" ? p.quizCorrect : undefined,

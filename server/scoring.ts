@@ -2,9 +2,133 @@
  * Munymo Scoring — Pure, exportable logic functions
  * These are the canonical implementations used by routers.ts and tested directly in munymo.test.ts
  */
-import { LEADERBOARD_QUALIFICATION_GAMES } from "@shared/const";
+import {
+  LEADERBOARD_QUALIFICATION_GAMES,
+  SCORE_WEIGHTS,
+  CONFIDENCE_TABLE,
+  DAY_KIND_COIN_TOSS_MARGIN_PCT_POINTS,
+  DAY_KIND_CLEAR_MARGIN_PCT_POINTS,
+  type ConfidenceLevel,
+  type DayKind,
+} from "@shared/const";
 
-// ─── Score Calculation ────────────────────────────────────────────────────────
+// ─── Scoring v2 (2026-10-07) ──────────────────────────────────────────────────
+//
+// Why the 80/20 model was replaced: a replay of the 77 archived games showed the
+// one-day call is a coin flip for everyone (Paul 42% right, the Coin Flip bot
+// 40%), and that 93% of quiz answers arrive inside 15 seconds, so the timed
+// quiz neither spread scores nor measured anything but speed. The score now
+// pays for the parts of a decision the player controls. Full reasoning and the
+// numbers: references/scoring-homework-findings-2026-10-07.md.
+
+const WEIGHT_SUM = SCORE_WEIGHTS.call + SCORE_WEIGHTS.reason + SCORE_WEIGHTS.conf + SCORE_WEIGHTS.check;
+if (WEIGHT_SUM !== 100) {
+  throw new Error(`SCORE_WEIGHTS must sum to 100, got ${WEIGHT_SUM}`);
+}
+
+/** Points for a declared confidence level, given whether the call was right. */
+export function computeConfidenceScore(level: ConfidenceLevel | null | undefined, callRight: boolean): number {
+  if (!level) return 0; // nothing declared (legacy picks, auto-submits): no points, no penalty
+  const [ifRight, ifWrong] = CONFIDENCE_TABLE[level];
+  return Math.round(SCORE_WEIGHTS.conf * (callRight ? ifRight : ifWrong));
+}
+
+/**
+ * "Your reason" is marked on consistency, never on the market result: the
+ * player named a metric and the company it favors, and the points are theirs
+ * if the final pick agrees with that company. Where the metric has an
+ * objective direction (today only Revenue Growth: faster is stronger), the
+ * player must also have read it the right way round. `objectiveSide` is null
+ * for every other metric, by design — see the metric-direction table in the
+ * findings document.
+ */
+export function computeReasonScore(
+  reasonMetric: string | null | undefined,
+  reasonSide: "A" | "B" | null | undefined,
+  finalSelection: "A" | "B" | null | undefined,
+  objectiveSide: "A" | "B" | null = null
+): number {
+  if (!reasonMetric || !reasonSide || !finalSelection) return 0;
+  if (reasonSide !== finalSelection) return 0;
+  if (objectiveSide && reasonSide !== objectiveSide) return 0;
+  return SCORE_WEIGHTS.reason;
+}
+
+/**
+ * Objective direction for a highlighted metric, from the two panel values.
+ * Returns the side the numbers favor, or null when the metric has no safe
+ * direction (P/E, beta, market cap, last move, distance from high, earnings
+ * date, analyst consensus when both ratings match). Only Revenue Growth
+ * qualifies today; "faster is stronger" is the one reading nobody argues with.
+ */
+export function objectiveSideForMetric(
+  label: string,
+  valueA: string | undefined,
+  valueB: string | undefined
+): "A" | "B" | null {
+  if (!/revenue growth/i.test(label) || !valueA || !valueB) return null;
+  const pct = (v: string) => {
+    const m = v.replace(/,/g, "").match(/([+-]?\d+(?:\.\d+)?)\s*%/);
+    return m ? parseFloat(m[1]) : null;
+  };
+  const a = pct(valueA), b = pct(valueB);
+  if (a == null || b == null || a === b) return null;
+  return a > b ? "A" : "B";
+}
+
+/** Reading check: right or wrong, untimed. */
+export function computeCheckScore(validationAnswer: string | null | undefined, correctAnswer: string): number {
+  return validationAnswer === correctAnswer ? SCORE_WEIGHTS.check : 0;
+}
+
+export interface ScoreV2Input {
+  finalSelection: "A" | "B" | null | undefined;
+  winner: "A" | "B";
+  reasonMetric?: string | null;
+  reasonSide?: "A" | "B" | null;
+  /** objective direction of the chosen metric, if any (objectiveSideForMetric) */
+  objectiveSide?: "A" | "B" | null;
+  confidence?: ConfidenceLevel | null;
+  validationAnswer?: string | null;
+  correctAnswer: string;
+}
+
+export interface ScoreV2 {
+  predictionScore: number;
+  reasonScore: number;
+  confidenceScore: number;
+  validationScore: number;
+  totalScore: number;
+}
+
+export function calculateScoreV2(input: ScoreV2Input): ScoreV2 {
+  const callRight = input.finalSelection === input.winner;
+  const predictionScore = callRight ? SCORE_WEIGHTS.call : 0;
+  const reasonScore = computeReasonScore(input.reasonMetric, input.reasonSide, input.finalSelection, input.objectiveSide ?? null);
+  const confidenceScore = computeConfidenceScore(input.confidence, callRight);
+  const validationScore = computeCheckScore(input.validationAnswer, input.correctAnswer);
+  return {
+    predictionScore,
+    reasonScore,
+    confidenceScore,
+    validationScore,
+    totalScore: predictionScore + reasonScore + confidenceScore + validationScore,
+  };
+}
+
+/**
+ * Classify the day from the distance between the two open-to-close moves.
+ * The Hindsight Spotlight must open by naming it, so a quarter-point result is
+ * never explained as if it had a cause.
+ */
+export function classifyDay(perfA: number, perfB: number): DayKind {
+  const gap = Math.abs(perfA - perfB);
+  if (gap < DAY_KIND_COIN_TOSS_MARGIN_PCT_POINTS) return "coin_toss";
+  if (gap < DAY_KIND_CLEAR_MARGIN_PCT_POINTS) return "clear";
+  return "decisive";
+}
+
+// ─── Legacy 80/20 score (kept for the test suite and for re-scoring pre-v2 games) ──
 
 /**
  * Time-decay modifier for the validation score.

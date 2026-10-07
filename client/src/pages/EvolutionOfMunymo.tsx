@@ -1,3 +1,4 @@
+import { SCORE_WEIGHTS } from "@shared/const";
 import PublicLayout from "@/components/PublicLayout";
 import { Link } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -196,6 +197,12 @@ export default function EvolutionOfMunymo() {
             accountability. You cannot claim to have "read the research" if you cannot answer a
             basic question about it. The 20 points are, in a sense, an honesty tax.
           </p>
+          <Callout>
+            Update, 2026-10-08: the 80/20 split has been replaced. The prediction turned out to be
+            close to a coin flip for everyone on many days, so the score now pays for the decision,
+            not the dice: the call is worth {SCORE_WEIGHTS.call} points, your reason {SCORE_WEIGHTS.reason}, your confidence {SCORE_WEIGHTS.conf} and an
+            untimed reading check {SCORE_WEIGHTS.check}. Games staged before the change still settle under 80/20.
+          </Callout>
         </Section>
 
         {/* 5 — Pairing Logic */}

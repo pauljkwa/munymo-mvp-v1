@@ -48,7 +48,7 @@ export function computeMilestones(m: MilestoneInput): Milestone[] {
     out.push({
       emoji: "💯",
       title: m.perfectGames === 1 ? "Your first perfect game" : `Perfect game number ${m.perfectGames}`,
-      body: "Right pick, right answer, inside fifteen seconds. That is the whole loop done cleanly.",
+      body: "Right call, right reason, the right confidence and a correct reading check. That is the whole loop done cleanly.",
     });
   }
 

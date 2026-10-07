@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { CheckCircle2, XCircle, Timer, Loader2, ArrowRight } from "lucide-react";
+import { SCORE_WEIGHTS } from "@shared/const";
+import { CheckCircle2, XCircle, Timer, BookOpen, Loader2, ArrowRight } from "lucide-react";
 
 /**
  * The timed Research Validation Question modal.
@@ -28,6 +29,11 @@ export interface ValidationModalProps {
   guest?: boolean;
   /** Reveal phase: show the verdict. */
   onReveal?: () => void;
+  /**
+   * Scoring v2 reading check: untimed, worth SCORE_WEIGHTS.check points, right
+   * or wrong. Legacy games and practice keep the timed 20% copy and countdown.
+   */
+  untimed?: boolean;
 }
 
 export function ValidationModal({
@@ -40,6 +46,7 @@ export function ValidationModal({
   onClose,
   guest = false,
   onReveal,
+  untimed = false,
 }: ValidationModalProps) {
   const [selectedAnswer, setSelectedAnswer] = useState<string>("");
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -50,6 +57,7 @@ export function ValidationModal({
   useEffect(() => {
     if (phase === "question") {
       startTimeRef.current = Date.now();
+      if (untimed) return; // still recorded for analytics, never shown
       timerRef.current = setInterval(() => {
         setElapsedMs(Date.now() - (startTimeRef.current ?? Date.now()));
       }, 100);
@@ -107,6 +115,8 @@ export function ValidationModal({
             <p className="text-lg mb-8" style={{ color: "oklch(0.9 0.06 145)" }}>
               {guest
                 ? "Well done — your research paid off."
+                : untimed
+                ? `Well done — your research paid off. Your ${SCORE_WEIGHTS.check} reading-check points are banked.`
                 : "Well done — your research paid off. Your validation bonus has been added to your score."}
             </p>
           ) : (
@@ -200,12 +210,25 @@ export function ValidationModal({
                 ⚠ Important — Read Before Continuing
               </p>
               <p className="text-sm" style={{ color: "var(--color-foreground)" }}>
-                A <strong>Research Validation Question</strong> worth{" "}
-                <strong>20% of your daily score</strong> will open when you press the button below.
+                {untimed ? (
+                  <>
+                    A <strong>reading check</strong> worth{" "}
+                    <strong>{SCORE_WEIGHTS.check} points</strong> will open when you press the button below.
+                  </>
+                ) : (
+                  <>
+                    A <strong>Research Validation Question</strong> worth{" "}
+                    <strong>20% of your daily score</strong> will open when you press the button below.
+                  </>
+                )}
               </p>
               <ul className="mt-3 text-sm space-y-1.5" style={{ color: "var(--color-muted)" }}>
                 <li>• You have <strong>one attempt only</strong> — no second chances</li>
-                <li>• Your answer will be <strong>timed</strong> — faster correct answers score higher</li>
+                {untimed ? (
+                  <li>• <strong>No timer</strong> — take the time you need</li>
+                ) : (
+                  <li>• Your answer will be <strong>timed</strong> — faster correct answers score higher</li>
+                )}
                 <li>• <strong>Do not close this window</strong> or navigate away once the question opens</li>
               </ul>
             </div>
@@ -224,17 +247,19 @@ export function ValidationModal({
           <>
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-2">
-                <Timer size={18} style={{ color: "var(--color-brand)" }} />
+                {untimed ? <BookOpen size={18} style={{ color: "var(--color-brand)" }} /> : <Timer size={18} style={{ color: "var(--color-brand)" }} />}
                 <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-brand)" }}>
-                  Research Validation
+                  {untimed ? "Reading Check" : "Research Validation"}
                 </span>
               </div>
-              <span
-                className="font-mono text-sm font-bold tabular-nums"
-                style={{ color: elapsedMs > 30000 ? "var(--color-warning)" : "var(--color-muted)" }}
-              >
-                {(elapsedMs / 1000).toFixed(1)}s
-              </span>
+              {!untimed && (
+                <span
+                  className="font-mono text-sm font-bold tabular-nums"
+                  style={{ color: elapsedMs > 30000 ? "var(--color-warning)" : "var(--color-muted)" }}
+                >
+                  {(elapsedMs / 1000).toFixed(1)}s
+                </span>
+              )}
             </div>
 
             <p className="font-semibold mb-6" style={{ color: "var(--color-foreground)" }}>

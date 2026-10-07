@@ -81,8 +81,8 @@ export default function Practice() {
                 </p>
                 <p className="text-sm leading-relaxed" style={{ color: "var(--color-muted)" }}>
                   But you don't have to wait until tomorrow to have a go. Every matchup we've
-                  run stays playable below — the same research, the same scoring, the same
-                  timed question. The result already exists, so you'll find out how you did
+                  run stays playable below — the same research, the same
+                  research question. The result already exists, so you'll find out how you did
                   straight away, and you can play as many as you like.
                 </p>
               </div>

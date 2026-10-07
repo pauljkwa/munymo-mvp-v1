@@ -138,6 +138,8 @@ check_freshness is a fast, deterministic check against the live database — it 
 ## Determine today's winner
 From the recent games list, find the game with status "active" or "locked" that has the EARLIEST gameDate — the one whose trading day has just concluded. Do NOT pick a game with a later/future gameDate just because it appears first in the list (the list is sorted newest-first); if more than one game is active/locked at once, the earliest-dated one is always the correct one to score. SETTLEMENT RULE — read this twice. Each company's move is measured from today's REGULAR-SESSION OPEN (the first trade at 9:30 AM ET) to today's REGULAR-SESSION CLOSE (the official 4:00 PM ET close). companyAPerf = (close − open) / open × 100, rounded to 2 decimals; same for B. Do NOT use the "% change" shown on a quote page — that figure is measured against the PRIOR day's close and includes the overnight gap, which players could already see before picks locked at the open. Look up the actual open and close prices for both companies, compute the two open-to-close percentages yourself, and the higher one wins (tie → company A). The server recomputes both percentages from the four prices you supply and will override your companyAPerf, companyBPerf and winnerTicker if they disagree, so get the four prices right: companyAStartPrice / companyAEndPrice / companyBStartPrice / companyBEndPrice as the actual $ prices (e.g. 187.32) at the open and the close. Then write winnerTicker, a 2–3 sentence resultSummary (quote the open-to-close moves, not the prior-close change), and a 3–5 paragraph hindsightSpotlight educational debrief.
 
+HINDSIGHT SPOTLIGHT OPENING RULE: the hindsightSpotlight MUST open with one sentence that classifies the day by the gap between the two open-to-close moves (winningMargin, in percentage points), using exactly these thresholds: under 0.25 points = "a coin toss"; 0.25 up to (but not including) 1 point = "clear"; 1 point or more = "decisive". Example opening: "Today was a coin toss: the two stocks finished 0.17 points apart." On a coin-toss day you must then say plainly that the result is too close to carry a lesson about the companies, BEFORE you explain how each stock traded. On clear and decisive days, go on to the usual debrief.
+
 ## Select tomorrow's matchup
 Follow the freshness pre-qualification sequence above first. Once a candidate sector + pair is confirmed fresh via check_freshness, continue only if the two companies are: genuine rivals/comparisons; widely recognised; the subject of a real investment debate; and tied to a specific news story from the last 48 hours (you must be able to name it). Avoid penny stocks, micro-caps, ETFs, and index funds. If a confirmed-fresh candidate fails these qualitative checks, pick a different one and re-confirm freshness before continuing.
 
@@ -149,7 +151,8 @@ While you're on the article that gave you the "buzz" signal for this matchup, ke
 - researchContent: 4–6 balanced, educational paragraphs (competitive landscape, performance drivers, risks/catalysts, current debate, upcoming events). Do not telegraph a winner.
 - researchSummary: 3–4 short plain-English paragraphs for beginners, NO jargon (no P/E, EPS, TTM, EBITDA). What each company does in one sentence; one reason to pick each; one thing to keep in mind.
 - researchMetrics: EIGHT metrics per ticker in two groups — see "researchMetrics rules" below.
-- validationQuestion: one question testing a verifiable fact answerable from your research.
+- highlightedMetrics: the FOUR metrics where the two companies differ most meaningfully — see "highlightedMetrics rules" below.
+- validationQuestion: one comparative question that needs both columns of the metrics panel (or both price charts) to answer — see the validation question rules below.
 
 ## researchMetrics rules
 The metrics panel is a teaching surface. The game page renders it in two labelled groups so players learn the horizon distinction every day — fundamentals vs. what shapes a single session. Use these EXACT metric names (after the ticker prefix), in this order:
@@ -168,29 +171,38 @@ The metrics panel is a teaching surface. The game page renders it in two labelle
 
 Every value must stand alone without relative time words — anchor any date explicitly (see the no-relative-time rule below).
 
+## highlightedMetrics rules
+Players are asked to name, from YOUR four highlighted metrics, the one that is the main reason for their pick — so the choice must be a good one. Output "highlightedMetrics" as an array of EXACTLY four strings. Each string is a metric label WITHOUT the ticker prefix: one of "Market Cap", "P/E Ratio", "Revenue Growth", "Analyst Consensus", "Next Earnings", "Beta", "Last Session Move", "vs 52-Week High", or "Price trend" (the 20-session chart). All four must be different.
+- Choose the four where the two companies differ most meaningfully on this day.
+- "Price trend" qualifies ONLY when the two companies' 20-session moves differ by more than 10 percentage points, or one chart shows an event (a gap, a spike, a breakdown) that the other lacks. Otherwise do not choose it.
+- NEVER choose a metric where both companies have the same value. "Next Earnings" qualifies only when one company reports on the game day or the next morning and the other does not (that is the single biggest difference a day can have); never when both say "No confirmed date".
+- Do not choose metrics just to cover both horizons; choose the four that genuinely separate the two companies.
+
 ## Dates in player-facing content — no relative time
 You are writing the night BEFORE the game day, and players read this content the next day (or later, after a weekend). Relative time words go stale and embarrass us: a company "scheduled to report earnings today" may have reported by the time anyone reads it. In pairingRationale, researchContent, researchSummary, and the validation question:
 - NEVER write "today", "tomorrow", "this morning", "later this week", or similar relative phrases for scheduled or recent events.
 - ALWAYS anchor events to an explicit day and date: "reports Q2 earnings on Tuesday, July 21", "announced its guidance cut on July 15".
 - Double-check via web_search whether a "scheduled" event (earnings, product launch, ruling) has ALREADY happened before describing it as upcoming — if it happened, describe the outcome instead.
 
-## Validation question type — vary it, don't default to multiple choice
+## Validation question — comparative, and vary the type
+The validation question is a READING CHECK: it must be answerable only by someone who looked at BOTH columns of the metrics panel (or both price charts). Write ONE comparative question, for example "Which company's shares are closer to their 52-week high?" or "Do both companies have a confirmed next-earnings date?" Never ask about a single fact that can be lifted from the written brief or from one company's figures alone. If "Price trend" is one of your highlightedMetrics, the question must NOT be about the charts — use the metrics panel instead. The question is not timed and there is no speed element; do not mention timing.
+
 Each recent game in the list you were given includes its "questionType" (may be null for older games). Look at the most recent game(s) and pick a DIFFERENT type than whatever was used last time — never repeat the immediately-previous type. Choose randomly among the other two eligible types (don't always alternate in the same fixed order; keep it unpredictable but never a repeat).
 
 - **multiple_choice**: 4 options; correctAnswer must be the EXACT text of one option; set "options" to the array of 4 strings.
-- **true_false**: a statement Claude judges as verifiably true or false from the research; correctAnswer is exactly "True" or "False"; set "options" to null.
-- **yes_no**: a yes/no question about the companies/matchup; correctAnswer is exactly "Yes" or "No"; set "options" to null.
+- **true_false**: a statement that is verifiably true or false from the metrics panel; correctAnswer is exactly "True" or "False"; set "options" to null.
+- **yes_no**: a yes/no question about the two companies' figures; correctAnswer is exactly "Yes" or "No"; set "options" to null.
 **Answer distribution — this matters more than it sounds.** Left alone, a model writing a
 question thinks of the correct answer first and then invents distractors, so the correct
 option ends up first almost every time; and it tends to write statements that happen to be
-TRUE. A player who notices either pattern scores the full validation 20% without reading
-the research, which defeats the point of the question.
+TRUE. A player who notices either pattern collects the reading-check points without reading
+the panel, which defeats the point of the question.
 
 - **multiple_choice**: do not worry about option order — the server reshuffles the options
   before a player ever sees them, so position carries no information. Focus on making all
   three distractors genuinely plausible to someone who skimmed rather than read.
 - **true_false**: aim for roughly half your statements to be FALSE over time. A false
-  statement should be false by one specific, checkable detail drawn from the research (a
+  statement should be false by one specific, checkable detail drawn from the panel (a
   wrong direction, a swapped company, an inverted comparison) — not vague or trivially
   absurd.
 - **yes_no**: likewise, roughly half should be "No". Ask something whose honest answer
@@ -260,8 +272,9 @@ Your FINAL message must contain ONLY the JSON object below — no markdown fence
       "<B ticker> Last Session Move": "<+/-X.X% (Mon DD)>",
       "<B ticker> vs 52-Week High": "<X% below high>"
     },
+    "highlightedMetrics": ["<label>", "<label>", "<label>", "<label>"],
     "validationQuestion": {
-      "questionType": "<multiple_choice | true_false | yes_no — see 'Validation question type' rule above>",
+      "questionType": "<multiple_choice | true_false | yes_no — see the 'Validation question' rules above>",
       "questionText": "<question text>",
       "options": ["<A>", "<B>", "<C>", "<D>"] or null,
       "correctAnswer": "<exact text of the correct option, or 'True'/'False', or 'Yes'/'No'>"

@@ -73,10 +73,29 @@ export async function runTesterPicks(): Promise<void> {
       }
 
       const finalSelection = Math.random() < 0.8 ? gutSelection : (gutSelection === "A" ? "B" : "A");
-      await caller.picks.submitFinal({ gameId: game.id, selection: finalSelection });
+      // Scoring v2: games with highlighted metrics require a reason + confidence.
+      // Bots always declare "tossup" (Coin Flip), name a random highlighted
+      // metric, and say it favors the company they actually picked.
+      const highlighted = game.highlightedMetrics ?? [];
+      await caller.picks.submitFinal({
+        gameId: game.id,
+        selection: finalSelection,
+        ...(highlighted.length > 0
+          ? { reasonMetric: randomElement(highlighted), reasonSide: finalSelection, confidence: "tossup" as const }
+          : {}),
+      });
 
-      if (options.length > 0) {
-        const answer = randomElement(options);
+      // multiple_choice has options; yes_no / true_false have none, so answer from their fixed vocab
+      const answerChoices =
+        options.length > 0
+          ? options
+          : question?.questionType === "yes_no"
+            ? ["Yes", "No"]
+            : question?.questionType === "true_false"
+              ? ["True", "False"]
+              : [];
+      if (answerChoices.length > 0) {
+        const answer = randomElement(answerChoices);
         await caller.picks.submitValidation({ gameId: game.id, answer, answerTimeMs: randomAnswerTimeMs() });
       }
 

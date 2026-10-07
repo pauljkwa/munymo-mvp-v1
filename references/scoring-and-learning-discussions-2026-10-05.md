@@ -201,11 +201,15 @@ Sub-questions inside this one: is it required or optional; what is the default i
 
 | # | Discussion | Status | Outcome |
 |---|---|---|---|
-| 1 | What the score rewards | Open | |
-| 2 | Confidence on the final pick | Open | |
-| 3 | The quiz and the timer | Open | |
-| 4 | Too close to call | Open | |
-| 5 | Lessons inside the game | Open | |
-| 6 | Feeling of progress | Open, waits on 2 and 5 | |
-| 7 | A faster first payoff | Open | |
-| 8 | Judging without players; the history | Open, prep work can start now | |
+| 1 | What the score rewards | Open, Paul's first positions 2026-10-07 | Still to be worked out. Every change to the mechanics gets a sample game built from existing data to check playability: "we don't want to turn this into the Spanish Inquisition". Two numbers is acceptable; site copy and seasons are not constraints while pre-beta, and now is the time for mechanical changes. Confidence alone does not separate a player from the crowd; worth about 10% of the score and a candidate input to MunyIQ. Paul wants a new "show your working" component: a simple method the player follows with the metrics we provide, scored on how accurately they apply it, within 5–10 minutes. |
+| 2 | Confidence on the final pick | Open, Paul's first position 2026-10-07 | Confidence should be a factor. Paul recalls it was decided earlier; the record shows it was parked for MunyIQ in `leaderboard-seasons-spec.md` (2026-09-17). |
+| 3 | The quiz and the timer | Open, Paul's first position 2026-10-07 | The decay exists to separate players beyond 100/80/20/0. Paul's original intent: decay starts immediately (or after about 5 seconds of reading), timed to the millisecond, so scores visibly differ. As built: flat 20 for 15 s, linear to 12 at 60 s, rounded to whole points (`server/scoring.ts`). |
+| 4 | Too close to call | Open, Paul's first position 2026-10-07 | Yes: Mo declares a coin-toss day. The debrief must still explain how each company traded and why (price drivers, share volume) and draw a simple lesson from each company's day in hindsight. |
+| 5 | Lessons inside the game | Open, Paul's first position 2026-10-07 | Lessons are for engaged players between games, while the market is open. The dashboard should record lessons and modules completed. End-of-lesson quizzes should be several questions of varied types. More detail later. |
+| 6 | Feeling of progress | Open, Paul's first position 2026-10-07 | A personal line graph of results over time; what the plotted value is still needs discussing. |
+| 7 | A faster first payoff | Open, Paul's first position 2026-10-07 | Sees it as "what keeps them around": lessons (5), plus the earlier idea of a running commentary on the matchup during the day, held back by agent cost. |
+| 8 | Judging without players; the history | Deferred by Paul 2026-10-07 | Settle the mechanics first. |
+
+**Homework delivered 2026-10-07 (Fable):** research, three candidate recipes, simulation and sample games in `references/scoring-homework-findings-2026-10-07.md`. Playable samples: https://claude.ai/artifact/7ZUsfySS8gRx9kzrkZVnSt (`#a`, `#b`, `#c`). The archive replay against Paul's and Coin Flip's real picks is pending permission for a read-only production read. Awaiting Paul's reactions before any spec. Later the same day: Paul proposed a daily "which of Mo's four highlighted metrics is the strongest indicator" question (40/30/20/10, no quiz); Fable's objection is that an analyst ranking of a one-day driver is an opinion graded as fact. Paul asked for Fable's own design; prototype at https://claude.ai/artifact/NkE3Uxiiw1GHcn9RY5dp38 (call 40 / reason 25 / confidence 20 / reading check 15, weights editable). Paul's standing intent: weights stay adjustable and beta testers will be asked about them.
+
+**Decided 2026-10-07 (Paul: "let's build it and push it and try it for a few days").** Discussions 1–4 closed by Scoring v2: the call 40, your reason 25 (one of Mo's four highlighted metrics plus the company it favors, marked on consistency, no answer key), confidence 20 (Toss-up 14/14, Leaning 18/10, Confident 20/4), reading check 15 (comparative question, untimed). Mo classifies each day (coin toss under 0.25 pts apart). Weights live in one adjustable object for the beta-tester question. Practice stays on 80/20 for the trial; old scores keep their numbers (Discussion 8 resolved by that transition rule). Build spec: `references/scoring-v2-build-spec-2026-10-07.md`. Discussions 5–7 remain open.

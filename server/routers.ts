@@ -2,6 +2,9 @@ import { TRPCError } from "@trpc/server";
 import type Anthropic from "@anthropic-ai/sdk";
 import {
   calculateScore,
+  calculateScoreV2,
+  objectiveSideForMetric,
+  classifyDay,
   checkLockout,
   computeNewStreak,
   isQualified,
@@ -21,7 +24,8 @@ import {
   sendEmail,
 } from "./email";
 import { z } from "zod";
-import { COOKIE_NAME } from "@shared/const";
+import { COOKIE_NAME, PRICE_TREND_LABEL } from "@shared/const";
+import { valuesForMetric, validateHighlightedMetrics, type MetricRow } from "./highlightedMetrics";
 import { currentSeasonKey, seasonLabel, seasonWindow } from "@shared/leaderboard";
 import { computeGutVsResearch, describeGutVsResearch } from "@shared/insight";
 import type { Candle } from "../drizzle/schema";
@@ -320,12 +324,33 @@ const picksRouter = router({
       z.object({
         gameId: z.number(),
         selection: z.enum(["A", "B"]),
+        // Scoring v2 — optional in the schema (legacy games, guest replay),
+        // required below when the game has highlightedMetrics.
+        reasonMetric: z.string().max(64).optional(),
+        reasonSide: z.enum(["A", "B"]).optional(),
+        confidence: z.enum(["tossup", "leaning", "confident"]).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       const game = await assertNotLocked(input.gameId);
       if (game.status !== "active") {
         throw new TRPCError({ code: "FORBIDDEN", message: "Game is not active" });
+      }
+      // Scoring v2 validation applies only when the game has highlighted metrics.
+      const highlighted = game.highlightedMetrics;
+      let v2: { reasonMetric: string; reasonSide: "A" | "B"; confidence: "tossup" | "leaning" | "confident" } | undefined;
+      if (highlighted && highlighted.length > 0) {
+        if (!input.reasonMetric || !input.reasonSide || !input.confidence) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Pick your reason (a highlighted metric and the company it favors) and your confidence before locking in",
+          });
+        }
+        const chosen = highlighted.find((m) => m.toLowerCase() === input.reasonMetric!.trim().toLowerCase());
+        if (!chosen) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Your reason must be one of today's highlighted metrics" });
+        }
+        v2 = { reasonMetric: chosen, reasonSide: input.reasonSide, confidence: input.confidence };
       }
       // Must have submitted a Gut Selection first
       const existing = await getPlayerPick(ctx.user.id, input.gameId);
@@ -336,7 +361,7 @@ const picksRouter = router({
         });
       }
       // Store final selection without validation answer (submitted separately via timed modal)
-      await upsertFinalSelection(ctx.user.id, input.gameId, input.selection);
+      await upsertFinalSelection(ctx.user.id, input.gameId, input.selection, v2);
       return { success: true };
     }),
 
@@ -926,7 +951,7 @@ async function closeAndScoreGame(
     resultCommentary?: string;
   }
 ): Promise<{
-  scoredPicks: Array<{ userId: number; predictionScore: number; validationScore: number; totalScore: number }>;
+  scoredPicks: Array<{ userId: number; predictionScore: number; validationScore: number; reasonScore?: number; confidenceScore?: number; totalScore: number }>;
   winner: "A" | "B";
   settlementWarnings: string[];
 }> {
@@ -998,7 +1023,12 @@ async function closeAndScoreGame(
   // 4. Score all participants
   const question = await getValidationQuestion(gameId);
   const picks = await getPicksForGame(gameId);
-  const scoredPicks: Array<{ userId: number; predictionScore: number; validationScore: number; totalScore: number }> = [];
+  // Scoring v2 applies only to games staged with highlighted metrics; the rest
+  // settle under the legacy 80/20 path exactly as before.
+  const isV2 = !!(game.highlightedMetrics && game.highlightedMetrics.length > 0);
+  const researchForV2 = isV2 ? await getResearchByGameId(gameId) : undefined;
+  const v2MetricRows = (researchForV2?.metricsSnapshot ?? researchForV2?.researchMetrics ?? []) as MetricRow[];
+  const scoredPicks: Array<{ userId: number; predictionScore: number; validationScore: number; reasonScore?: number; confidenceScore?: number; totalScore: number }> = [];
 
   for (const pick of picks) {
     if (!pick.finalSelection) continue;
@@ -1007,15 +1037,44 @@ async function closeAndScoreGame(
     // but skip the streak update — it already ran once and would otherwise
     // double-increment on retry.
     const alreadyScored = await getPlayerScoreForGame(pick.userId, gameId);
-    const { predictionScore, validationScore } = calculateScore(
-      pick.finalSelection,
-      winner,
-      pick.validationAnswer,
-      question?.correctAnswer ?? "",
-      pick.validationAnswerTimeMs
-    );
-    await insertDailyScore(pick.userId, gameId, predictionScore, validationScore);
-    scoredPicks.push({ userId: pick.userId, predictionScore, validationScore, totalScore: predictionScore + validationScore });
+    let predictionScore: number;
+    let validationScore: number;
+    let reasonScore: number | undefined; // stays undefined for legacy games (email branches on presence)
+    let confidenceScore: number | undefined;
+    if (isV2) {
+      let objectiveSide: "A" | "B" | null = null;
+      if (pick.reasonMetric && pick.reasonMetric.toLowerCase() !== PRICE_TREND_LABEL.toLowerCase()) {
+        const { valueA, valueB } = valuesForMetric(v2MetricRows, pick.reasonMetric, game.companyATicker, game.companyBTicker);
+        objectiveSide = objectiveSideForMetric(pick.reasonMetric, valueA, valueB);
+      }
+      ({ predictionScore, validationScore, reasonScore, confidenceScore } = calculateScoreV2({
+        finalSelection: pick.finalSelection,
+        winner,
+        reasonMetric: pick.reasonMetric,
+        reasonSide: pick.reasonSide,
+        objectiveSide,
+        confidence: pick.confidence,
+        validationAnswer: pick.validationAnswer,
+        correctAnswer: question?.correctAnswer ?? "",
+      }));
+    } else {
+      ({ predictionScore, validationScore } = calculateScore(
+        pick.finalSelection,
+        winner,
+        pick.validationAnswer,
+        question?.correctAnswer ?? "",
+        pick.validationAnswerTimeMs
+      ));
+    }
+    await insertDailyScore(pick.userId, gameId, predictionScore, validationScore, reasonScore ?? 0, confidenceScore ?? 0);
+    scoredPicks.push({
+      userId: pick.userId,
+      predictionScore,
+      validationScore,
+      reasonScore,
+      confidenceScore,
+      totalScore: predictionScore + validationScore + (reasonScore ?? 0) + (confidenceScore ?? 0),
+    });
 
     // 5. Update leaderboard and streaks
     await upsertLeaderboardStat(pick.userId);
@@ -1031,6 +1090,7 @@ async function closeAndScoreGame(
   await updateGame(gameId, {
     status: "result_published",
     winner,
+    dayKind: companyAPerf !== undefined && companyBPerf !== undefined ? classifyDay(companyAPerf, companyBPerf) : undefined,
     companyAPerf: companyAPerf !== undefined ? String(companyAPerf) : undefined,
     companyBPerf: companyBPerf !== undefined ? String(companyBPerf) : undefined,
     companyAStartPrice: opts.companyAStartPrice !== undefined ? String(opts.companyAStartPrice) : undefined,
@@ -1280,6 +1340,8 @@ const adminRouter = router({
             winner: settledWinner,
             predictionScore: scored.predictionScore,
             validationScore: scored.validationScore,
+            reasonScore: scored.reasonScore,
+            confidenceScore: scored.confidenceScore,
             totalScore: scored.totalScore,
             resultCommentary: input.resultCommentary,
             gameDate: game.gameDate,
@@ -1388,6 +1450,8 @@ const adminRouter = router({
         nextResearchContent: z.string().optional(),
         nextResearchSummary: z.string().optional(),
         nextResearchMetrics: z.record(z.string(), z.string()).optional(),
+        // Scoring v2: Mo's four highlighted metrics (validated against the panel labels below).
+        nextHighlightedMetrics: z.array(z.string()).length(4).optional(),
         // ── Tomorrow's validation question ──
         nextQuestionType: z.enum(["multiple_choice", "yes_no", "true_false"]).optional(),
         nextQuestionText: z.string().optional(),
@@ -1418,7 +1482,7 @@ const adminRouter = router({
       // ── 1. Close today's game (skipped if no closeGameId — Game 1 / first game) ──
       let game: Awaited<ReturnType<typeof getGameById>> | null = null;
       let winner: "A" | "B" | undefined;
-      const scoredPicks: Array<{ userId: number; predictionScore: number; validationScore: number; totalScore: number }> = [];
+      const scoredPicks: Array<{ userId: number; predictionScore: number; validationScore: number; reasonScore?: number; confidenceScore?: number; totalScore: number }> = [];
 
       if (input.closeGameId) {
         if (input.winner === undefined) {
@@ -1540,6 +1604,16 @@ const adminRouter = router({
           };
           nextGameCreated = false;
         } else {
+          const nextMetricRows: MetricRow[] = input.nextResearchMetrics
+            ? Object.entries(input.nextResearchMetrics).map(([label, value]) => ({ label, value: String(value) }))
+            : [];
+          const nextHighlightedMetrics = validateHighlightedMetrics(
+            input.nextHighlightedMetrics,
+            nextMetricRows,
+            input.nextCompanyATicker!,
+            input.nextCompanyBTicker!,
+            "endOfDay"
+          );
           const nextGameFields = {
             gameDate: input.nextGameDate!,
             exchange: input.nextExchange,
@@ -1553,6 +1627,7 @@ const adminRouter = router({
             sourceTitle: input.nextSourceTitle,
             sourcePublisher: input.nextSourcePublisher,
             lockoutAt: input.nextLockoutAt ? new Date(input.nextLockoutAt) : undefined,
+            highlightedMetrics: nextHighlightedMetrics,
             createdBy: ctx.user.id,
             status: "active" as const,
           };
@@ -1693,6 +1768,8 @@ const adminRouter = router({
                 winner: closedWinner,
                 predictionScore: scored.predictionScore,
                 validationScore: scored.validationScore,
+                reasonScore: scored.reasonScore,
+                confidenceScore: scored.confidenceScore,
                 totalScore: scored.totalScore,
                 resultCommentary: input.resultSummary ?? "",
                 gameDate: game.gameDate,

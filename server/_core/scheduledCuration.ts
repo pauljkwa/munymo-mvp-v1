@@ -13,6 +13,7 @@ import { notifyOwner } from "./notification";
 import { ENV } from "./env";
 import { settleFromPrices } from "../scoring";
 import { buildUnsubscribeUrl } from "../unsubscribe";
+import { validateHighlightedMetrics } from "../highlightedMetrics";
 
 /**
  * Shared-secret auth for the scheduled endpoints.
@@ -322,11 +323,18 @@ export function classifyCurationPayload(body: { stagedGameId?: number; tomorrow?
   return "invalid";
 }
 
+/** Validates `tomorrow.highlightedMetrics` against the panel labels (scoring v2).
+ *  Null on any failure — the game then settles under legacy scoring. */
+function resolveHighlightedMetrics(tomorrow: CurationTomorrow): string[] | null {
+  const rows = Object.entries(tomorrow.researchMetrics ?? {}).map(([label, value]) => ({ label, value: String(value) }));
+  return validateHighlightedMetrics(tomorrow.highlightedMetrics, rows, tomorrow.companyATicker, tomorrow.companyBTicker, "stage-game");
+}
+
 /** Upserts a game's research + validation question from a `tomorrow` block.
  *  Idempotent — safe to call again on a retried submission (used by both the
  *  C1 guard's re-upsert and the initial creation path). */
 async function upsertProposalContent(gameId: number, tomorrow: CurationTomorrow): Promise<void> {
-  const { upsertResearchWithMetrics, upsertValidationQuestion } = await import("../db");
+  const { upsertResearchWithMetrics, upsertValidationQuestion, updateGame } = await import("../db");
   if (tomorrow.researchContent) {
     const metricsArray = tomorrow.researchMetrics
       ? Object.entries(tomorrow.researchMetrics).map(([label, value]) => ({ label, value: String(value) }))
@@ -340,6 +348,19 @@ async function upsertProposalContent(gameId: number, tomorrow: CurationTomorrow)
       options: tomorrow.validationQuestion.options ?? undefined,
       correctAnswer: tomorrow.validationQuestion.correctAnswer,
     });
+  }
+  // Scoring v2: keep the game's highlighted metrics in step with the (re-)upserted
+  // panel — but only while the game is still a draft. Once it is active, players
+  // have picked reasons against the four on show, and submitFinal validates
+  // against this list, so changing it under them would reject their picks.
+  if (tomorrow.highlightedMetrics !== undefined) {
+    const { getGameById } = await import("../db");
+    const current = await getGameById(gameId);
+    if (!current || current.status === "draft") {
+      await updateGame(gameId, { highlightedMetrics: resolveHighlightedMetrics(tomorrow) });
+    } else {
+      console.warn(`[scoring v2] game ${gameId} is ${current.status}; highlightedMetrics left unchanged on re-apply`);
+    }
   }
 }
 
@@ -699,6 +720,7 @@ async function dailyCurationHandler(req: Request, res: Response) {
       nextResearchContent: tomorrow.researchContent,
       nextResearchSummary: tomorrow.researchSummary,
       nextResearchMetrics: tomorrow.researchMetrics as Record<string, string> | undefined,
+      nextHighlightedMetrics: Array.isArray(tomorrow.highlightedMetrics) && tomorrow.highlightedMetrics.length === 4 ? tomorrow.highlightedMetrics : undefined,
       nextQuestionType: questionType,
       nextQuestionText: tomorrow.validationQuestion?.questionText,
       nextQuestionOptions: tomorrow.validationQuestion?.options ?? undefined,
@@ -787,6 +809,8 @@ interface CurationTomorrow {
   researchContent?: string;
   researchSummary?: string;
   researchMetrics?: Record<string, string>;
+  /** Scoring v2: exactly four metric labels (no ticker prefix) or "Price trend". */
+  highlightedMetrics?: string[];
   validationQuestion?: {
     questionType: string;
     questionText: string;
@@ -917,6 +941,8 @@ async function stageGameHandler(req: Request, res: Response) {
       sourceTitle: tomorrow.sourceTitle,
       sourcePublisher: tomorrow.sourcePublisher,
       lockoutAt: new Date(lockoutAt),
+      // Scoring v2 (null = this game runs legacy scoring)
+      highlightedMetrics: resolveHighlightedMetrics(tomorrow),
       // Cron-triggered — no admin session; id 1 ("Cron") is the same
       // convention dailyCurationHandler uses for its admin.endOfDay caller context.
       createdBy: 1,

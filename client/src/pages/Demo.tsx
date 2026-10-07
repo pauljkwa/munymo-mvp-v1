@@ -1,3 +1,4 @@
+import { SCORE_WEIGHTS } from "@shared/const";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
@@ -148,7 +149,7 @@ function ValidationModal({ phase, onOpenQuestion, onSubmitAnswer, result, onClos
               : `The correct answer was: "${DEMO_GAME.validationQuestion.correctAnswer}"`}
           </p>
           <p className="text-white/60 text-xs mb-8">
-            In the real game, your answer speed also contributes to your score.
+            In the real game, this reading check is worth {SCORE_WEIGHTS.check} points. There is no timer.
           </p>
           <button className="btn-brand bg-white text-gray-900 hover:bg-white/90" onClick={onClose}>
             See the Result <ArrowRight size={16} />
@@ -168,9 +169,9 @@ function ValidationModal({ phase, onOpenQuestion, onSubmitAnswer, result, onClos
               <h3 style={{ color: "var(--color-foreground)" }}>Research Validation</h3>
             </div>
             <p className="text-sm mb-5" style={{ color: "var(--color-muted)" }}>
-              A timed question is about to open. It's worth{" "}
-              <strong style={{ color: "var(--color-foreground)" }}>20% of your score</strong>.
-              Answer as quickly as you can — speed matters.
+              A reading check is about to open. In the real game it's worth{" "}
+              <strong style={{ color: "var(--color-foreground)" }}>{SCORE_WEIGHTS.check} points</strong>.
+              There is no timer — take the time you need.
             </p>
             <div
               className="rounded-lg px-3 py-2 mb-5 text-xs"
@@ -254,7 +255,7 @@ const STEP_TIPS: Record<string, { title: string; body: string; emoji: string }> 
   research: {
     emoji: "📊",
     title: "Step 2 of 5 — Research",
-    body: "Read the rationale, analyst notes, metrics, and charts for both companies. You'll be tested on this in a timed question — so read carefully!",
+    body: "Read the rationale, analyst notes, metrics, and charts for both companies. You'll be asked one question about it afterward — so read carefully!",
   },
   final: {
     emoji: "🎯",
@@ -262,9 +263,9 @@ const STEP_TIPS: Record<string, { title: string; body: string; emoji: string }> 
     body: "Lock in your official prediction — this is the pick that counts for scoring. Changing your mind from your gut pick is allowed; that's the whole point.",
   },
   validation: {
-    emoji: "⏱",
-    title: "Step 4 of 5 — Validation Question",
-    body: "A timed question on the research you just read — answer quickly, speed is part of your score. It tests whether you absorbed the research or just skimmed it.",
+    emoji: "📖",
+    title: "Step 4 of 5 — Reading Check",
+    body: "One question on the research you just read. There is no timer. It tests whether you absorbed the research or just skimmed it.",
   },
   result: {
     emoji: "🏆",
@@ -729,8 +730,8 @@ export default function Demo() {
                 <Timer size={16} className="mt-0.5 shrink-0" style={{ color: "var(--color-warning)" }} />
                 <p className="text-sm" style={{ color: "var(--color-muted)" }}>
                   After submitting your final selection, a{" "}
-                  <strong style={{ color: "var(--color-foreground)" }}>timed Research Validation Question</strong>{" "}
-                  will open worth <strong style={{ color: "var(--color-foreground)" }}>20% of your score</strong>.
+                  <strong style={{ color: "var(--color-foreground)" }}>reading check</strong>{" "}
+                  will open. In the real game it is worth <strong style={{ color: "var(--color-foreground)" }}>{SCORE_WEIGHTS.check} points</strong>, with no timer.
                   Study the research carefully.
                 </p>
               </div>

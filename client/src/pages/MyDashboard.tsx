@@ -191,7 +191,7 @@ export default function MyDashboard() {
                 icon={BookOpen}
                 label="Research Score"
                 value={`${stats.validationAccuracy}%`}
-                sub="Validation accuracy"
+                sub="Reading-check accuracy"
               />
               <StatCard
                 icon={Trophy}

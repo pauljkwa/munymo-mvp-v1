@@ -50,10 +50,61 @@ import {
   CalendarPlus,
 } from "lucide-react";
 import { downloadResultReminder } from "@/lib/calendar";
+import {
+  SCORE_WEIGHTS,
+  CONFIDENCE_TABLE,
+  CONFIDENCE_LABELS,
+  PRICE_TREND_LABEL,
+  type ConfidenceLevel,
+} from "@shared/const";
 
 const ALL_LESSONS_FLAT = ALL_LEVELS.flatMap((level) => level.lessons);
 
-type GameStep = "gut" | "research" | "final" | "submitted";
+type GameStep = "gut" | "research" | "reason" | "final" | "submitted";
+
+const CONFIDENCE_LEVELS: ConfidenceLevel[] = ["tossup", "leaning", "confident"];
+
+/** Points shown on a confidence button: "{if right} / {if wrong}". */
+const confidencePoints = (level: ConfidenceLevel) => {
+  const [ifRight, ifWrong] = CONFIDENCE_TABLE[level];
+  return `${Math.round(SCORE_WEIGHTS.conf * ifRight)} / ${Math.round(SCORE_WEIGHTS.conf * ifWrong)}`;
+};
+
+const sameLabel = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/**
+ * Both companies' values for each highlighted metric. Research metric keys are
+ * prefixed with the ticker ("NEE — Revenue Growth"); strip it to match Mo's
+ * highlighted labels. "Price trend" has no values: the player reads the chart.
+ */
+function highlightedValues(
+  metrics: Record<string, string> | null | undefined,
+  highlighted: string[],
+  tickerA: string,
+  tickerB: string
+): { label: string; valueA: string | null; valueB: string | null }[] {
+  const strip = (label: string, ticker: string) => {
+    const m = label.match(new RegExp(`^${ticker}\\s*[—\\-:]\\s*(.+)$`, "i"));
+    return m ? m[1] : null;
+  };
+  const a = new Map<string, string>();
+  const b = new Map<string, string>();
+  for (const [key, value] of Object.entries(metrics ?? {})) {
+    const sa = strip(key, tickerA);
+    const sb = strip(key, tickerB);
+    if (sa) a.set(sa.trim().toLowerCase(), value);
+    else if (sb) b.set(sb.trim().toLowerCase(), value);
+  }
+  return highlighted.map((label) =>
+    sameLabel(label, PRICE_TREND_LABEL)
+      ? { label, valueA: null, valueB: null }
+      : {
+          label,
+          valueA: a.get(label.trim().toLowerCase()) ?? "—",
+          valueB: b.get(label.trim().toLowerCase()) ?? "—",
+        }
+  );
+}
 
 // ─── Timed Validation Modal ───────────────────────────────────────────────────
 
@@ -139,13 +190,22 @@ export default function DailyGame() {
     );
   };
 
+  // Scoring v2 applies only to games Mo staged with highlighted metrics.
+  // Games without them run the legacy flow and copy unchanged.
+  const highlightedMetrics: string[] | null = game?.highlightedMetrics ?? null;
+  const isV2 = highlightedMetrics !== null;
+
   const goToFinalStep = () => {
-    setStep("final");
+    setStep(isV2 ? "reason" : "final");
     requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
   };
 
   const [gutSelection, setGutSelection] = useState<"A" | "B" | null>(null);
   const [finalSelection, setFinalSelection] = useState<"A" | "B" | null>(null);
+  // Scoring v2: "your reason" and confidence
+  const [reasonMetric, setReasonMetric] = useState<string | null>(null);
+  const [reasonSide, setReasonSide] = useState<"A" | "B" | null>(null);
+  const [confidence, setConfidence] = useState<ConfidenceLevel | null>(null);
 
   // Chart panel state (hoisted here because hooks can't be inside IIFEs)
   const [chartTicker, setChartTicker] = useState<string | null>(null);
@@ -227,7 +287,15 @@ export default function DailyGame() {
       try {
         for (const stepName of steps) {
           if (stepName === "gut") await replayGut.mutateAsync({ gameId, selection: stored.gut });
-          if (stepName === "final" && stored.final) await replayFinal.mutateAsync({ gameId, selection: stored.final });
+          if (stepName === "final" && stored.final) {
+            await replayFinal.mutateAsync({
+              gameId,
+              selection: stored.final,
+              ...(stored.reasonMetric && stored.reasonSide && stored.confidence
+                ? { reasonMetric: stored.reasonMetric, reasonSide: stored.reasonSide, confidence: stored.confidence }
+                : {}),
+            });
+          }
           if (stepName === "validation" && stored.validationAnswer) {
             const r = await replayValidation.mutateAsync({
               gameId,
@@ -382,8 +450,12 @@ export default function DailyGame() {
     return new Date(myPick.finalSubmittedAt) >= lockoutTime;
   })();
 
-  const stepLabels: GameStep[] = ["gut", "research", "final", "submitted"];
-  const stepDisplayLabels = ["Gut Pick", "Research", "Final Pick", "Done"];
+  const stepLabels: GameStep[] = isV2
+    ? ["gut", "research", "reason", "final", "submitted"]
+    : ["gut", "research", "final", "submitted"];
+  const stepDisplayLabels = isV2
+    ? ["Gut Pick", "Research", "Your Reason", "Final Pick", "Done"]
+    : ["Gut Pick", "Research", "Final Pick", "Done"];
   const stepIndex = (s: GameStep) => stepLabels.indexOf(s);
   const currentIndex = stepIndex(step);
 
@@ -435,6 +507,7 @@ export default function DailyGame() {
           onClose={handleCloseModal}
           guest={isGuest}
           onReveal={() => setModalPhase("result")}
+          untimed={isV2}
         />
       )}
 
@@ -512,7 +585,7 @@ export default function DailyGame() {
                     {stepDisplayLabels[i]}
                   </span>
                 </div>
-                {i < 3 && (
+                {i < stepLabels.length - 1 && (
                   <div
                     className="h-px flex-1 mb-4"
                     style={{ background: isDone ? "var(--color-brand)" : "var(--color-border)" }}
@@ -538,7 +611,7 @@ export default function DailyGame() {
                 : step === "final"
                 ? isFinalSelected
                 : isGutSelected;
-            const canSelect = !isLocked && step !== "submitted" && step !== "research";
+            const canSelect = !isLocked && step !== "submitted" && step !== "research" && step !== "reason";
 
             return (
               <button
@@ -765,7 +838,20 @@ export default function DailyGame() {
                   valueB: metricsB[i]?.[1] ?? "—",
                   rawLabelB: metricsB[i]?.[0] ?? "",
                   group: metricGroupInfo(metricsA[i]?.[0] ?? metricsB[i]?.[0] ?? ""),
+                  highlighted:
+                    highlightedMetrics !== null &&
+                    highlightedMetrics.some((h) => sameLabel(h, metricLabelsA[i] ?? metricLabelsB[i] ?? "")),
                 }));
+                const priceTrendHighlighted =
+                  highlightedMetrics !== null && highlightedMetrics.some((h) => sameLabel(h, PRICE_TREND_LABEL));
+                const highlightChip = (
+                  <span
+                    className="inline-block self-start rounded-full px-1.5 py-0.5 text-[0.55rem] font-bold uppercase tracking-wider"
+                    style={{ background: "oklch(0.85 0.12 80 / 0.7)", color: "oklch(0.35 0.08 70)" }}
+                  >
+                    Highlighted
+                  </span>
+                );
                 // Only show group header bands when the game actually spans
                 // multiple groups (legacy games render exactly as before)
                 const showGroupHeaders = new Set(rows.map((r) => r.group.id)).size > 1;
@@ -776,6 +862,12 @@ export default function DailyGame() {
                       <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--color-brand)" }}>
                         Key Metrics
                       </p>
+                      {isV2 && (
+                        <p className="text-xs mb-3" style={{ color: "var(--color-muted)" }}>
+                          Mo has highlighted the four metrics where these two companies differ most today.
+                          You'll be asked which one is your reason.
+                        </p>
+                      )}
 
                       {/* Two-column comparison table */}
                       <div
@@ -826,7 +918,9 @@ export default function DailyGame() {
                             className="grid grid-cols-2"
                             style={{
                               borderBottom: i < rows.length - 1 ? "1px solid var(--color-border)" : undefined,
-                              background: i % 2 === 0 ? "var(--color-surface)" : "var(--color-surface-raised)",
+                              background: row.highlighted
+                                ? "oklch(0.95 0.07 85 / 0.55)"
+                                : i % 2 === 0 ? "var(--color-surface)" : "var(--color-surface-raised)",
                             }}
                           >
                             {/* Company A cell */}
@@ -834,6 +928,7 @@ export default function DailyGame() {
                               className="px-3 py-2.5 flex flex-col gap-0.5"
                               style={{ borderRight: "1px solid var(--color-border)" }}
                             >
+                              {row.highlighted && highlightChip}
                               <p className="text-[0.625rem] font-semibold uppercase tracking-wider" style={{ color: "var(--color-muted)" }}>
                                 {row.labelA}
                               </p>
@@ -856,10 +951,18 @@ export default function DailyGame() {
                           </div>
                         ))}
 
-                        {/* Chart CTAs */}
+                        {/* Chart CTAs (highlighted when Price trend is one of Mo's four) */}
+                        {priceTrendHighlighted && (
+                          <div className="px-3 pt-2 pb-0" style={{ borderTop: "2px solid var(--color-border)", background: "oklch(0.95 0.07 85 / 0.55)" }}>
+                            {highlightChip}
+                          </div>
+                        )}
                         <div
                           className="grid grid-cols-2"
-                          style={{ borderTop: "2px solid var(--color-border)", background: "var(--color-surface-raised)" }}
+                          style={{
+                            borderTop: "2px solid var(--color-border)",
+                            background: priceTrendHighlighted ? "oklch(0.95 0.07 85 / 0.55)" : "var(--color-surface-raised)",
+                          }}
                         >
                           {[{ ticker: tickerA, name: game.companyAName ?? "", color: "#009050" }, { ticker: tickerB, name: game.companyBName ?? "", color: "#1d4ed8" }].map((co) => (
                             <div
@@ -895,13 +998,26 @@ export default function DailyGame() {
                 className="card-glass p-4 mb-4 flex items-start gap-3"
                 style={{ borderColor: "var(--color-warning)" }}
               >
-                <Timer size={16} className="mt-0.5 shrink-0" style={{ color: "var(--color-warning)" }} />
-                <p className="text-sm" style={{ color: "var(--color-muted)" }}>
-                  After submitting your final selection, a{" "}
-                  <strong style={{ color: "var(--color-foreground)" }}>timed Research Validation Question</strong>{" "}
-                  will open worth <strong style={{ color: "var(--color-foreground)" }}>20% of your score</strong>.
-                  Study the research carefully.
-                </p>
+                {isV2 ? (
+                  <BookOpen size={16} className="mt-0.5 shrink-0" style={{ color: "var(--color-warning)" }} />
+                ) : (
+                  <Timer size={16} className="mt-0.5 shrink-0" style={{ color: "var(--color-warning)" }} />
+                )}
+                {isV2 ? (
+                  <p className="text-sm" style={{ color: "var(--color-muted)" }}>
+                    After submitting your final selection, a{" "}
+                    <strong style={{ color: "var(--color-foreground)" }}>reading check</strong>{" "}
+                    will open worth <strong style={{ color: "var(--color-foreground)" }}>{SCORE_WEIGHTS.check} points</strong>.
+                    No timer. Study the research carefully.
+                  </p>
+                ) : (
+                  <p className="text-sm" style={{ color: "var(--color-muted)" }}>
+                    After submitting your final selection, a{" "}
+                    <strong style={{ color: "var(--color-foreground)" }}>timed Research Validation Question</strong>{" "}
+                    will open worth <strong style={{ color: "var(--color-foreground)" }}>20% of your score</strong>.
+                    Study the research carefully.
+                  </p>
+                )}
               </div>
             )}
 
@@ -909,11 +1025,95 @@ export default function DailyGame() {
               className="btn-brand w-full justify-center"
               onClick={goToFinalStep}
             >
-              I've Read the Research — Make Final Pick
+              {isV2 ? "I've Read the Research — Choose My Reason" : "I've Read the Research — Make Final Pick"}
               <ArrowRight size={16} />
             </button>
           </div>
         )}
+
+        {/* ── Step: Your reason (scoring v2 only) ── */}
+        {step === "reason" && isV2 && !isLocked && (() => {
+          const options = highlightedValues(
+            (research?.metrics as Record<string, string> | null) ?? null,
+            highlightedMetrics ?? [],
+            (game.companyATicker ?? "").toUpperCase(),
+            (game.companyBTicker ?? "").toUpperCase()
+          );
+          const choiceStyle = (selected: boolean) => ({
+            background: selected ? "var(--color-brand)" : "var(--color-surface-raised)",
+            color: selected ? "var(--color-brand-foreground)" : "var(--color-foreground)",
+            border: `1px solid ${selected ? "var(--color-brand)" : "var(--color-border)"}`,
+          });
+          return (
+            <div className="card-glass p-6 animate-scale-in">
+              <div className="flex items-center gap-3 mb-4">
+                <Lightbulb size={20} style={{ color: "var(--color-brand)" }} />
+                <h3 style={{ color: "var(--color-foreground)" }}>Your Reason</h3>
+              </div>
+              <p className="text-sm font-semibold mb-3" style={{ color: "var(--color-foreground)" }}>
+                Which highlighted metric is the main reason for your pick?
+              </p>
+              <div className="flex flex-col gap-2 mb-6">
+                {options.map((o) => (
+                  <button
+                    key={o.label}
+                    type="button"
+                    onClick={() => {
+                      setReasonMetric(o.label);
+                      setReasonSide(null);
+                    }}
+                    className="px-4 py-3 rounded-xl text-sm text-left transition-all"
+                    style={choiceStyle(reasonMetric === o.label)}
+                  >
+                    <span className="font-semibold">{o.label}</span>
+                    <span className="block text-xs mt-0.5 opacity-80">
+                      {o.valueA === null
+                        ? "the chart"
+                        : `${game.companyATicker}: ${o.valueA} · ${game.companyBTicker}: ${o.valueB}`}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              {reasonMetric && (
+                <div className="mb-6">
+                  <p className="text-sm font-semibold mb-3" style={{ color: "var(--color-foreground)" }}>
+                    Which company does {reasonMetric} favor?
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    {(["A", "B"] as const).map((side) => (
+                      <button
+                        key={side}
+                        type="button"
+                        onClick={() => setReasonSide(side)}
+                        className="px-4 py-3 rounded-xl text-sm font-semibold transition-all"
+                        style={choiceStyle(reasonSide === side)}
+                      >
+                        {side === "A" ? game.companyAName : game.companyBName}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs" style={{ color: "var(--color-muted)" }}>
+                    The {SCORE_WEIGHTS.reason} reason points are yours if your final pick agrees with the company you
+                    name here, and, where a metric has a plain direction, you read it the right way round. There is
+                    no answer key for which metric matters most.
+                  </p>
+                </div>
+              )}
+
+              <button
+                className="btn-brand w-full justify-center"
+                disabled={!reasonMetric || !reasonSide}
+                onClick={() => {
+                  setStep("final");
+                  requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
+                }}
+              >
+                Continue to Final Pick <ArrowRight size={16} />
+              </button>
+            </div>
+          );
+        })()}
 
         {/* ── Step: Final ── */}
         {step === "final" && !isLocked && (
@@ -926,15 +1126,51 @@ export default function DailyGame() {
               Having reviewed the research, confirm your official prediction. This is the pick
               that will be scored.
             </p>
+            {isV2 && (
+              <div className="mb-6">
+                <p className="text-sm font-semibold mb-3" style={{ color: "var(--color-foreground)" }}>
+                  How sure are you?
+                </p>
+                <div className="grid grid-cols-3 gap-2 mb-2">
+                  {CONFIDENCE_LEVELS.map((level) => {
+                    const selected = confidence === level;
+                    return (
+                      <button
+                        key={level}
+                        type="button"
+                        onClick={() => setConfidence(level)}
+                        className="px-2 py-3 rounded-xl text-sm font-semibold transition-all"
+                        style={{
+                          background: selected ? "var(--color-brand)" : "var(--color-surface-raised)",
+                          color: selected ? "var(--color-brand-foreground)" : "var(--color-foreground)",
+                          border: `1px solid ${selected ? "var(--color-brand)" : "var(--color-border)"}`,
+                        }}
+                      >
+                        {CONFIDENCE_LABELS[level]}
+                        <span className="block text-xs font-mono mt-0.5 opacity-80">{confidencePoints(level)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-xs" style={{ color: "var(--color-muted)" }}>
+                  Points if right / if wrong. Toss-up never loses.
+                </p>
+              </div>
+            )}
             <button
               className="btn-brand w-full justify-center"
-              disabled={!finalSelection || submitFinal.isPending}
+              disabled={!finalSelection || submitFinal.isPending || (isV2 && !confidence)}
               onClick={() => {
                 if (!finalSelection || !game.id) return;
+                if (isV2 && (!reasonMetric || !reasonSide || !confidence)) return;
+                const v2Fields = isV2 && reasonMetric && reasonSide && confidence
+                  ? { reasonMetric, reasonSide, confidence }
+                  : {};
                 if (isGuest) {
                   saveGuestPick({
                     ...(guestPick ?? { gameId: game.id, gut: gutSelection ?? finalSelection, savedAt: Date.now() }),
                     final: finalSelection,
+                    ...v2Fields,
                     savedAt: Date.now(),
                   });
                   trackEvent("guest_final_pick");
@@ -942,7 +1178,7 @@ export default function DailyGame() {
                   else setStep("submitted");
                   return;
                 }
-                submitFinal.mutate({ gameId: game.id, selection: finalSelection });
+                submitFinal.mutate({ gameId: game.id, selection: finalSelection, ...v2Fields });
               }}
             >
               {submitFinal.isPending ? (
@@ -988,6 +1224,7 @@ export default function DailyGame() {
               Your final selection is locked in. Results will be published after the game closes.
               {justConverted && " We'll email you when they're in."}
             </p>
+            {isV2 && <V2SubmittedNote reasonMetric={reasonMetric} reasonCompany={reasonSide === "A" ? game.companyAName : reasonSide === "B" ? game.companyBName : null} />}
             {validationQ && !myPick?.validationAnswer ? (
               <button
                 className="btn-brand w-full justify-center mb-3"
@@ -1040,11 +1277,15 @@ export default function DailyGame() {
                 style={{ background: "var(--color-warning)18", border: "1px solid var(--color-warning)40" }}
               >
                 <p className="text-sm font-semibold mb-1" style={{ color: "var(--color-foreground)" }}>
-                  You can still earn bonus points
+                  {isV2 ? "You can still earn reading-check points" : "You can still earn bonus points"}
                 </p>
                 <p className="text-sm" style={{ color: "var(--color-muted)" }}>
-                  Answer the Research Validation Question to earn{" "}
-                  <strong style={{ color: "var(--color-foreground)" }}>20% of your score</strong> as a bonus.
+                  Answer the {isV2 ? "reading check" : "Research Validation Question"} to earn{" "}
+                  {isV2 ? (
+                    <strong style={{ color: "var(--color-foreground)" }}>{SCORE_WEIGHTS.check} points</strong>
+                  ) : (
+                    <strong style={{ color: "var(--color-foreground)" }}>20% of your score</strong>
+                  )}{isV2 ? "." : " as a bonus."}
                 </p>
               </div>
             )}
@@ -1523,6 +1764,37 @@ function LastGuestPickCard({ pick }: { pick: GuestPick }) {
         With a free account, today's game counts toward your score and streak, and we'll send you the result.
       </p>
       <CreateAccountButton label="Create a free account" />
+    </div>
+  );
+}
+
+
+/**
+ * Scoring v2 note under "Picks Submitted": what is already banked and what
+ * settles at the close. Weights come from SCORE_WEIGHTS, never typed here.
+ */
+function V2SubmittedNote({ reasonMetric, reasonCompany }: { reasonMetric: string | null; reasonCompany: string | null }) {
+  return (
+    <div
+      className="rounded-xl p-4 mb-5 text-left text-sm"
+      style={{ background: "var(--color-surface-raised)", border: "1px solid var(--color-border)", color: "var(--color-muted)" }}
+    >
+      {reasonMetric && reasonCompany && (
+        <p className="mb-2">
+          Your reason: <strong style={{ color: "var(--color-foreground)" }}>{reasonMetric}</strong> favors{" "}
+          <strong style={{ color: "var(--color-foreground)" }}>{reasonCompany}</strong>.
+        </p>
+      )}
+      <p className="mb-2">
+        <strong style={{ color: "var(--color-foreground)" }}>Banked before the open:</strong> your reason and your
+        reading check ({SCORE_WEIGHTS.reason} + {SCORE_WEIGHTS.check} points available).
+      </p>
+      <p className="mb-2">
+        <strong style={{ color: "var(--color-foreground)" }}>Settles at the close:</strong> the call and your confidence.
+      </p>
+      <p className="text-xs" style={{ color: "var(--color-subtle)" }}>
+        How today is scored: {SCORE_WEIGHTS.call} / {SCORE_WEIGHTS.reason} / {SCORE_WEIGHTS.conf} / {SCORE_WEIGHTS.check}
+      </p>
     </div>
   );
 }

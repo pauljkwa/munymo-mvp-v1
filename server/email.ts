@@ -1,6 +1,7 @@
 import { buildUnsubscribeUrl } from "./unsubscribe";
 import { Resend } from "resend";
 import { ENV } from "./_core/env";
+import { SCORE_WEIGHTS } from "@shared/const";
 
 // ─── Client ───────────────────────────────────────────────────────────────────
 
@@ -36,6 +37,9 @@ export type ResultPublishedData = {
   winner: "A" | "B";
   predictionScore: number;
   validationScore: number;
+  /** Scoring v2 only — present (even if 0) for v2 games, omitted for legacy 80/20 games. */
+  reasonScore?: number;
+  confidenceScore?: number;
   totalScore: number;
   resultCommentary?: string | null;
   gameDate: string;
@@ -245,6 +249,38 @@ export function buildResultPublishedEmail(data: ResultPublishedData): { subject:
        <p style="margin:0 0 20px 0;font-size:14px;color:${TEXT_MUTED};line-height:1.6;">${data.resultCommentary}</p>`
     : "";
 
+  const scoreCell = (title: string, score: number, max: number, width: string, last = false, colour: string = DEEP_GREEN) => `
+        <td style="padding:20px 8px;text-align:center;${last ? "" : `border-right:1px solid ${BORDER};`}" width="${width}">
+          ${label(title)}
+          <p style="margin:8px 0 0 0;font-size:28px;font-weight:700;color:${colour};font-family:Georgia,serif;">${score}</p>
+          <p style="margin:4px 0 0 0;font-size:11px;color:${TEXT_LABEL};">/ ${max} pts</p>
+        </td>`;
+  const isV2 = data.reasonScore !== undefined && data.confidenceScore !== undefined;
+  const scoreCardHtml = isV2
+    ? `<!-- Score card (scoring v2) -->
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color:${BG_SUBTLE};border:1px solid ${BORDER};border-radius:8px;margin:0 0 24px 0;">
+      <tr>
+        ${scoreCell("The Call", data.predictionScore, SCORE_WEIGHTS.call, "25%")}
+        ${scoreCell("Your Reason", data.reasonScore!, SCORE_WEIGHTS.reason, "25%")}
+        ${scoreCell("Confidence", data.confidenceScore!, SCORE_WEIGHTS.conf, "25%")}
+        ${scoreCell("Reading Check", data.validationScore, SCORE_WEIGHTS.check, "25%", true)}
+      </tr>
+      <tr>
+        <td colspan="4" style="padding:14px;text-align:center;border-top:1px solid ${BORDER};">
+          ${label("Total Score")}
+          <p style="margin:6px 0 0 0;font-size:28px;font-weight:700;color:${scoreColour};font-family:Georgia,serif;">${data.totalScore} <span style="font-size:11px;font-weight:400;color:${TEXT_LABEL};font-family:Arial,sans-serif;">/ 100 pts</span></p>
+        </td>
+      </tr>
+    </table>`
+    : `<!-- Score card (legacy 80/20) -->
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color:${BG_SUBTLE};border:1px solid ${BORDER};border-radius:8px;margin:0 0 24px 0;">
+      <tr>
+        ${scoreCell("Prediction", data.predictionScore, 80, "33%")}
+        ${scoreCell("Validation", data.validationScore, 20, "33%")}
+        ${scoreCell("Total Score", data.totalScore, 100, "33%", true, scoreColour)}
+      </tr>
+    </table>`;
+
   const html = emailWrapper(`
     <p style="margin:0 0 20px 0;font-size:15px;color:${TEXT_MAIN};">${greeting}</p>
     <h1 style="margin:0 0 6px 0;font-size:24px;font-weight:700;color:${DEEP_GREEN};">
@@ -254,26 +290,7 @@ export function buildResultPublishedEmail(data: ResultPublishedData): { subject:
       <strong style="color:${BRAND_GREEN};">${winnerTicker}</strong> (${winnerName}) outperformed today.
     </p>
 
-    <!-- Score card -->
-    <table width="100%" cellpadding="0" cellspacing="0" style="background-color:${BG_SUBTLE};border:1px solid ${BORDER};border-radius:8px;margin:0 0 24px 0;">
-      <tr>
-        <td style="padding:20px;text-align:center;border-right:1px solid ${BORDER};" width="33%">
-          ${label("Prediction")}
-          <p style="margin:8px 0 0 0;font-size:28px;font-weight:700;color:${DEEP_GREEN};font-family:Georgia,serif;">${data.predictionScore}</p>
-          <p style="margin:4px 0 0 0;font-size:11px;color:${TEXT_LABEL};">/ 80 pts</p>
-        </td>
-        <td style="padding:20px;text-align:center;border-right:1px solid ${BORDER};" width="33%">
-          ${label("Validation")}
-          <p style="margin:8px 0 0 0;font-size:28px;font-weight:700;color:${DEEP_GREEN};font-family:Georgia,serif;">${data.validationScore}</p>
-          <p style="margin:4px 0 0 0;font-size:11px;color:${TEXT_LABEL};">/ 20 pts</p>
-        </td>
-        <td style="padding:20px;text-align:center;" width="33%">
-          ${label("Total Score")}
-          <p style="margin:8px 0 0 0;font-size:28px;font-weight:700;color:${scoreColour};font-family:Georgia,serif;">${data.totalScore}</p>
-          <p style="margin:4px 0 0 0;font-size:11px;color:${TEXT_LABEL};">/ 100 pts</p>
-        </td>
-      </tr>
-    </table>
+    ${scoreCardHtml}
 
     ${commentaryBlock}
     ${divider}
@@ -487,7 +504,7 @@ export function buildWelcomeEmail(data: WelcomeData): { subject: string; html: s
           <p style="margin:10px 0 0 0;font-size:14px;color:${TEXT_MUTED};line-height:1.8;">
             <strong style="color:${TEXT_MAIN};">1.</strong> Gut pick — choose a winner on instinct alone<br/>
             <strong style="color:${TEXT_MAIN};">2.</strong> Read the research brief and charts<br/>
-            <strong style="color:${TEXT_MAIN};">3.</strong> Lock in your final pick + answer one timed question<br/>
+            <strong style="color:${TEXT_MAIN};">3.</strong> Lock in your final pick, name your reason and confidence, and answer one reading-check question<br/>
             <strong style="color:${TEXT_MAIN};">4.</strong> See the result after market close
           </p>
         </td>

@@ -145,7 +145,7 @@ export default function Leaderboard() {
             </p>
             <p className="text-xs mb-6" style={{ color: "var(--color-subtle)" }}>
               <Dices size={11} className="inline -mt-0.5 mr-1" />
-              <strong>Coin Flip</strong> is a bot that picks at random and guesses the question. It's on
+              <strong>Coin Flip</strong> is a bot that picks at random and always says Toss-up. It's on
               every board so you can see whether you're beating chance. Tied totals share a position;
               among ties, the higher average is listed first.
             </p>

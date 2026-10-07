@@ -386,7 +386,7 @@ export async function createOrReviveGame(
   cancelledRow?: { id: number }
 ): Promise<number> {
   if (cancelledRow) {
-    await updateGame(cancelledRow.id, { ...fields, winner: null, resultSummary: null });
+    await updateGame(cancelledRow.id, { ...fields, winner: null, resultSummary: null, dayKind: null });
     return cancelledRow.id;
   }
   return createGame(fields);
@@ -491,11 +491,24 @@ export async function upsertGutSelection(userId: number, gameId: number, selecti
 export async function upsertFinalSelection(
   userId: number,
   gameId: number,
-  selection: "A" | "B"
+  selection: "A" | "B",
+  v2?: {
+    reasonMetric?: string | null;
+    reasonSide?: "A" | "B" | null;
+    confidence?: "tossup" | "leaning" | "confident" | null;
+  }
 ) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const now = new Date();
+  // Scoring v2 fields only written when supplied (legacy games / guest replay omit them)
+  const v2Fields = v2
+    ? {
+        reasonMetric: v2.reasonMetric ?? null,
+        reasonSide: v2.reasonSide ?? null,
+        confidence: v2.confidence ?? null,
+      }
+    : {};
   await db
     .insert(playerPicks)
     .values({
@@ -503,11 +516,13 @@ export async function upsertFinalSelection(
       gameId,
       finalSelection: selection,
       finalSubmittedAt: now,
+      ...v2Fields,
     })
     .onDuplicateKeyUpdate({
       set: {
         finalSelection: selection,
         finalSubmittedAt: now,
+        ...v2Fields,
       },
     });
 }
@@ -557,15 +572,19 @@ export async function insertDailyScore(
   userId: number,
   gameId: number,
   predictionScore: number,
-  validationScore: number
+  validationScore: number,
+  reasonScore = 0,
+  confidenceScore = 0
 ) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const totalScore = predictionScore + validationScore;
+  const totalScore = predictionScore + validationScore + reasonScore + confidenceScore;
   await db
     .insert(dailyScores)
-    .values({ userId, gameId, predictionScore, validationScore, totalScore })
-    .onDuplicateKeyUpdate({ set: { predictionScore, validationScore, totalScore, calculatedAt: new Date() } });
+    .values({ userId, gameId, predictionScore, validationScore, reasonScore, confidenceScore, totalScore })
+    .onDuplicateKeyUpdate({
+      set: { predictionScore, validationScore, reasonScore, confidenceScore, totalScore, calculatedAt: new Date() },
+    });
 }
 
 export async function getPlayerScoreHistory(userId: number) {
@@ -578,6 +597,8 @@ export async function getPlayerScoreHistory(userId: number) {
       gameId: dailyScores.gameId,
       predictionScore: dailyScores.predictionScore,
       validationScore: dailyScores.validationScore,
+      reasonScore: dailyScores.reasonScore,
+      confidenceScore: dailyScores.confidenceScore,
       totalScore: dailyScores.totalScore,
       calculatedAt: dailyScores.calculatedAt,
       gameDate: dailyGames.gameDate,

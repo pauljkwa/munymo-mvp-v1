@@ -21,6 +21,10 @@ export interface ShareResultInput {
   validationAnswered: boolean;
   totalScore: number;
   currentStreak: number;
+  /** Scoring v2 result: share text drops the timed-quiz marker. */
+  v2?: boolean;
+  /** "Toss-up" / "Leaning" / "Confident"; null when none was recorded. */
+  confidenceLabel?: string | null;
 }
 
 export function buildShareText(r: ShareResultInput): string {
@@ -28,8 +32,17 @@ export function buildShareText(r: ShareResultInput): string {
   const date = d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
   const gut = r.gutCorrect === null ? "🧠➖" : r.gutCorrect ? "🧠✅" : "🧠❌";
   const fin = r.finalCorrect ? "🔬✅" : "🔬❌";
-  const val = r.validationAnswered ? `⏱${r.validationScore}` : "⏱➖";
   const streak = r.currentStreak > 1 ? `\n🔥 ${r.currentStreak}-day streak` : "";
+  if (r.v2) {
+    const verdict = r.finalCorrect ? "called it" : "missed it";
+    const conf = r.confidenceLabel ? ` · ${r.confidenceLabel}` : "";
+    return (
+      `Munymo · ${date} · ${r.tickerA} vs ${r.tickerB}\n` +
+      `${gut} ${fin} → ${r.totalScore}/100 · ${verdict}${conf}${streak}\n` +
+      `https://munymo.com/game/${r.gameId}/result`
+    );
+  }
+  const val = r.validationAnswered ? `⏱${r.validationScore}` : "⏱➖";
   return (
     `Munymo · ${date} · ${r.tickerA} vs ${r.tickerB}\n` +
     `${gut} ${fin} ${val} → ${r.totalScore} pts${streak}\n` +

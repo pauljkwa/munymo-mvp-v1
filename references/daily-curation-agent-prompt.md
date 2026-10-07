@@ -50,7 +50,7 @@ Record:
 - `companyAStartPrice` / `companyAEndPrice` — Company A's actual $ price at today's session open and close
 - `companyBStartPrice` / `companyBEndPrice` — Company B's actual $ price at today's session open and close
 - `resultSummary` — 2–3 sentence explanation of why the winner won today (use real data: earnings, news, sector moves)
-- `hindsightSpotlight` — 3–5 paragraph educational debrief. Include: what drove the result, what the research said vs what happened, analyst consensus at close, key lesson for investors, and what to watch going forward
+- `hindsightSpotlight` — 3–5 paragraph educational debrief. Include: what drove the result, what the research said vs what happened, analyst consensus at close, key lesson for investors, and what to watch going forward. **It must open with one sentence that classifies the day** by the gap between the two open-to-close moves (the same thresholds the server uses): under 0.25 percentage points = "a coin toss"; 0.25 up to 1 point = "clear"; 1 point or more = "decisive". On a coin-toss day, say plainly that the result is too close to carry a lesson about the companies, BEFORE explaining how each stock traded.
 
 ---
 
@@ -104,6 +104,8 @@ For each company, gather the following metrics. Use Yahoo Finance, financial new
 
 Every value must stand alone without relative time words — anchor dates explicitly.
 
+**Highlighted metrics (`highlightedMetrics`):** Pick EXACTLY four metrics where the two companies differ most meaningfully today. Players are asked to choose which highlighted metric is the main reason for their pick. Each entry is a metric label WITHOUT the ticker prefix — one of `Market Cap`, `P/E Ratio`, `Revenue Growth`, `Analyst Consensus`, `Next Earnings`, `Beta`, `Last Session Move`, `vs 52-Week High` — or `Price trend` (the 20-session chart). All four must be different. `Price trend` qualifies only when the two companies' 20-session moves differ by more than 10 percentage points, or one chart shows an event the other lacks. Never choose a metric where both values are the same or either is "No confirmed date". If the list is invalid the game falls back to the legacy scoring for that day.
+
 **Pairing Rationale:** Write 2–3 sentences explaining what is happening in the market **today specifically** that makes this matchup timely. Reference the actual news event, earnings release, analyst call, sector move, or macro development from the last 48 hours that motivated this pick. This is not a description of the companies or their general rivalry — it is the reason a player opening the app today will immediately understand why *these two, right now*. If you cannot point to a specific recent event, you have chosen the wrong companies.
 
 **Research Content:** Write 4–6 paragraphs of balanced research covering:
@@ -127,6 +129,8 @@ Avoid all financial jargon (P/E ratio, EPS, TTM, EBITDA, etc.). Write as if expl
 
 ## Step 5 — Write the Validation Question
 
+The validation question is an untimed **reading check**. Write ONE **comparative** question whose answer needs both columns of the metrics panel (or both price charts) — for example "Which company's shares are closer to their 52-week high?" Never ask for a fact that can be lifted from the written brief or from one company's figures alone, and never write a question about the charts if `Price trend` is one of your highlighted metrics. There is no timer and no speed element; do not mention timing.
+
 Vary the question type — do not default to multiple choice every day. The recent games list includes each game's `questionType` (may be `null` for older games). Look at the most recently used type and pick a **different** one this time, chosen randomly between the other two eligible types (don't just alternate in a fixed order — keep it unpredictable, but never repeat the immediately-previous type). If there is no prior game or no type history, pick any of the three at random.
 
 - **multiple_choice**: 4 options, one clearly correct answer, three plausible distractors. `correctAnswer` must be the **exact text** of one of the four options. `options` is the array of 4 strings.
@@ -135,14 +139,14 @@ Vary the question type — do not default to multiple choice every day. The rece
 **Answer distribution — this matters more than it sounds.** Left alone, a model writing a
 question thinks of the correct answer first and then invents distractors, so the correct
 option ends up first almost every time; and it tends to write statements that happen to be
-TRUE. A player who notices either pattern scores the full validation 20% without reading
-the research, which defeats the point of the question.
+TRUE. A player who notices either pattern collects the reading-check points without reading
+the panel, which defeats the point of the question.
 
 - **multiple_choice**: do not worry about option order — the server reshuffles the options
   before a player ever sees them, so position carries no information. Focus on making all
   three distractors genuinely plausible to someone who skimmed rather than read.
 - **true_false**: aim for roughly half your statements to be FALSE over time. A false
-  statement should be false by one specific, checkable detail drawn from the research (a
+  statement should be false by one specific, checkable detail drawn from the metrics panel (a
   wrong direction, a swapped company, an inverted comparison) — not vague or trivially
   absurd.
 - **yes_no**: likewise, roughly half should be "No". Ask something whose honest answer
@@ -152,10 +156,9 @@ Never signal the answer in the phrasing (hedges like "may" or "could" reading as
 absolutes like "always"/"never" reading as False).
 
 Whichever type you choose, the question must:
-- Test a specific, verifiable fact about one of the two companies
-- Be answerable from the research content you wrote
+- Compare the two companies using figures from the metrics panel (or both charts)
 - Have one clearly correct answer
-- Be educational — teach the player something meaningful about investing or the companies
+- Be educational — teach the player how to read the panel
 
 ---
 
@@ -240,6 +243,7 @@ The JSON structure to POST:
       "<CompanyB ticker> Last Session Move": "<+/-X.X% (Mon DD)>",
       "<CompanyB ticker> vs 52-Week High": "<X% below high>"
     },
+    "highlightedMetrics": ["<label>", "<label>", "<label>", "<label>"],
     "validationQuestion": {
       "questionType": "multiple_choice | true_false | yes_no  (see Step 5 — vary this, don't always use multiple_choice)",
       "questionText": "<question text>",

@@ -321,7 +321,7 @@ export default function AdminEditGame() {
           <div className="flex items-center gap-2 mb-4">
             <HelpCircle size={16} style={{ color: "var(--color-brand)" }} />
             <h2 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-brand)" }}>
-              Validation Question (20% of Daily Score)
+              Reading Check Question
             </h2>
           </div>
           <div className="flex flex-col gap-4">

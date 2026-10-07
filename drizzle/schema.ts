@@ -92,6 +92,19 @@ export const dailyGames = mysqlTable(
     resultSummary: text("resultSummary"), // short paragraph summary of the matchup outcome
     hindsightSpotlight: text("hindsightSpotlight"), // educational debrief with 20/20 hindsight
     resultCommentary: text("resultCommentary"), // legacy field kept for compatibility
+    /**
+     * Scoring v2 (approved by Paul 2026-10-07). Mo's four metrics for the day —
+     * the ones where the two companies differ most — by panel label (e.g.
+     * "P/E Ratio"), with "Price trend" allowed for the chart. The player's
+     * "your reason" step is chosen from these four.
+     */
+    highlightedMetrics: json("highlightedMetrics").$type<string[] | null>(),
+    /**
+     * Set at settlement from the open-to-close margin: "coin_toss" below
+     * DAY_KIND_COIN_TOSS_MARGIN_PCT_POINTS, "clear" below 1 point, else
+     * "decisive". The Hindsight Spotlight opens by naming it.
+     */
+    dayKind: mysqlEnum("dayKind", ["coin_toss", "clear", "decisive"]),
     lockoutAt: timestamp("lockoutAt"), // server-enforced deadline
     publishedAt: timestamp("publishedAt"),
     cancelledAt: timestamp("cancelledAt"),
@@ -204,6 +217,16 @@ export const playerPicks = mysqlTable(
     gutSubmittedAt: timestamp("gutSubmittedAt"),
     finalSelection: mysqlEnum("finalSelection", ["A", "B"]), // null until submitted
     finalSubmittedAt: timestamp("finalSubmittedAt"),
+    /**
+     * Scoring v2 "your reason": one of the game's highlightedMetrics and the
+     * company the player says it favors. Marked on consistency with
+     * finalSelection (and, where the metric has an objective direction, on
+     * reading it the right way round). Never marked against the market result.
+     */
+    reasonMetric: varchar("reasonMetric", { length: 64 }),
+    reasonSide: mysqlEnum("reasonSide", ["A", "B"]),
+    /** Scoring v2 confidence on the final pick; Coin Flip always declares tossup. */
+    confidence: mysqlEnum("confidence", ["tossup", "leaning", "confident"]),
     validationAnswer: varchar("validationAnswer", { length: 256 }),
     validationAnswerTimeMs: int("validationAnswerTimeMs"), // ms from question display to answer submit
     validationSubmittedAt: timestamp("validationSubmittedAt"),
@@ -223,9 +246,15 @@ export type InsertPlayerPick = typeof playerPicks.$inferInsert;
 
 /**
  * Calculated server-side only, never accepted from client.
- * predictionScore: 0 or 80 (correct/incorrect Final Selection)
- * validationScore: 0 or 20 (correct/incorrect validation answer)
- * totalScore: predictionScore + validationScore (0–100)
+ *
+ * Scoring v2 (from 2026-10-08; weights in shared/const SCORE_WEIGHTS):
+ *   predictionScore: the call (0 or SCORE_WEIGHTS.call)
+ *   reasonScore:     "your reason" (0 or SCORE_WEIGHTS.reason)
+ *   confidenceScore: from the published confidence table
+ *   validationScore: reading check (0 or SCORE_WEIGHTS.check; no time decay)
+ *   totalScore:      the sum (0–100)
+ * Rows scored before v2 keep their 80/20 numbers; reasonScore and
+ * confidenceScore are 0 there (Discussion 8: the past is left as it was).
  */
 export const dailyScores = mysqlTable(
   "daily_scores",
@@ -233,8 +262,10 @@ export const dailyScores = mysqlTable(
     id: int("id").autoincrement().primaryKey(),
     userId: int("userId").notNull(),
     gameId: int("gameId").notNull(),
-    predictionScore: int("predictionScore").notNull().default(0), // 0 or 80
-    validationScore: int("validationScore").notNull().default(0), // 0 or 20
+    predictionScore: int("predictionScore").notNull().default(0),
+    validationScore: int("validationScore").notNull().default(0),
+    reasonScore: int("reasonScore").notNull().default(0),
+    confidenceScore: int("confidenceScore").notNull().default(0),
     totalScore: int("totalScore").notNull().default(0), // 0–100
     calculatedAt: timestamp("calculatedAt").defaultNow().notNull(),
   },

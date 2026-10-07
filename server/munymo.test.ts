@@ -15,8 +15,11 @@ import {
   computeProjectedRank,
   computeAverageDailyScore,
   LEADERBOARD_QUALIFICATION_THRESHOLD,
+  calculateScoreV2,
+  objectiveSideForMetric,
+  classifyDay,
 } from "./scoring";
-import { LEADERBOARD_QUALIFICATION_GAMES } from "@shared/const";
+import { LEADERBOARD_QUALIFICATION_GAMES, SCORE_WEIGHTS } from "@shared/const";
 
 // ─── Score Calculation ────────────────────────────────────────────────────────
 describe("calculateScore — 80/20 model (production function)", () => {
@@ -74,6 +77,114 @@ describe("calculateScore — 80/20 model (production function)", () => {
     const r = calculateScore("A", "A", "Yes", "Yes", 40_000);
     expect(r.validationScore).toBeGreaterThan(12);
     expect(r.validationScore).toBeLessThan(20);
+  });
+});
+
+// ─── Scoring v2 (2026-10-07) ──────────────────────────────────────────────────
+describe("Scoring v2 (2026-10-07)", () => {
+  const base = { winner: "A" as const, correctAnswer: "Yes", validationAnswer: "No" };
+
+  it("SCORE_WEIGHTS sums to 100", () => {
+    expect(SCORE_WEIGHTS.call + SCORE_WEIGHTS.reason + SCORE_WEIGHTS.conf + SCORE_WEIGHTS.check).toBe(100);
+  });
+
+  it("confidence points: right call", () => {
+    const pts = (c: "tossup" | "leaning" | "confident") =>
+      calculateScoreV2({ ...base, finalSelection: "A", confidence: c }).confidenceScore;
+    expect(pts("tossup")).toBe(14);
+    expect(pts("leaning")).toBe(18);
+    expect(pts("confident")).toBe(20);
+  });
+
+  it("confidence points: wrong call", () => {
+    const pts = (c: "tossup" | "leaning" | "confident") =>
+      calculateScoreV2({ ...base, finalSelection: "B", confidence: c }).confidenceScore;
+    expect(pts("tossup")).toBe(14);
+    expect(pts("leaning")).toBe(10);
+    expect(pts("confident")).toBe(4);
+  });
+
+  it("call is 40 when right, 0 when wrong", () => {
+    expect(calculateScoreV2({ ...base, finalSelection: "A" }).predictionScore).toBe(40);
+    expect(calculateScoreV2({ ...base, finalSelection: "B" }).predictionScore).toBe(0);
+  });
+
+  it("reason: consistent with final pick scores 25, inconsistent scores 0", () => {
+    const ok = calculateScoreV2({ ...base, finalSelection: "B", reasonMetric: "P/E Ratio", reasonSide: "B" });
+    const bad = calculateScoreV2({ ...base, finalSelection: "B", reasonMetric: "P/E Ratio", reasonSide: "A" });
+    expect(ok.reasonScore).toBe(25);
+    expect(bad.reasonScore).toBe(0);
+  });
+
+  it("reason: scored on consistency, not on the market result", () => {
+    const wrongCall = calculateScoreV2({ ...base, finalSelection: "B", reasonMetric: "Beta", reasonSide: "B" });
+    expect(wrongCall.predictionScore).toBe(0);
+    expect(wrongCall.reasonScore).toBe(25);
+  });
+
+  it("reason: objective-direction miss scores 0 even when consistent with the pick", () => {
+    const miss = calculateScoreV2({
+      ...base, finalSelection: "A", reasonMetric: "Revenue Growth", reasonSide: "A", objectiveSide: "B",
+    });
+    expect(miss.reasonScore).toBe(0);
+    const hit = calculateScoreV2({
+      ...base, finalSelection: "A", reasonMetric: "Revenue Growth", reasonSide: "A", objectiveSide: "A",
+    });
+    expect(hit.reasonScore).toBe(25);
+  });
+
+  it("a pick with null reason and confidence scores 0 on both but still gets call + check", () => {
+    const r = calculateScoreV2({
+      finalSelection: "A", winner: "A", reasonMetric: null, reasonSide: null, confidence: null,
+      validationAnswer: "Yes", correctAnswer: "Yes",
+    });
+    expect(r.reasonScore).toBe(0);
+    expect(r.confidenceScore).toBe(0);
+    expect(r.predictionScore).toBe(40);
+    expect(r.validationScore).toBe(15);
+    expect(r.totalScore).toBe(55);
+  });
+
+  it("a perfect day is 100 and the total is the sum of the four parts", () => {
+    const r = calculateScoreV2({
+      finalSelection: "A", winner: "A", reasonMetric: "P/E Ratio", reasonSide: "A", confidence: "confident",
+      validationAnswer: "Yes", correctAnswer: "Yes",
+    });
+    expect(r.totalScore).toBe(100);
+    expect(r.totalScore).toBe(r.predictionScore + r.reasonScore + r.confidenceScore + r.validationScore);
+  });
+});
+
+describe("objectiveSideForMetric", () => {
+  it("Revenue Growth: higher growth wins (A)", () => {
+    expect(objectiveSideForMetric("Revenue Growth", "+36% YoY", "+34% YoY")).toBe("A");
+  });
+  it("Revenue Growth: higher growth wins (B), with decimals and suffixes", () => {
+    expect(objectiveSideForMetric("Revenue Growth", "+7.7% (YoY, FY2026E)", "+13.8% (YoY, FY2026E)")).toBe("B");
+  });
+  it("equal values give null", () => {
+    expect(objectiveSideForMetric("Revenue Growth", "+10% YoY", "+10% YoY")).toBeNull();
+  });
+  it("metrics without a safe direction give null", () => {
+    expect(objectiveSideForMetric("P/E Ratio", "25.1", "31.4")).toBeNull();
+  });
+  it("missing value gives null", () => {
+    expect(objectiveSideForMetric("Revenue Growth", undefined, "+34% YoY")).toBeNull();
+    expect(objectiveSideForMetric("Revenue Growth", "+36% YoY", undefined)).toBeNull();
+  });
+});
+
+describe("classifyDay boundaries", () => {
+  it("0.249 is a coin toss", () => expect(classifyDay(0.249, 0)).toBe("coin_toss"));
+  it("0.25 is clear", () => expect(classifyDay(0.25, 0)).toBe("clear"));
+  it("0.999 is clear", () => expect(classifyDay(0.999, 0)).toBe("clear"));
+  it("1.0 is decisive", () => expect(classifyDay(1.0, 0)).toBe("decisive"));
+  it("uses the absolute gap, order and sign independent", () => {
+    expect(classifyDay(0, 0.249)).toBe("coin_toss");
+    expect(classifyDay(-0.1, 0.1)).toBe("coin_toss");
+    expect(classifyDay(-1.5, -0.4)).toBe("decisive");
+    expect(classifyDay(-2, 1)).toBe("decisive");
+    expect(classifyDay(-0.5, -0.1)).toBe("clear");
   });
 });
 
