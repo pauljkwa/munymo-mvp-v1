@@ -48,6 +48,7 @@ import {
   getAuditLog,
   getCommunityStats,
   getGameById,
+  getPublishedGameBySlug,
   getLeaderboard,
   getLeaderboardStatForUser,
   getProvisionalLeaderboard,
@@ -102,6 +103,7 @@ import {
 } from "./db";
 import { ALL_LESSON_IDS } from "@shared/lessonIds";
 import { pingIndexNow } from "./_core/indexNow";
+import { archivePath } from "@shared/slugs";
 import {
   MARKET_CODES,
   MAX_MARKET_PICKS,
@@ -153,6 +155,15 @@ const gamesRouter = router({
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const game = await getGameById(input.id);
+      if (!game) throw new TRPCError({ code: "NOT_FOUND" });
+      return game;
+    }),
+
+  // Archive pages are addressed by descriptive slug (shared/slugs.ts).
+  getBySlug: publicProcedure
+    .input(z.object({ slug: z.string().max(120) }))
+    .query(async ({ input }) => {
+      const game = await getPublishedGameBySlug(input.slug);
       if (!game) throw new TRPCError({ code: "NOT_FOUND" });
       return game;
     }),
@@ -1033,7 +1044,11 @@ async function closeAndScoreGame(
   });
 
   // 8. Announce the new archive page to Bing (IndexNow). Fire-and-forget.
-  void pingIndexNow([`https://munymo.com/research/${gameId}`]);
+  // Looked up after the write so the URL uses the published row; never awaited,
+  // so a lookup failure can't fail a settlement that already succeeded.
+  void getGameById(gameId)
+    .then((g) => g && pingIndexNow([`https://munymo.com${archivePath(g)}`]))
+    .catch(() => {});
 
   return { scoredPicks, winner, settlementWarnings: settlement.warnings };
 }

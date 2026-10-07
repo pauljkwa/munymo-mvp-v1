@@ -1,4 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import { lessonPath } from "@shared/slugs";
 import { trpc } from "@/lib/trpc";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import PublicLayout from "@/components/PublicLayout";
@@ -110,7 +111,7 @@ export default function LearningHub() {
                     {level.lessons.map((lesson) => (
                       <Link
                         key={lesson.id}
-                        href={`/learn/${lesson.id}`}
+                        href={lessonPath(lesson.id)}
                         className="flex items-center justify-between gap-3 px-5 py-3 text-sm transition-colors hover:bg-[var(--color-surface-raised)]"
                         style={{ borderBottom: "1px solid var(--color-border)" }}
                       >

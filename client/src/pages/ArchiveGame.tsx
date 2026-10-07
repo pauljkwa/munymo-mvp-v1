@@ -8,19 +8,45 @@ import { Link } from "wouter";
 import { ArrowLeft, Trophy, BookOpen, Users, Loader2, HelpCircle, Lightbulb, ExternalLink, BarChart2 } from "lucide-react";
 import ResearchMetricsPanel from "@/components/ResearchMetricsPanel";
 import { ChartSheet } from "@/components/ChartSheet";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { archivePath, archiveSlug } from "@shared/slugs";
 
 export default function ArchiveGame() {
-  const { id } = useParams<{ id: string }>();
-  const gameId = parseInt(id ?? "0", 10);
+  // Either a descriptive slug (/research/fcx-vs-scco-2026-07-28) or a legacy
+  // numeric id from an old in-app link — see shared/slugs.ts.
+  const { id: segment = "" } = useParams<{ id: string }>();
+  const isLegacyId = /^\d+$/.test(segment);
 
-  const { data: game, isLoading } = trpc.games.getById.useQuery({ id: gameId });
+  const byId = trpc.games.getById.useQuery(
+    { id: parseInt(segment, 10) },
+    { enabled: isLegacyId }
+  );
+  const bySlug = trpc.games.getBySlug.useQuery(
+    { slug: segment },
+    { enabled: !isLegacyId && !!segment, retry: false }
+  );
+  const game = isLegacyId ? byId.data : bySlug.data;
+  const isLoading = isLegacyId ? byId.isLoading : bySlug.isLoading;
+  const gameId = game?.id ?? 0;
+
+  // Keep the address bar on the canonical slug, so shares and bookmarks
+  // carry the descriptive URL. Unpublished games keep their numeric URL.
+  const utils = trpc.useUtils();
+  useEffect(() => {
+    if (isLegacyId && game?.status === "result_published") {
+      // The router re-renders on the new URL; seed the slug query so it
+      // doesn't flash a spinner while re-fetching the game it already has.
+      utils.games.getBySlug.setData({ slug: archiveSlug(game) }, game);
+      window.history.replaceState(window.history.state, "", archivePath(game) + window.location.search);
+    }
+  }, [isLegacyId, game, utils]);
+
   const { data: research } = trpc.games.getResearch.useQuery(
     { gameId },
     { enabled: !!gameId }
   );
-  const { data: communityStats } = trpc.games.getCommunityStats.useQuery({ gameId });
-  const { data: validationQ } = trpc.games.getValidationQuestion.useQuery({ gameId });
+  const { data: communityStats } = trpc.games.getCommunityStats.useQuery({ gameId }, { enabled: !!gameId });
+  const { data: validationQ } = trpc.games.getValidationQuestion.useQuery({ gameId }, { enabled: !!gameId });
   // Fire-and-forget: log clicks on the source-article link for referral reporting.
   const recordOutboundClick = trpc.games.recordOutboundClick.useMutation();
   const [chartTicker, setChartTicker] = useState<string | null>(null);

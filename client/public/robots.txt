@@ -3,6 +3,13 @@ Allow: /
 Disallow: /admin
 Disallow: /dashboard
 Disallow: /profile
+# Google renders pages by running their JavaScript, and obeys robots.txt for
+# every request the page makes while rendering. The public pages load their
+# content from /api/trpc/, so it MUST stay crawlable — blocking it made every
+# archive page render as "Game not found" for Google (fixed 2026-10-07).
+# The API responses carry X-Robots-Tag: noindex, so they're never listed in
+# search results themselves.
+Allow: /api/trpc/
 Disallow: /api/
 
 Sitemap: https://munymo.com/sitemap.xml

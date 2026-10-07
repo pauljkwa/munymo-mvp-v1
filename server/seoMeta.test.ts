@@ -20,9 +20,12 @@ import {
   injectCrawlContent,
   stripUnconfiguredAnalytics,
   injectPageMeta,
+  injectPrefetch,
+  resolveLegacyRedirect,
   resolvePageMeta,
   type PageMeta,
 } from "./_core/seo";
+import { archivePath, archiveSlugDate, lessonIdFromSegment, lessonPath, LESSON_SLUGS } from "@shared/slugs";
 
 const DEFAULT_TITLE = "Munymo — Free Daily Stock Market Prediction Game";
 
@@ -57,13 +60,19 @@ describe("resolvePageMeta — route table", () => {
     expect(meta.title).toBe(`${first.title} — Learn the Stock Market | Munymo`);
     expect(meta.status).toBe(200);
 
+    // Descriptive slug resolves to the same lesson, with the slug as canonical.
+    const bySlug = await resolvePageMeta(lessonPath(first.id));
+    expect(bySlug.title).toBe(meta.title);
+    expect(bySlug.canonical).toBe(`https://munymo.com${lessonPath(first.id)}`);
+    expect(meta.canonical).toBe(bySlug.canonical);
+
     const missing = await resolvePageMeta("/learn/does-not-exist");
     expect(missing.status).toBe(404);
     expect(missing.noindex).toBe(true);
   });
 
   it("unknown routes return 404 + noindex (kills soft-404s)", async () => {
-    for (const p of ["/this-page-does-not-exist", "/research/not-a-number", "/404"]) {
+    for (const p of ["/this-page-does-not-exist", "/research/not-a-number", "/research/fcx-vs-scco", "/404"]) {
       const meta = await resolvePageMeta(p);
       expect(meta.status, p).toBe(404);
       expect(meta.noindex, p).toBe(true);
@@ -154,7 +163,7 @@ describe("buildCrawlLinks — server-rendered internal links", () => {
     const lessons = ALL_LEVELS.flatMap((l) => l.lessons);
     expect(lessons.length).toBeGreaterThan(0);
     for (const lesson of lessons) {
-      expect(html).toContain(`href="/learn/${lesson.id}"`);
+      expect(html).toContain(`href="${lessonPath(lesson.id)}"`);
     }
   });
 
@@ -304,5 +313,74 @@ describe("IndexNow payload", () => {
   it("the key file served from client/public matches the key", () => {
     const file = readFileSync(path.resolve(__dirname, "../client/public", `${INDEXNOW_KEY}.txt`), "utf8");
     expect(file.trim()).toBe(INDEXNOW_KEY);
+  });
+});
+
+// 2026-10-07: archive and lesson pages moved to descriptive URLs.
+describe("descriptive URLs (shared/slugs.ts)", () => {
+  it("builds the agreed archive slug format", () => {
+    const g = { companyATicker: "FCX", companyBTicker: "SCCO", gameDate: "2026-07-28" };
+    expect(archivePath(g)).toBe("/research/fcx-vs-scco-2026-07-28");
+    // Share-class tickers stay URL-safe and still parse.
+    const brk = { companyATicker: "BRK.B", companyBTicker: "BF-B", gameDate: "2026-08-01" };
+    expect(archivePath(brk)).toBe("/research/brk-b-vs-bf-b-2026-08-01");
+    expect(archiveSlugDate("brk-b-vs-bf-b-2026-08-01")).toBe("2026-08-01");
+    expect(archiveSlugDate("810001")).toBeNull();
+    expect(archiveSlugDate("fcx-vs-scco")).toBeNull();
+  });
+
+  it("every lesson has a unique, url-safe slug", () => {
+    const ids = ALL_LEVELS.flatMap((l) => l.lessons.map((x) => x.id));
+    expect(Object.keys(LESSON_SLUGS).sort()).toEqual([...ids].sort());
+    const slugs = Object.values(LESSON_SLUGS);
+    expect(new Set(slugs).size).toBe(slugs.length);
+    for (const slug of slugs) {
+      expect(slug).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
+      // A slug that looked like a legacy id or an archive slug would be ambiguous.
+      expect(slug).not.toMatch(/^l\d{3}-\d+$/);
+      expect(archiveSlugDate(slug)).toBeNull();
+    }
+  });
+
+  it("resolves both the slug and the legacy id to the lesson", () => {
+    expect(lessonIdFromSegment("what-a-share-actually-is")).toBe("l100-1");
+    expect(lessonIdFromSegment("l100-1")).toBe("l100-1");
+    expect(lessonIdFromSegment("l999-9")).toBeNull();
+  });
+
+  it("301s legacy lesson urls to their slug, keeping the query string", async () => {
+    expect(await resolveLegacyRedirect("/learn/l100-1")).toBe("/learn/what-a-share-actually-is");
+    expect(await resolveLegacyRedirect("/learn/l100-1?ref=email")).toBe("/learn/what-a-share-actually-is?ref=email");
+    expect(await resolveLegacyRedirect("/learn/what-a-share-actually-is")).toBeNull();
+    expect(await resolveLegacyRedirect("/learn")).toBeNull();
+    // No DB in tests: a numeric archive url can't be looked up, so it stays put.
+    expect(await resolveLegacyRedirect("/research/810001")).toBeNull();
+  });
+
+  it("emits slug links on the lesson pages themselves", async () => {
+    const first = ALL_LEVELS[0].lessons[0];
+    const html = await buildCrawlContent(lessonPath(first.id));
+    expect(html).toContain(first.title);
+    expect(html).not.toMatch(/href="\/learn\/l\d{3}-\d+"/);
+  });
+});
+
+describe("injectPrefetch", () => {
+  it("places the data script before </body>", () => {
+    const out = injectPrefetch("<html><body><div id=\"root\"></div></body></html>", "<script>x</script>");
+    expect(out).toBe("<html><body><div id=\"root\"></div><script>x</script>\n</body></html>");
+  });
+  it("is a no-op with no script", () => {
+    expect(injectPrefetch("<body></body>", "")).toBe("<body></body>");
+  });
+});
+
+describe("robots.txt — Google must be able to render pages", () => {
+  const robots = fs.readFileSync(path.resolve(import.meta.dirname, "../client/public/robots.txt"), "utf-8");
+  // Google obeys robots.txt for every request a page makes while rendering.
+  // Blocking the API made every archive page render as "Game not found" for
+  // Google and collapsed ~80 pages into one duplicate (2026-10-07).
+  it("allows the tRPC API that public pages load their content from", () => {
+    expect(robots).toMatch(/^Allow: \/api\/trpc\/$/m);
   });
 });

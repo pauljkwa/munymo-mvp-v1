@@ -1,4 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import { archivePath } from "@shared/slugs";
 import { trpc } from "@/lib/trpc";
 import AdminLayout from "@/components/AdminLayout";
 import { Link } from "wouter";
@@ -312,7 +313,7 @@ export default function AdminDashboard() {
                           )}
                           {game.status === "result_published" && (
                             <Link
-                              href={`/research/${game.id}`}
+                              href={game.status === "result_published" ? archivePath(game) : `/research/${game.id}`}
                               className="text-xs btn-ghost py-1 px-2"
                             >
                               <span className="hidden sm:inline">View </span>Archive

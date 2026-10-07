@@ -1,4 +1,5 @@
 import { trpc } from "@/lib/trpc";
+import { archivePath } from "@shared/slugs";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import PublicLayout from "@/components/PublicLayout";
 import { Link } from "wouter";
@@ -47,7 +48,7 @@ export default function ResearchHub() {
             {games.map((game) => (
               <Link
                 key={game.id}
-                href={`/research/${game.id}`}
+                href={archivePath(game)}
                 className="card-glass p-5 flex items-center justify-between gap-4 hover:border-[var(--color-brand)] transition-all duration-200 group"
               >
                 <div className="flex-1 min-w-0">

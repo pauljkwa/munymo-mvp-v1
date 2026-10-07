@@ -1,4 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import { lessonPath } from "@shared/slugs";
 import MoByline from "@/components/MoByline";
 import PerfectScoreConfetti from "@/components/PerfectScoreConfetti";
 import MoreToPlay from "@/components/MoreToPlay";
@@ -346,7 +347,7 @@ export default function GameResult() {
                   Three minutes on this lesson before tomorrow's game is the reset: it turns the
                   metrics panel into a fixed set of questions you answer the same way every day.
                 </p>
-                <Link href="/learn/l500-3" className="text-xs font-semibold" style={{ color: "var(--color-brand)" }}>
+                <Link href={lessonPath("l500-3")} className="text-xs font-semibold" style={{ color: "var(--color-brand)" }}>
                   Checklists Beat Hunches (3 min) →
                 </Link>
               </div>

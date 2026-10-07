@@ -28,6 +28,7 @@ import { BENCHMARK_BOT_ID, HIDDEN_BOT_IDS, LEADERBOARD_QUALIFICATION_GAMES, TEST
 import { rankSeasonStandings, type SeasonRow } from "@shared/leaderboard";
 import type { PickOutcome } from "@shared/insight";
 import { tallyMarketVotes, type MarketVoteTally } from "@shared/markets";
+import { archiveSlug, archiveSlugDate } from "@shared/slugs";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -317,6 +318,23 @@ export async function getGameById(id: number) {
   if (!db) return undefined;
   const result = await db.select().from(dailyGames).where(eq(dailyGames.id, id)).limit(1);
   return result[0];
+}
+
+/**
+ * A published archive game by its descriptive URL slug
+ * (fcx-vs-scco-2026-07-28). Game dates are unique, so the date finds the row
+ * and the full slug must then match — a wrong ticker pair is a 404, not a
+ * silent alias. Unpublished games never resolve: tomorrow's matchup stays private.
+ */
+export async function getPublishedGameBySlug(slug: string) {
+  const date = archiveSlugDate(slug);
+  if (!date) return undefined;
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(dailyGames).where(eq(dailyGames.gameDate, date)).limit(1);
+  const game = result[0];
+  if (!game || game.status !== "result_published" || archiveSlug(game) !== slug) return undefined;
+  return game;
 }
 
 export async function listGames(limit = 20, offset = 0) {

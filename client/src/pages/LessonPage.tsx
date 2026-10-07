@@ -5,7 +5,8 @@ import { usePageMeta } from "@/hooks/usePageMeta";
 import PublicLayout from "@/components/PublicLayout";
 import { ALL_LEVELS } from "@/content/lessons";
 import { Link, useParams } from "wouter";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { lessonIdFromSegment, lessonPath } from "@shared/slugs";
 import {
   ArrowLeft,
   ArrowRight,
@@ -19,7 +20,17 @@ import {
 const ALL_LESSONS = ALL_LEVELS.flatMap((level) => level.lessons);
 
 export default function LessonPage() {
-  const { lessonId } = useParams<{ lessonId: string }>();
+  // Descriptive slug (/learn/what-a-share-actually-is) or a legacy id
+  // (/learn/l100-1) — both resolve to the internal lesson id.
+  const { lessonId: segment = "" } = useParams<{ lessonId: string }>();
+  const lessonId = lessonIdFromSegment(segment) ?? segment;
+  // Legacy URL in the address bar → swap to the slug without a reload.
+  useEffect(() => {
+    const canonical = lessonPath(lessonId);
+    if (canonical !== `/learn/${segment}` && lessonIdFromSegment(segment)) {
+      window.history.replaceState(window.history.state, "", canonical + window.location.search);
+    }
+  }, [segment, lessonId]);
   // Keyed by lessonId so quiz state (answered/selected/result) resets when
   // navigating between lessons — the route param change alone doesn't remount.
   return <LessonView key={lessonId} lessonId={lessonId} />;
@@ -273,7 +284,7 @@ function LessonView({ lessonId }: { lessonId: string }) {
         <div className="flex items-center justify-between mt-6 animate-fade-up delay-75">
           {prevLesson ? (
             <Link
-              href={`/learn/${prevLesson.id}`}
+              href={lessonPath(prevLesson.id)}
               className="text-sm font-semibold inline-flex items-center gap-1"
               style={{ color: "var(--color-brand)" }}
             >
@@ -284,7 +295,7 @@ function LessonView({ lessonId }: { lessonId: string }) {
           )}
           {nextLesson && (
             <Link
-              href={`/learn/${nextLesson.id}`}
+              href={lessonPath(nextLesson.id)}
               className="text-sm font-semibold inline-flex items-center gap-1"
               style={{ color: "var(--color-brand)" }}
             >

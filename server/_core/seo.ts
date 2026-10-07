@@ -2,7 +2,7 @@
  * SEO — GET /sitemap.xml + server-side page metadata.
  *
  * The sitemap is served dynamically (not a static file) so it always includes
- * every published archive game under /research/:id — that list grows every
+ * every published archive game under /research/:slug — that list grows every
  * trading day, and the archive pages are the most crawlable, content-rich URLs
  * on the site. Static marketing/legal routes are listed alongside.
  *
@@ -21,6 +21,7 @@ import type { Express, Request, Response } from "express";
 // directly — unlike client components. If a lesson file ever imports runtime
 // client code, the server build breaks: split the data into shared/ instead.
 import { ALL_LEVELS } from "../../client/src/content/lessons";
+import { archivePath, archiveSlugDate, lessonIdFromSegment, lessonPath } from "@shared/slugs";
 
 const BASE_URL = "https://munymo.com";
 
@@ -93,7 +94,7 @@ async function sitemapHandler(_req: Request, res: Response) {
   try {
     const games = await getPublishedGames();
     const gameUrls = games.map((g) => ({
-      loc: `${BASE_URL}/research/${g.id}`,
+      loc: `${BASE_URL}${archivePath(g)}`,
       lastmod: g.gameDate,
     }));
 
@@ -102,7 +103,7 @@ async function sitemapHandler(_req: Request, res: Response) {
       // Individual lessons were missing from the sitemap entirely: /learn was
       // listed but none of the lesson pages beneath it.
       ...ALL_LESSONS.map(
-        (l) => `  <url><loc>${xmlEscape(`${BASE_URL}/learn/${l.id}`)}</loc></url>`
+        (l) => `  <url><loc>${xmlEscape(`${BASE_URL}${lessonPath(l.id)}`)}</loc></url>`
       ),
       ...gameUrls.map(
         (u) => `  <url><loc>${xmlEscape(u.loc)}</loc><lastmod>${u.lastmod}</lastmod></url>`
@@ -233,17 +234,18 @@ export async function resolvePageMeta(rawPath: string): Promise<PageMeta> {
 
     const lessonMatch = p.match(/^\/learn\/([^/]+)$/);
     if (lessonMatch) {
-      const lesson = ALL_LESSONS.find((l) => l.id === lessonMatch[1]);
+      const lessonId = lessonIdFromSegment(lessonMatch[1]);
+      const lesson = lessonId ? ALL_LESSONS.find((l) => l.id === lessonId) : undefined;
       if (!lesson) return defaults({ status: 404, noindex: true });
       return defaults({
         title: `${lesson.title} — Learn the Stock Market | Munymo`,
         description: `A short Munymo lesson: ${lesson.title}. Learn stock market basics and analysis skills alongside the free daily stock market game.`,
-        canonical: `${BASE_URL}${p}`,
+        canonical: `${BASE_URL}${lessonPath(lesson.id)}`,
       });
     }
 
-    const gameMatch = p.match(/^\/research\/(\d+)$/);
-    if (gameMatch) return resolveArchiveGameMeta(parseInt(gameMatch[1], 10), p);
+    const gameMatch = p.match(/^\/research\/([^/]+)$/);
+    if (gameMatch) return resolveArchiveGameMeta(gameMatch[1], p);
 
     // Anything else isn't a route the app knows — the SPA shell renders
     // NotFound, and the 404 status stops Google indexing soft-404s.
@@ -254,17 +256,31 @@ export async function resolvePageMeta(rawPath: string): Promise<PageMeta> {
   }
 }
 
-async function resolveArchiveGameMeta(id: number, p: string): Promise<PageMeta> {
-  try {
-    const { getDb } = await import("../db");
-    const db = await getDb();
-    // DB unavailable → fail open rather than 404-ing a real archive page.
-    if (!db) return defaults({ canonical: `${BASE_URL}${p}` });
+/**
+ * The game behind a /research/:segment URL — a descriptive slug, or a legacy
+ * numeric id (which the server 301s, and old in-app links still use).
+ * Returns undefined when it doesn't exist; throws only if the DB does.
+ */
+async function findArchiveGame(segment: string) {
+  const { getDb, getGameById, getPublishedGameBySlug } = await import("../db");
+  if (!(await getDb())) throw new Error("db unavailable");
+  if (/^\d+$/.test(segment)) return getGameById(parseInt(segment, 10));
+  return getPublishedGameBySlug(segment);
+}
 
-    const { dailyGames } = await import("../../drizzle/schema.js");
-    const { eq } = await import("drizzle-orm");
-    const rows = await db.select().from(dailyGames).where(eq(dailyGames.id, id)).limit(1);
-    const game = rows[0];
+async function resolveArchiveGameMeta(segment: string, p: string): Promise<PageMeta> {
+  try {
+    // Not a numeric id or a well-formed slug → can't be a game, DB or not.
+    if (!/^\d+$/.test(segment) && !archiveSlugDate(segment)) {
+      return defaults({ status: 404, noindex: true });
+    }
+    let game;
+    try {
+      game = await findArchiveGame(segment);
+    } catch {
+      // DB unavailable → fail open rather than 404-ing a real archive page.
+      return defaults({ canonical: `${BASE_URL}${p}` });
+    }
     if (!game) return defaults({ status: 404, noindex: true });
 
     // Only published games are in the sitemap; a queued future game keeps the
@@ -274,7 +290,7 @@ async function resolveArchiveGameMeta(id: number, p: string): Promise<PageMeta> 
     return defaults({
       title: `${game.companyATicker} vs ${game.companyBTicker} — Which Stock Performed Better? | Munymo`,
       description: `${game.companyAName} (${game.companyATicker}) vs ${game.companyBName} (${game.companyBTicker}), ${game.gameDate}: research brief, result, and community stats from Munymo's daily stock market game.`,
-      canonical: `${BASE_URL}${p}`,
+      canonical: `${BASE_URL}${archivePath(game)}`,
     });
   } catch (err) {
     console.error("[seo] archive game meta lookup failed:", err);
@@ -362,7 +378,7 @@ function paragraphs(text: string | null | undefined): string {
 
 function gameLink(g: ArchiveGame): { href: string; text: string } {
   return {
-    href: `/research/${g.id}`,
+    href: archivePath(g),
     // Ticker-pair anchor text, not "read more" — it is the phrase these pages
     // should rank for and the only anchor text Google gets for them.
     text: `${g.companyATicker} vs ${g.companyBTicker} — ${g.gameDate}`,
@@ -383,21 +399,21 @@ function gameLink(g: ArchiveGame): { href: string; text: string } {
  * Only result_published games render, mirroring resolveArchiveGameMeta's
  * guard, so a queued future matchup can never leak through the html.
  */
-async function buildArchiveGameContent(id: number): Promise<string> {
+async function buildArchiveGameContent(
+  game: NonNullable<Awaited<ReturnType<typeof findArchiveGame>>>
+): Promise<string> {
   const { getDb } = await import("../db");
   const db = await getDb();
   if (!db) return "";
+  if (game.status !== "result_published") return "";
 
-  const { dailyGames, gameResearch } = await import("../../drizzle/schema.js");
+  const { gameResearch } = await import("../../drizzle/schema.js");
   const { eq } = await import("drizzle-orm");
-
-  const [game] = await db.select().from(dailyGames).where(eq(dailyGames.id, id)).limit(1);
-  if (!game || game.status !== "result_published") return "";
 
   const [research] = await db
     .select()
     .from(gameResearch)
-    .where(eq(gameResearch.gameId, id))
+    .where(eq(gameResearch.gameId, game.id))
     .limit(1);
 
   const a = `${game.companyAName} (${game.companyATicker})`;
@@ -462,15 +478,17 @@ export async function buildCrawlContent(path: string): Promise<string> {
     let p = path.split("?")[0].split("#")[0];
     if (p.length > 1) p = p.replace(/\/+$/, "");
 
-    const gameMatch = p.match(/^\/research\/(\d+)$/);
+    const gameMatch = p.match(/^\/research\/([^/]+)$/);
     if (gameMatch) {
-      const content = await buildArchiveGameContent(parseInt(gameMatch[1], 10));
+      const game = await findArchiveGame(gameMatch[1]);
+      if (!game) return "";
+      const content = await buildArchiveGameContent(game);
       if (!content) return "";
       // Sibling + hub links so a crawler landing here has somewhere to go, and
       // the archive gains an internal link graph rather than a flat sitemap.
       const games = await getPublishedGames();
       const siblings = games
-        .filter((g) => `/research/${g.id}` !== p)
+        .filter((g) => g.id !== game.id)
         .slice(0, MAX_SIBLING_LINKS)
         .map(gameLink);
       return (
@@ -483,11 +501,13 @@ export async function buildCrawlContent(path: string): Promise<string> {
 
     const lessonMatch = p.match(/^\/learn\/([^/]+)$/);
     if (lessonMatch) {
-      const content = buildLessonContent(lessonMatch[1]);
+      const lessonId = lessonIdFromSegment(lessonMatch[1]);
+      if (!lessonId) return "";
+      const content = buildLessonContent(lessonId);
       if (!content) return "";
-      const others = ALL_LESSONS.filter((l) => l.id !== lessonMatch[1])
+      const others = ALL_LESSONS.filter((l) => l.id !== lessonId)
         .slice(0, MAX_SIBLING_LINKS)
-        .map((l) => ({ href: `/learn/${l.id}`, text: l.title }));
+        .map((l) => ({ href: lessonPath(l.id), text: l.title }));
       return (
         content +
         `<nav aria-label="More lessons"><h2>More lessons</h2><ul>` +
@@ -510,7 +530,7 @@ export async function buildCrawlContent(path: string): Promise<string> {
       if (!ALL_LESSONS.length) return "";
       return (
         `<nav aria-label="Lessons"><h2>Lessons</h2><ul>` +
-        linkList(ALL_LESSONS.map((l) => ({ href: `/learn/${l.id}`, text: l.title }))) +
+        linkList(ALL_LESSONS.map((l) => ({ href: lessonPath(l.id), text: l.title }))) +
         `</ul></nav>`
       );
     }
@@ -596,4 +616,127 @@ export function injectPageMeta(html: string, meta: PageMeta): string {
     out = out.replace("</title>", `</title>\n    ${extra.join("\n    ")}`);
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Legacy URL redirects
+// ---------------------------------------------------------------------------
+
+/**
+ * 301 target for a pre-slug URL, or null. /research/810001 →
+ * /research/fcx-vs-scco-2026-07-28 and /learn/l100-1 →
+ * /learn/what-a-share-actually-is, query string kept. Only published games
+ * redirect: an unpublished game's numeric URL stays put (noindex) so the
+ * slug — which names tomorrow's tickers — never leaks. Never throws.
+ */
+export async function resolveLegacyRedirect(rawUrl: string): Promise<string | null> {
+  try {
+    const [rawPath, ...q] = rawUrl.split("?");
+    const query = q.length ? `?${q.join("?")}` : "";
+    const p = rawPath.length > 1 ? rawPath.replace(/\/+$/, "") : rawPath;
+
+    const lesson = p.match(/^\/learn\/(l\d{3}-\d+)$/);
+    if (lesson) {
+      const target = lessonPath(lesson[1]);
+      return target !== p ? target + query : null;
+    }
+
+    const game = p.match(/^\/research\/(\d+)$/);
+    if (game) {
+      const { getGameById } = await import("../db");
+      const row = await getGameById(parseInt(game[1], 10));
+      if (row && row.status === "result_published") return archivePath(row) + query;
+    }
+    return null;
+  } catch (err) {
+    console.error("[seo] resolveLegacyRedirect failed:", err);
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Prefetched page data
+// ---------------------------------------------------------------------------
+
+/**
+ * The archive page's tRPC query results, embedded in the html so the app
+ * renders the page WITHOUT calling the API.
+ *
+ * WHY: Google indexes the page after running its JavaScript. Until 2026-10-07
+ * robots.txt disallowed /api/, so Google's renderer could not fetch the game,
+ * and every archive page rendered as the same "Game not found." screen with
+ * the default site title. Google then judged ~80 different pages to be one
+ * duplicate and indexed only /research/2. Search Console reported it as
+ * "Duplicate, Google chose different canonical than user" for weeks; it was
+ * only visible by rendering pages the way Googlebot does (robots.txt obeyed),
+ * which a normal browser never does. robots.txt now allows /api/trpc/ too, but
+ * a page whose content depends on a second network round-trip is fragile for
+ * any crawler, so the data now ships with the page.
+ *
+ * main.tsx seeds the query cache from this before the first render. Keys must
+ * match the useQuery calls in client/src/pages/ArchiveGame.tsx exactly.
+ */
+export async function buildPrefetch(rawUrl: string): Promise<string> {
+  try {
+    let p = rawUrl.split("?")[0].split("#")[0];
+    if (p.length > 1) p = p.replace(/\/+$/, "");
+    const m = p.match(/^\/research\/([^/]+)$/);
+    if (!m || /^\d+$/.test(m[1])) return "";
+
+    const { getPublishedGameBySlug } = await import("../db");
+    const game = await getPublishedGameBySlug(m[1]);
+    if (!game) return "";
+
+    const { appRouter } = await import("../routers");
+    const superjson = (await import("superjson")).default;
+    // Public procedures only, as a signed-out visitor.
+    const caller = appRouter.createCaller({ req: null as never, res: null as never, user: null });
+    const gameId = game.id;
+    const settle = <T>(pr: Promise<T>) => pr.catch(() => undefined);
+    const [research, communityStats, validationQ] = await Promise.all([
+      settle(caller.games.getResearch({ gameId })),
+      settle(caller.games.getCommunityStats({ gameId })),
+      settle(caller.games.getValidationQuestion({ gameId })),
+    ]);
+
+    const entries: { path: string[]; input: unknown; data: unknown }[] = [
+      { path: ["games", "getBySlug"], input: { slug: m[1] }, data: game },
+    ];
+    if (research !== undefined) entries.push({ path: ["games", "getResearch"], input: { gameId }, data: research });
+    if (communityStats !== undefined) entries.push({ path: ["games", "getCommunityStats"], input: { gameId }, data: communityStats });
+    if (validationQ !== undefined) entries.push({ path: ["games", "getValidationQuestion"], input: { gameId }, data: validationQ });
+
+    // Escaping "<" as \u003c (still valid JSON) stops "</script>" or "<!--"
+    // inside the research text from ending the tag early.
+    const json = superjson.stringify(entries).replace(/</g, "\\u003c");
+    return `<script>window.__MUNYMO_PREFETCH__=${json};</script>`;
+  } catch (err) {
+    console.error("[seo] buildPrefetch failed:", err);
+    return "";
+  }
+}
+
+/** Insert the prefetch script before </body>; the deferred app bundle reads it after parse. */
+export function injectPrefetch(html: string, script: string): string {
+  if (!script || !html.includes("</body>")) return html;
+  return html.replace("</body>", `${script}\n</body>`);
+}
+
+/**
+ * Everything the server adds to the SPA shell for one URL: head metadata,
+ * crawlable body content, and prefetched page data. Shared by the dev and
+ * production handlers in vite.ts so the two can't drift. Never throws.
+ */
+export async function decorateShell(html: string, url: string): Promise<{ status: number; html: string }> {
+  const [meta, content, prefetch] = await Promise.all([
+    resolvePageMeta(url),
+    buildCrawlContent(url),
+    buildPrefetch(url),
+  ]);
+  return {
+    status: meta.status,
+    html: stripUnconfiguredAnalytics(
+      injectPrefetch(injectCrawlContent(injectPageMeta(html, meta), content), prefetch)
+    ),
+  };
 }

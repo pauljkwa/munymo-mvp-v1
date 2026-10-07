@@ -1,4 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import { lessonPath } from "@shared/slugs";
 import MoByline from "@/components/MoByline";
 import { SignInButton, SignUpButton } from "@clerk/clerk-react";
 import { trpc } from "@/lib/trpc";
@@ -1197,7 +1198,7 @@ export default function DailyGame() {
                     {ALL_LEVELS.find((lv) => lv.level === lessonOfTheDay.level)?.goal}
                   </p>
                   <Link
-                    href={`/learn/${lessonOfTheDay.id}`}
+                    href={lessonPath(lessonOfTheDay.id)}
                     className="text-xs font-semibold inline-flex items-center gap-1 mt-1"
                     style={{ color: "var(--color-brand)" }}
                   >

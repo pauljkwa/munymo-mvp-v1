@@ -55,9 +55,14 @@ async function startServer() {
   registerCurationAgent(app);
   registerReferralRoutes(app);
   app.post("/api/scheduled/auto-submit-locked-picks", autoSubmitLockedPicksHandler);
-  // tRPC API
+  // tRPC API. robots.txt lets Google fetch it (pages need it to render), so
+  // mark every response noindex — JSON data URLs must never show in results.
   app.use(
     "/api/trpc",
+    (_req, res, next) => {
+      res.setHeader("X-Robots-Tag", "noindex");
+      next();
+    },
     createExpressMiddleware({
       router: appRouter,
       createContext,

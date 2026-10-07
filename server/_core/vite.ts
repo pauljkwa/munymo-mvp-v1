@@ -5,13 +5,7 @@ import { nanoid } from "nanoid";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import viteConfig from "../../vite.config";
-import {
-  buildCrawlContent,
-  injectCrawlContent,
-  injectPageMeta,
-  resolvePageMeta,
-  stripUnconfiguredAnalytics,
-} from "./seo";
+import { decorateShell, resolveLegacyRedirect } from "./seo";
 
 export async function setupVite(app: Express, server: Server) {
   const serverOptions = {
@@ -32,6 +26,9 @@ export async function setupVite(app: Express, server: Server) {
     const url = req.originalUrl;
 
     try {
+      const legacy = await resolveLegacyRedirect(url);
+      if (legacy) return res.redirect(301, legacy);
+
       const clientTemplate = path.resolve(
         import.meta.dirname,
         "../..",
@@ -46,14 +43,10 @@ export async function setupVite(app: Express, server: Server) {
         `src="/src/main.tsx?v=${nanoid()}"`
       );
       const page = await vite.transformIndexHtml(url, template);
-      // Same per-route title/canonical/status the production server sends, so
-      // SEO output is inspectable in dev. resolvePageMeta never throws.
-      const meta = await resolvePageMeta(url);
-      const content = await buildCrawlContent(url);
-      res
-        .status(meta.status)
-        .set({ "Content-Type": "text/html" })
-        .end(stripUnconfiguredAnalytics(injectCrawlContent(injectPageMeta(page, meta), content)));
+      // Same per-route decoration the production server sends, so SEO output
+      // is inspectable in dev. decorateShell never throws.
+      const out = await decorateShell(page, url);
+      res.status(out.status).set({ "Content-Type": "text/html" }).end(out.html);
     } catch (e) {
       vite.ssrFixStacktrace(e as Error);
       next(e);
@@ -112,16 +105,16 @@ export function serveStatic(app: Express) {
     try {
       // req.originalUrl, not req.path: inside app.use("*") Express rewrites
       // req.path relative to the matched mount.
-      const meta = await resolvePageMeta(req.originalUrl);
+      // Pre-slug URLs (/research/810001, /learn/l100-1) move permanently to
+      // their descriptive address — every old link and email keeps working.
+      const legacy = await resolveLegacyRedirect(req.originalUrl);
+      if (legacy) return res.redirect(301, legacy);
       const html = await fs.promises.readFile(indexPath, "utf-8");
-      // Server-rendered content inside the shell: without this the html Google
-      // receives is an empty div — no links on hub pages, and every leaf page
-      // byte-identical to every other (see buildCrawlContent).
-      const content = await buildCrawlContent(req.originalUrl);
-      res
-        .status(meta.status)
-        .set("Content-Type", "text/html; charset=utf-8")
-        .send(stripUnconfiguredAnalytics(injectCrawlContent(injectPageMeta(html, meta), content)));
+      // Head metadata, server-rendered content and prefetched page data: without
+      // these the html Google receives is an empty shell, and the rendered page
+      // depends on API calls (see buildPrefetch in seo.ts).
+      const out = await decorateShell(html, req.originalUrl);
+      res.status(out.status).set("Content-Type", "text/html; charset=utf-8").send(out.html);
     } catch (err) {
       // Never let SEO decoration take the site down — serve the plain shell.
       console.error("[seo] falling back to plain index.html:", err);
