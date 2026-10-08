@@ -1152,18 +1152,70 @@ const adminRouter = router({
         sector: z.string().optional(),
         pairingRationale: z.string().optional(),
         lockoutAt: z.string().datetime().optional(),
+        // Source article
+        sourceUrl: z.string().optional(),
+        sourceTitle: z.string().max(256).optional(),
+        sourcePublisher: z.string().max(128).optional(),
+        // Research + panel (keys ticker-prefixed, e.g. "VST Market Cap")
+        researchContent: z.string().optional(),
+        researchSummary: z.string().optional(),
+        researchMetrics: z.record(z.string(), z.string()).optional(),
+        // Scoring v2: exactly four labels, validated against the metrics below
+        highlightedMetrics: z.array(z.string()).length(4).optional(),
+        // Reading check question
+        questionType: z.enum(["multiple_choice", "yes_no", "true_false"]).optional(),
+        questionText: z.string().optional(),
+        options: z.array(z.string()).optional(),
+        correctAnswer: z.string().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { lockoutAt: lockoutAtStr, ...rest } = input;
-      await createGame({
+      const {
+        lockoutAt: lockoutAtStr,
+        researchContent, researchSummary, researchMetrics, highlightedMetrics,
+        questionType, questionText, options, correctAnswer,
+        ...rest
+      } = input;
+      if ((researchMetrics && Object.keys(researchMetrics).length > 0) || researchSummary) {
+        if (!researchContent) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Research metrics and summary need the full analysis text too." });
+        }
+      }
+      const hasQuestion = !!(questionText || correctAnswer);
+      if (hasQuestion && !(questionType && questionText && correctAnswer)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "The reading check needs a type, question text and correct answer." });
+      }
+      const metricsArray = researchMetrics
+        ? Object.entries(researchMetrics).map(([label, value]) => ({ label, value: String(value) }))
+        : [];
+      const validatedHighlights = highlightedMetrics
+        ? validateHighlightedMetrics(highlightedMetrics, metricsArray, rest.companyATicker, rest.companyBTicker, "admin-create-game")
+        : null;
+      const gameId = await createGame({
         ...rest,
         lockoutAt: lockoutAtStr ? new Date(lockoutAtStr) : undefined,
+        highlightedMetrics: validatedHighlights,
         createdBy: ctx.user.id,
         status: "draft",
       });
-      await writeAuditLog(ctx.user.id, "create_game", "game", undefined, JSON.stringify(input));
-      return { success: true };
+      if (researchContent) {
+        await upsertResearchWithMetrics(gameId, researchContent, metricsArray, researchSummary);
+      }
+      if (hasQuestion && questionType && questionText && correctAnswer) {
+        await upsertValidationQuestion(gameId, {
+          questionType,
+          questionText,
+          options: options && options.length > 0 ? options : undefined,
+          correctAnswer,
+        });
+      }
+      await writeAuditLog(ctx.user.id, "create_game", "game", gameId, JSON.stringify(input));
+      return {
+        success: true,
+        gameId,
+        // True when four highlights were sent but failed validation (game runs legacy scoring)
+        highlightedMetricsDropped: !!highlightedMetrics && validatedHighlights === null,
+      };
     }),
 
   activateGame: adminProcedure
@@ -1230,32 +1282,75 @@ const adminRouter = router({
         sourceTitle: z.string().max(256).optional(),
         sourcePublisher: z.string().max(128).optional(),
         lockoutAt: z.string().datetime().optional(),
+        // Scoring v2: exactly four labels, or null to clear (game then runs legacy scoring)
+        highlightedMetrics: z.array(z.string()).length(4).nullable().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { gameId, lockoutAt: lockoutAtStr, ...rest } = input;
+      const { gameId, lockoutAt: lockoutAtStr, highlightedMetrics, ...rest } = input;
       const game = await getGameById(gameId);
       if (!game) throw new TRPCError({ code: "NOT_FOUND" });
       if (game.status === "result_published" || game.status === "cancelled") {
         throw new TRPCError({ code: "FORBIDDEN", message: "Cannot edit a closed game" });
       }
-      const data = { ...rest, ...(lockoutAtStr !== undefined ? { lockoutAt: new Date(lockoutAtStr) } : {}) };
+      let highlightPatch: { highlightedMetrics: string[] | null } | Record<string, never> = {};
+      if (highlightedMetrics !== undefined) {
+        // Players pick reasons against the four on show, so they are frozen once the game is live.
+        if (game.status !== "draft") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Highlighted metrics can only change while the game is a draft" });
+        }
+        if (highlightedMetrics === null) {
+          highlightPatch = { highlightedMetrics: null };
+        } else {
+          const research = await getResearchByGameId(gameId);
+          const rows = ((research?.researchMetrics ?? []) as MetricRow[]);
+          const valid = validateHighlightedMetrics(highlightedMetrics, rows, game.companyATicker, game.companyBTicker, "admin-update-game");
+          if (!valid) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Highlighted metrics must be four different labels that exist in the saved metrics panel (or Price trend). Save the metrics first.",
+            });
+          }
+          highlightPatch = { highlightedMetrics: valid };
+        }
+      }
+      const data = { ...rest, ...highlightPatch, ...(lockoutAtStr !== undefined ? { lockoutAt: new Date(lockoutAtStr) } : {}) };
       await updateGame(gameId, data);
       await writeAuditLog(ctx.user.id, "update_game", "game", gameId, JSON.stringify(data));
       return { success: true };
     }),
 
   updateResearch: adminProcedure
-    .input(z.object({ gameId: z.number(), content: z.string().min(1), summary: z.string().optional() }))
+    .input(
+      z.object({
+        gameId: z.number(),
+        content: z.string().min(1),
+        summary: z.string().optional(),
+        // Ticker-prefixed panel metrics, e.g. "VST Market Cap". Omit to leave the saved panel untouched.
+        researchMetrics: z.record(z.string(), z.string()).optional(),
+      })
+    )
     .mutation(async ({ ctx, input }) => {
       const game = await getGameById(input.gameId);
       if (!game) throw new TRPCError({ code: "NOT_FOUND" });
       if (game.status === "result_published" || game.status === "cancelled") {
         throw new TRPCError({ code: "FORBIDDEN", message: "Cannot edit research for a closed game" });
       }
-      await upsertResearch(input.gameId, input.content, input.summary);
+      let highlightsStillValid = true;
+      if (input.researchMetrics) {
+        const metricsArray = Object.entries(input.researchMetrics).map(([label, value]) => ({ label, value: String(value) }));
+        const existing = await getResearchByGameId(input.gameId);
+        await upsertResearchWithMetrics(input.gameId, input.content, metricsArray, input.summary ?? existing?.researchSummary ?? undefined);
+        if (game.highlightedMetrics) {
+          highlightsStillValid =
+            validateHighlightedMetrics(game.highlightedMetrics, metricsArray, game.companyATicker, game.companyBTicker, "admin-update-research") !== null;
+        }
+      } else {
+        await upsertResearch(input.gameId, input.content, input.summary);
+      }
       await writeAuditLog(ctx.user.id, "update_research", "game", input.gameId);
-      return { success: true };
+      // False when the saved highlights no longer match the new panel — the editor should re-pick them
+      return { success: true, highlightsStillValid };
     }),
 
   setValidationQuestion: adminProcedure

@@ -14,7 +14,7 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["server/**/*.test.ts", "server/**/*.spec.ts"],
+    include: ["server/**/*.test.ts", "server/**/*.spec.ts", "shared/**/*.test.ts"],
     // SAFETY: the suite must never be able to reach a real database. Several
     // tests rely on "no database" to exercise failure paths — including
     // dashboard.deleteAccount, which would ERASE user 1 for real if a

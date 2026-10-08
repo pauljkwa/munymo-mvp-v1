@@ -96,19 +96,19 @@ export function ValidationModal({
     const isCorrect = result.isCorrect;
     return (
       <div
-        className="fixed inset-0 z-50 flex flex-col items-center justify-center p-8"
+        className="fixed inset-0 z-50 flex flex-col items-center justify-center p-8 overflow-y-auto"
         style={{
           background: isCorrect ? "oklch(0.28 0.12 145)" : "oklch(0.28 0.12 25)",
           color: "#fff",
         }}
       >
-        <div className="text-center max-w-sm">
+        <div className="text-center max-w-sm my-auto">
           {isCorrect ? (
             <CheckCircle2 size={80} className="mx-auto mb-6" style={{ color: "oklch(0.85 0.18 145)" }} />
           ) : (
             <XCircle size={80} className="mx-auto mb-6" style={{ color: "oklch(0.85 0.18 25)" }} />
           )}
-          <h2 className="font-display text-4xl font-bold mb-4">
+          <h2 className="font-display text-4xl font-bold mb-4" style={{ color: "#fff" }}>
             {isCorrect ? "Correct!" : "Incorrect"}
           </h2>
           {isCorrect ? (
@@ -155,12 +155,12 @@ export function ValidationModal({
   return (
     // Overlay — pointer-events blocked to prevent navigation
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto"
       style={{ background: "oklch(0 0 0 / 0.7)" }}
       onMouseDown={(e) => e.stopPropagation()}
     >
       <div
-        className="w-full max-w-md rounded-2xl p-8 shadow-2xl transition-colors duration-500"
+        className="w-full max-w-md max-h-[90vh] overflow-y-auto my-auto rounded-2xl p-8 shadow-2xl transition-colors duration-500"
         style={{ background: bgColor, color: textColor }}
       >
         {/* ── Phase: Reveal ── A guest answered before creating an account.

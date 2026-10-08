@@ -4,6 +4,7 @@ import { useParams, useLocation } from "wouter";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { Save, Play, XCircle, Loader2, HelpCircle, BookOpen } from "lucide-react";
+import { emptyGrid, joinMetrics, splitMetrics, HighlightPicker, MetricsGridFields, HIGHLIGHT_COUNT, type MetricsGrid } from "./MetricsPanelFields";
 
 export default function AdminEditGame() {
   const { id } = useParams<{ id: string }>();
@@ -17,6 +18,10 @@ export default function AdminEditGame() {
   const [researchContent, setResearchContent] = useState("");
   const [researchSummary, setResearchSummary] = useState("");
   const [lockoutAtInput, setLockoutAtInput] = useState("");
+  const [metricsGrid, setMetricsGrid] = useState<MetricsGrid>(emptyGrid());
+  // Saved panel rows that are not one of the eight standard labels — kept untouched on save
+  const [metricExtras, setMetricExtras] = useState<Record<string, string>>({});
+  const [highlights, setHighlights] = useState<string[]>([]);
   const [matchupForm, setMatchupForm] = useState({
     pairingRationale: "",
     sourceTitle: "",
@@ -34,6 +39,22 @@ export default function AdminEditGame() {
     if (research?.content) setResearchContent(research.content);
     if (research?.researchSummary) setResearchSummary(research.researchSummary);
   }, [research]);
+
+  useEffect(() => {
+    if (game) {
+      const { grid, extras } = splitMetrics(
+        (research?.metrics ?? {}) as Record<string, string>,
+        game.companyATicker,
+        game.companyBTicker
+      );
+      setMetricsGrid(grid);
+      setMetricExtras(extras);
+    }
+  }, [research, game?.companyATicker, game?.companyBTicker]);
+
+  useEffect(() => {
+    setHighlights(Array.isArray(game?.highlightedMetrics) ? (game!.highlightedMetrics as string[]) : []);
+  }, [game?.highlightedMetrics]);
 
   useEffect(() => {
     if (game) {
@@ -73,8 +94,19 @@ export default function AdminEditGame() {
   });
 
   const saveResearch = trpc.admin.updateResearch.useMutation({
-    onSuccess: () => { toast.success("Research saved."); refetchResearch(); },
+    onSuccess: (res) => {
+      toast.success("Research saved.");
+      if (res && res.highlightsStillValid === false) {
+        toast.warning("The saved highlighted metrics no longer match this panel. Re-pick them below.");
+      }
+      refetchResearch();
+    },
     onError: (e: { message: string }) => toast.error(e.message),
+  });
+
+  const saveHighlights = trpc.admin.updateGame.useMutation({
+    onSuccess: () => { toast.success("Highlighted metrics saved."); refetch(); },
+    onError: (e) => toast.error(e.message),
   });
 
   const saveMatchup = trpc.admin.updateGame.useMutation({
@@ -302,15 +334,66 @@ export default function AdminEditGame() {
             placeholder="Paste research content here. Players will see this after submitting their Gut Selection."
             className="input-field w-full resize-y"
           />
+          <h3 className="text-xs font-semibold uppercase tracking-wider mt-5 mb-3" style={{ color: "var(--color-brand)" }}>
+            Metrics Panel
+          </h3>
+          <MetricsGridFields
+            grid={metricsGrid}
+            onChange={setMetricsGrid}
+            tickerA={game.companyATicker}
+            tickerB={game.companyBTicker}
+            disabled={!isEditable}
+          />
           {isEditable && (
             <div className="flex justify-end mt-3">
               <button
-                onClick={() => saveResearch.mutate({ gameId, content: researchContent, summary: researchSummary || undefined })}
+                onClick={() => {
+                  const metrics = joinMetrics(metricsGrid, game.companyATicker, game.companyBTicker, metricExtras);
+                  saveResearch.mutate({
+                    gameId,
+                    content: researchContent,
+                    summary: researchSummary || undefined,
+                    researchMetrics: Object.keys(metrics).length > 0 ? metrics : undefined,
+                  });
+                }}
                 disabled={saveResearch.isPending}
                 className="btn-brand"
               >
                 {saveResearch.isPending ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
                 Save Research
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Highlighted Metrics */}
+        <div className="card-glass p-6 mb-5">
+          <div className="flex items-center gap-2 mb-4">
+            <BookOpen size={16} style={{ color: "var(--color-brand)" }} />
+            <h2 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-brand)" }}>
+              Highlighted Metrics
+            </h2>
+          </div>
+          <p className="text-xs mb-3" style={{ color: "var(--color-subtle)" }}>
+            The four metrics where the two companies differ most today. Players name one as the reason for their pick.
+            Save the metrics panel first. They can only change while the game is a draft; clearing all four runs the game under legacy scoring.
+          </p>
+          <HighlightPicker selected={highlights} onChange={setHighlights} disabled={game.status !== "draft"} />
+          {game.status === "draft" && (
+            <div className="flex justify-end mt-3">
+              <button
+                onClick={() => {
+                  if (highlights.length !== 0 && highlights.length !== HIGHLIGHT_COUNT) {
+                    toast.error(`Tick exactly ${HIGHLIGHT_COUNT} highlighted metrics, or none.`);
+                    return;
+                  }
+                  saveHighlights.mutate({ gameId, highlightedMetrics: highlights.length === HIGHLIGHT_COUNT ? highlights : null });
+                }}
+                disabled={saveHighlights.isPending}
+                className="btn-brand"
+              >
+                {saveHighlights.isPending ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+                Save Highlighted Metrics
               </button>
             </div>
           )}

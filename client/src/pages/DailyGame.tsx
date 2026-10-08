@@ -1,5 +1,6 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { lessonPath } from "@shared/slugs";
+import { displayCompanyName } from "@shared/companyName";
 import MoByline from "@/components/MoByline";
 import { SignInButton, SignUpButton } from "@clerk/clerk-react";
 import { trpc } from "@/lib/trpc";
@@ -83,8 +84,10 @@ function highlightedValues(
   tickerA: string,
   tickerB: string
 ): { label: string; valueA: string | null; valueB: string | null }[] {
+  // Live labels are "VST Market Cap" (space only); older games used "AMD — Market Cap".
+  // The separator is optional, or today's four never match and every value shows "—".
   const strip = (label: string, ticker: string) => {
-    const m = label.match(new RegExp(`^${ticker}\\s*[—\\-:]\\s*(.+)$`, "i"));
+    const m = label.match(new RegExp(`^${ticker}\\s*(?:[—\\-:]\\s*)?(.+)$`, "i"));
     return m ? m[1] : null;
   };
   const a = new Map<string, string>();
@@ -220,6 +223,14 @@ export default function DailyGame() {
   useEffect(() => {
     if (myPick?.finalSelection) setStep("submitted");
     else if (myPick?.gutSelection) setStep("research");
+  }, [myPick]);
+
+  // Restore the scoring v2 reason and confidence after a reload.
+  useEffect(() => {
+    if (!myPick) return;
+    if (myPick.reasonMetric) setReasonMetric(myPick.reasonMetric);
+    if (myPick.reasonSide === "A" || myPick.reasonSide === "B") setReasonSide(myPick.reasonSide);
+    if (myPick.confidence) setConfidence(myPick.confidence as ConfidenceLevel);
   }, [myPick]);
 
   // ── Guest play ──
@@ -366,6 +377,10 @@ export default function DailyGame() {
 
   const submitFinal = trpc.picks.submitFinal.useMutation({
     onSuccess: () => {
+      if (game?.id) {
+        utils.picks.getMyPick.invalidate({ gameId: game.id });
+        utils.games.getCommunityStats.invalidate({ gameId: game.id });
+      }
       // Open the validation confirmation modal
       if (validationQ) {
         setModalPhase("confirm");
@@ -379,6 +394,10 @@ export default function DailyGame() {
 
   const submitValidation = trpc.picks.submitValidation.useMutation({
     onSuccess: (data) => {
+      if (game?.id) {
+        utils.picks.getMyPick.invalidate({ gameId: game.id });
+        utils.games.getCommunityStats.invalidate({ gameId: game.id });
+      }
       setValidationResult({ isCorrect: data.isCorrect });
       setModalPhase("result");
     },
@@ -632,7 +651,7 @@ export default function DailyGame() {
               >
                 <div className="ticker-chip mx-auto mb-3">{ticker}</div>
                 <p className="font-semibold text-sm" style={{ color: "var(--color-foreground)" }}>
-                  {name}
+                  {displayCompanyName(name)}
                 </p>
                 {showSelected && (
                   <div
@@ -822,8 +841,9 @@ export default function DailyGame() {
                 metricsB = [...metricsB].sort((a, b) => metricGroupInfo(a[0]).rank - metricGroupInfo(b[0]).rank);
 
                 // Normalise metric labels to strip ticker prefix for display
+                // Separator optional: live labels are "VST Market Cap", older ones "AMD — Market Cap".
                 const shortLabel = (label: string, ticker: string) =>
-                  label.replace(new RegExp(`^${ticker}\\s*[—\\-:]\\s*`, "i"), "");
+                  label.replace(new RegExp(`^${ticker}\\s*(?:[—\\-:]\\s*)?`, "i"), "");
 
                 // Build a unified row list: [{label, valueA, valueB}]
                 const metricLabelsA = metricsA.map(([l]) => shortLabel(l, tickerA));
@@ -882,7 +902,7 @@ export default function DailyGame() {
                           {[{ ticker: tickerA, name: game.companyAName ?? "", color: "#009050" }, { ticker: tickerB, name: game.companyBName ?? "", color: "#1d4ed8" }].map((co) => (
                             <div
                               key={co.ticker}
-                              className="px-3 py-3 flex items-center gap-2"
+                              className="px-3 py-3 flex items-center gap-2 min-w-0"
                               style={{ borderRight: co.ticker === tickerA ? "1px solid var(--color-border)" : undefined }}
                             >
                               <span
@@ -891,8 +911,8 @@ export default function DailyGame() {
                               >
                                 {co.ticker}
                               </span>
-                              <span className="text-xs font-semibold leading-tight" style={{ color: "var(--color-foreground)" }}>
-                                {co.name}
+                              <span className="text-xs font-semibold leading-tight break-words min-w-0" style={{ color: "var(--color-foreground)" }}>
+                                {displayCompanyName(co.name)}
                               </span>
                             </div>
                           ))}
@@ -1191,6 +1211,23 @@ export default function DailyGame() {
         )}
 
         {/* ── Submitted ── */}
+        {step === "submitted" && isGuest && isV2 && guestPick && (
+          <div className="mb-4">
+            <YourDayCard
+              companyAName={game.companyAName}
+              companyBName={game.companyBName}
+              finalSide={guestPick.final ?? finalSelection}
+              reasonMetric={guestPick.reasonMetric ?? null}
+              reasonSide={guestPick.reasonSide ?? null}
+              confidence={guestPick.confidence ?? null}
+              quiz={
+                guestPick.quizCorrect === undefined
+                  ? guestPick.validationAnswer ? "answered" : "none"
+                  : guestPick.quizCorrect ? "correct" : "incorrect"
+              }
+            />
+          </div>
+        )}
         {step === "submitted" && isGuest && (
           <GuestAskCard
             pickName={(guestPick?.final ?? finalSelection) === "A" ? game.companyAName : game.companyBName}
@@ -1224,8 +1261,22 @@ export default function DailyGame() {
               Your final selection is locked in. Results will be published after the game closes.
               {justConverted && " We'll email you when they're in."}
             </p>
-            {isV2 && <V2SubmittedNote reasonMetric={reasonMetric} reasonCompany={reasonSide === "A" ? game.companyAName : reasonSide === "B" ? game.companyBName : null} />}
-            {validationQ && !myPick?.validationAnswer ? (
+            {isV2 && (
+              <YourDayCard
+                companyAName={game.companyAName}
+                companyBName={game.companyBName}
+                finalSide={myPick?.finalSelection ?? finalSelection}
+                reasonMetric={reasonMetric}
+                reasonSide={reasonSide}
+                confidence={confidence}
+                quiz={
+                  validationResult
+                    ? validationResult.isCorrect ? "correct" : "incorrect"
+                    : myPick?.validationAnswer ? "answered" : "none"
+                }
+              />
+            )}
+            {validationQ && !myPick?.validationAnswer && !validationResult ? (
               <button
                 className="btn-brand w-full justify-center mb-3"
                 onClick={() => setModalPhase("confirm")}
@@ -1247,6 +1298,14 @@ export default function DailyGame() {
           <div className="mt-4">
             <ResultReminderPrompt />
           </div>
+        )}
+
+        {step === "submitted" && isV2 && (
+          <EarlierLessonCard
+            key={game.id}
+            gameId={game.id}
+            completedLessonIds={(learnProgress ?? []).map((p) => p.lessonId)}
+          />
         )}
 
         {(step === "submitted" || isLocked) && <MoreToPlay />}
@@ -1770,31 +1829,139 @@ function LastGuestPickCard({ pick }: { pick: GuestPick }) {
 
 
 /**
- * Scoring v2 note under "Picks Submitted": what is already banked and what
- * settles at the close. Weights come from SCORE_WEIGHTS, never typed here.
+ * Scoring v2 "Your day" card: what the player chose, what is already banked and
+ * what settles at the close. Weights come from SCORE_WEIGHTS, never typed here.
  */
-function V2SubmittedNote({ reasonMetric, reasonCompany }: { reasonMetric: string | null; reasonCompany: string | null }) {
+function YourDayCard({
+  companyAName,
+  companyBName,
+  finalSide,
+  reasonMetric,
+  reasonSide,
+  confidence,
+  quiz,
+}: {
+  companyAName: string;
+  companyBName: string;
+  finalSide: "A" | "B" | null;
+  reasonMetric: string | null;
+  reasonSide: "A" | "B" | null;
+  confidence: ConfidenceLevel | null;
+  quiz: "correct" | "incorrect" | "answered" | "none";
+}) {
+  const nameOf = (side: "A" | "B" | null) =>
+    side === "A" ? displayCompanyName(companyAName) : side === "B" ? displayCompanyName(companyBName) : null;
+  const strong = { color: "var(--color-foreground)" };
+  const consistent = Boolean(reasonSide && finalSide && reasonSide === finalSide);
+  const banked = (consistent ? SCORE_WEIGHTS.reason : 0) + (quiz === "correct" ? SCORE_WEIGHTS.check : 0);
+  const finalName = nameOf(finalSide);
+  const reasonName = nameOf(reasonSide);
   return (
     <div
       className="rounded-xl p-4 mb-5 text-left text-sm"
       style={{ background: "var(--color-surface-raised)", border: "1px solid var(--color-border)", color: "var(--color-muted)" }}
     >
-      {reasonMetric && reasonCompany && (
+      <p className="font-semibold mb-3" style={strong}>Your day</p>
+      {finalName && (
         <p className="mb-2">
-          Your reason: <strong style={{ color: "var(--color-foreground)" }}>{reasonMetric}</strong> favors{" "}
-          <strong style={{ color: "var(--color-foreground)" }}>{reasonCompany}</strong>.
+          Final pick: <strong style={strong}>{finalName}</strong>
+          {confidence ? <> · <strong style={strong}>{CONFIDENCE_LABELS[confidence]}</strong></> : null}
+        </p>
+      )}
+      {reasonMetric && reasonName && (
+        <p className="mb-2">
+          Your reason: <strong style={strong}>{reasonMetric}</strong> favors <strong style={strong}>{reasonName}</strong>{" "}
+          {consistent ? (
+            <span style={{ color: "var(--color-success)" }}>✓ agrees with your pick</span>
+          ) : (
+            <span style={{ color: "var(--color-error, #dc2626)" }}>✗ your pick disagrees with your reason, so these points are lost</span>
+          )}
         </p>
       )}
       <p className="mb-2">
-        <strong style={{ color: "var(--color-foreground)" }}>Banked before the open:</strong> your reason and your
-        reading check ({SCORE_WEIGHTS.reason} + {SCORE_WEIGHTS.check} points available).
+        Reading check:{" "}
+        {quiz === "correct" ? (
+          <strong style={strong}>correct ✓ ({SCORE_WEIGHTS.check} banked)</strong>
+        ) : quiz === "incorrect" ? (
+          <strong style={strong}>incorrect ✗ (0)</strong>
+        ) : quiz === "answered" ? (
+          <strong style={strong}>answered</strong>
+        ) : (
+          <strong style={strong}>not yet answered</strong>
+        )}
       </p>
       <p className="mb-2">
-        <strong style={{ color: "var(--color-foreground)" }}>Settles at the close:</strong> the call and your confidence.
+        <strong style={strong}>Banked before the open:</strong> {banked} of {SCORE_WEIGHTS.reason + SCORE_WEIGHTS.check}{" "}
+        <span className="text-xs" style={{ color: "var(--color-subtle)" }}>(final marking at the close)</span>
+      </p>
+      <p className="mb-2">
+        <strong style={strong}>Settles at the close:</strong> the call ({SCORE_WEIGHTS.call}) and your confidence ({SCORE_WEIGHTS.conf})
       </p>
       <p className="text-xs" style={{ color: "var(--color-subtle)" }}>
         How today is scored: {SCORE_WEIGHTS.call} / {SCORE_WEIGHTS.reason} / {SCORE_WEIGHTS.conf} / {SCORE_WEIGHTS.check}
       </p>
+    </div>
+  );
+}
+
+/**
+ * Optional, unscored retrieval practice from a lesson the player already knows.
+ * Deliberately never calls learn.markComplete; answer state is local only.
+ */
+function EarlierLessonCard({ gameId, completedLessonIds }: { gameId: number; completedLessonIds: string[] }) {
+  const [picked, setPicked] = useState<string | null>(null);
+  const done = ALL_LESSONS_FLAT.filter((l) => completedLessonIds.includes(l.id));
+  const lesson = done.length > 0 ? done[gameId % done.length] : ALL_LESSONS_FLAT.find((l) => l.level === 100);
+  if (!lesson) return null;
+  const { quiz } = lesson;
+  const options = quiz.questionType === "multiple_choice" ? (quiz.options ?? []) : ["True", "False"];
+  const answered = picked !== null;
+  const correct = picked === quiz.correctAnswer;
+  return (
+    <div className="card-glass p-5 mt-5 text-left">
+      <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--color-brand)" }}>
+        While you wait
+      </p>
+      <h3 className="mb-1" style={{ color: "var(--color-foreground)" }}>One from an earlier lesson</h3>
+      <p className="text-xs mb-4" style={{ color: "var(--color-subtle)" }}>
+        Optional and unscored. It has no effect on your streak.
+      </p>
+      <p className="text-sm font-medium mb-3" style={{ color: "var(--color-foreground)" }}>{quiz.questionText}</p>
+      <div className="grid gap-2 mb-3">
+        {options.map((opt) => {
+          const isPicked = picked === opt;
+          const isRight = opt === quiz.correctAnswer;
+          const border = answered && isRight ? "var(--color-success)" : isPicked ? "var(--color-error, #dc2626)" : "var(--color-border)";
+          return (
+            <button
+              key={opt}
+              disabled={answered}
+              onClick={() => setPicked(opt)}
+              className="rounded-xl px-4 py-3 text-sm text-left transition-all active:scale-[0.99]"
+              style={{
+                border: `1px solid ${border}`,
+                background: "var(--color-surface-raised)",
+                color: "var(--color-foreground)",
+              }}
+            >
+              {opt}
+            </button>
+          );
+        })}
+      </div>
+      {answered && (
+        <div className="text-sm" style={{ color: "var(--color-muted)" }}>
+          <p className="mb-2">
+            <strong style={{ color: correct ? "var(--color-success)" : "var(--color-foreground)" }}>
+              {correct ? "Correct." : "Not quite."}
+            </strong>{" "}
+            {quiz.explanation}
+          </p>
+          <Link href={lessonPath(lesson.id)} className="font-semibold" style={{ color: "var(--color-brand)" }}>
+            Recap the lesson: {lesson.title} →
+          </Link>
+        </div>
+      )}
     </div>
   );
 }

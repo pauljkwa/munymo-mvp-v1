@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
+import { HighlightPicker, HIGHLIGHT_COUNT } from "./MetricsPanelFields";
 import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, Plus, Trash2, Upload } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -49,6 +50,8 @@ interface FormState {
   // Tomorrow's research
   nextResearchContent: string;
   metrics: MetricRow[];
+  // Scoring v2: four highlighted metric labels (empty = legacy scoring)
+  highlightedMetrics: string[];
   // Tomorrow's validation question
   nextQuestionType: "multiple_choice" | "yes_no" | "true_false" | "";
   nextQuestionText: string;
@@ -87,6 +90,7 @@ const defaultForm: FormState = {
   nextLockoutAt: "",
   nextResearchContent: "",
   metrics: [{ id: makeId(), label: "", value: "" }],
+  highlightedMetrics: [],
   nextQuestionType: "",
   nextQuestionText: "",
   nextQuestionOptions: ["", ""],
@@ -105,20 +109,14 @@ function parseJsonImport(raw: string): Partial<FormState> | null {
     const tomorrow = parsed.tomorrow ?? parsed;
     const today = parsed.today ?? parsed;
 
-    // Filter out analyst consensus from pre-game metrics — it belongs in Hindsight Spotlight only
-    const CONSENSUS_PATTERN = /analyst\s*(consensus|rating|rec|recommendation)/i;
     const rawMetrics = tomorrow.researchMetrics
       ? Object.entries(tomorrow.researchMetrics as Record<string, string>)
       : (parsed.nextResearchMetrics
           ? Object.entries(parsed.nextResearchMetrics as Record<string, string>)
           : []);
-    const filteredMetrics = rawMetrics.filter(([label]) => !CONSENSUS_PATTERN.test(label));
-    const removedCount = rawMetrics.length - filteredMetrics.length;
-    if (removedCount > 0) {
-      (parsed as Record<string, unknown>).__consensusRemoved = removedCount;
-    }
-    const metrics: MetricRow[] = filteredMetrics.length > 0
-      ? filteredMetrics.map(([label, value]) => ({ id: makeId(), label, value: String(value) }))
+    // Analyst Consensus is one of the eight standard panel metrics (and can be highlighted), so nothing is filtered out.
+    const metrics: MetricRow[] = rawMetrics.length > 0
+      ? rawMetrics.map(([label, value]) => ({ id: makeId(), label, value: String(value) }))
       : [];
 
     // Helper: read from nested tomorrow block first, then flat top-level fallback
@@ -178,6 +176,10 @@ function parseJsonImport(raw: string): Partial<FormState> | null {
       nextLockoutAt: lockoutAt,
       nextResearchContent: String(t("researchContent", "nextResearchContent") ?? ""),
       metrics: metrics.length > 0 ? metrics : [{ id: makeId(), label: "", value: "" }],
+      highlightedMetrics: (() => {
+        const h = t("highlightedMetrics", "nextHighlightedMetrics");
+        return Array.isArray(h) ? h.map(String) : [];
+      })(),
       // Validation question
       nextQuestionType: String(questionType) as "multiple_choice" | "yes_no" | "true_false" | "",
       nextQuestionText: String(questionText),
@@ -246,15 +248,7 @@ export default function AdminEndOfDay() {
     setForm((prev) => ({ ...prev, ...parsed, closeGameId: autoGameId ?? "", winner: resolvedWinner ?? "" }));
     setShowJsonPanel(false);
     setJsonInput("");
-    const removed = obj?.__consensusRemoved as number | undefined;
-    if (removed && removed > 0) {
-      toast.warning(
-        `${removed} analyst consensus metric${removed > 1 ? "s were" : " was"} removed from Research Metrics. Analyst consensus belongs in the Hindsight Spotlight only.`,
-        { duration: 6000 }
-      );
-    } else {
-      toast.success("Fields populated from JSON. Please review before submitting.");
-    }
+    toast.success("Fields populated from JSON. Please review before submitting.");
   }
 
   function addMetric() {
@@ -299,6 +293,10 @@ export default function AdminEndOfDay() {
       toast.error("Please complete all required fields in the 'Close Today's Game' section.");
       return;
     }
+    if (form.highlightedMetrics.length > 0 && form.highlightedMetrics.length !== HIGHLIGHT_COUNT) {
+      toast.error(`Tick exactly ${HIGHLIGHT_COUNT} highlighted metrics, or none.`);
+      return;
+    }
     if (!form.nextGameDate || !form.nextCompanyAName || !form.nextCompanyATicker || !form.nextCompanyBName || !form.nextCompanyBTicker) {
       toast.error("Please complete all required fields in the 'Set Up Tomorrow's Game' section.");
       return;
@@ -340,6 +338,7 @@ export default function AdminEndOfDay() {
       })() : undefined,
       nextResearchContent: form.nextResearchContent || undefined,
       nextResearchMetrics: Object.keys(metricsRecord).length > 0 ? metricsRecord : undefined,
+      nextHighlightedMetrics: form.highlightedMetrics.length === HIGHLIGHT_COUNT ? form.highlightedMetrics : undefined,
       nextQuestionType: (form.nextQuestionType as "multiple_choice" | "yes_no" | "true_false") || undefined,
       nextQuestionText: form.nextQuestionText || undefined,
       nextQuestionOptions: form.nextQuestionType === "multiple_choice" ? form.nextQuestionOptions.filter(Boolean) : undefined,
@@ -719,7 +718,7 @@ export default function AdminEndOfDay() {
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                Key financial data points displayed as a structured table. Add, remove, and edit freely — these are not hard-coded. <strong>Do not include analyst consensus ratings here</strong> — that belongs in the Hindsight Spotlight post-result debrief only.
+                Key financial data points displayed as a structured table. Add, remove, and edit freely — these are not hard-coded. Use the eight standard labels with the ticker prefix (e.g. "VST Market Cap") so the highlighted metrics below can match them.
               </p>
               <div className="space-y-2">
                 {form.metrics.map((m) => (
@@ -747,6 +746,20 @@ export default function AdminEndOfDay() {
                   </div>
                 ))}
               </div>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-3">
+              <Label>Highlighted Metrics</Label>
+              <p className="text-xs text-muted-foreground">
+                The four metrics where the two companies differ most. Players name one as the reason for their pick. Labels must match the
+                metric labels above without the ticker prefix (or be "Price trend"); anything else is stored as none and the game runs legacy scoring.
+              </p>
+              <HighlightPicker
+                selected={form.highlightedMetrics}
+                onChange={(next) => set("highlightedMetrics", next)}
+              />
             </div>
           </CardContent>
         )}

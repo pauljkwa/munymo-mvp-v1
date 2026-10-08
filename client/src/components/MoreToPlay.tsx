@@ -42,7 +42,7 @@ export default function MoreToPlay() {
         className="text-xs font-semibold uppercase tracking-wider mb-3"
         style={{ color: "var(--color-brand)" }}
       >
-        While you wait
+        More to play
       </p>
       <div className="grid sm:grid-cols-3 gap-3">
         {options.map((o, i) => (
