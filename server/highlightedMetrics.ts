@@ -4,6 +4,8 @@
  * highlighted labels, and look up the two values for a label.
  */
 import { HIGHLIGHTED_METRIC_COUNT, PRICE_TREND_LABEL } from "@shared/const";
+import { calculateScoreV2, objectiveSideForMetric } from "./scoring";
+import type { ConfidenceLevel } from "@shared/const";
 
 export interface MetricRow {
   label: string;
@@ -89,4 +91,38 @@ export function validateHighlightedMetrics(
     return null;
   }
   return cleaned.map((l) => (l.toLowerCase() === PRICE_TREND_LABEL.toLowerCase() ? PRICE_TREND_LABEL : l));
+}
+
+/**
+ * Practice-mode v2 scoring (practice spec 2026-10-12). Pure: resolves the
+ * objective side of the chosen reason metric exactly as live settlement does,
+ * then scores with calculateScoreV2.
+ */
+export function scorePracticeV2(input: {
+  finalSelection: "A" | "B";
+  winner: "A" | "B";
+  reasonMetric?: string | null;
+  reasonSide?: "A" | "B" | null;
+  confidence?: ConfidenceLevel | null;
+  validationAnswer?: string | null;
+  correctAnswer: string;
+  metricRows: MetricRow[];
+  tickerA: string;
+  tickerB: string;
+}) {
+  let objectiveSide: "A" | "B" | null = null;
+  if (input.reasonMetric && input.reasonMetric.toLowerCase() !== PRICE_TREND_LABEL.toLowerCase()) {
+    const { valueA, valueB } = valuesForMetric(input.metricRows, input.reasonMetric, input.tickerA, input.tickerB);
+    objectiveSide = objectiveSideForMetric(input.reasonMetric, valueA, valueB);
+  }
+  return calculateScoreV2({
+    finalSelection: input.finalSelection,
+    winner: input.winner,
+    reasonMetric: input.reasonMetric,
+    reasonSide: input.reasonSide,
+    objectiveSide,
+    confidence: input.confidence,
+    validationAnswer: input.validationAnswer,
+    correctAnswer: input.correctAnswer,
+  });
 }

@@ -37,7 +37,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { ENV } from "./env";
 import { notifyOwner } from "./notification";
 
-const MODEL = "claude-sonnet-5"; // Sonnet 5 ≈ 60% cheaper than Opus 4.8; switched 2026-07-18 to keep curation under the API spend limit
+export const MODEL = "claude-sonnet-5"; // Sonnet 5 ≈ 60% cheaper than Opus 4.8; switched 2026-07-18 to keep curation under the API spend limit
 // Failsafe (2026-07-30, after an overload storm killed the night): 529
 // overloaded_error is capacity trouble in ONE model's serving pool, so waiting
 // harder is the wrong tool — switching pools is. After 2 failed retries of a
@@ -111,7 +111,7 @@ export function isTransientApiError(err: unknown): boolean {
 // Adapted from references/daily-curation-agent-prompt.md for the Claude API
 // (web_search tool instead of a shell/curl harness; output is a single JSON
 // object which this script POSTs to the endpoint).
-const SYSTEM_PROMPT = `You are the Munymo Daily Curation Agent. Munymo is a daily stock-picking game: each trading day players are shown two well-known companies and pick which one will have the higher closing % change that day.
+export const SYSTEM_PROMPT = `You are the Munymo Daily Curation Agent. Munymo is a daily stock-picking game: each trading day players are shown two well-known companies and pick which one will have the higher closing % change that day.
 
 Your job runs once per US trading day, just after NASDAQ closes. You must:
 1. Determine today's winner from real closing prices.

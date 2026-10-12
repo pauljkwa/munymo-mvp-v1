@@ -81,8 +81,8 @@ export default function Practice() {
                 </p>
                 <p className="text-sm leading-relaxed" style={{ color: "var(--color-muted)" }}>
                   But you don't have to wait until tomorrow to have a go. Every matchup we've
-                  run stays playable below — the same research, the same
-                  research question. The result already exists, so you'll find out how you did
+                  run stays playable below — the same research,
+                  the same questions. The result already exists, so you'll find out how you did
                   straight away, and you can play as many as you like.
                 </p>
               </div>
@@ -98,8 +98,7 @@ export default function Practice() {
             </h1>
           </div>
           <p className="text-sm" style={{ color: "var(--color-muted)" }}>
-            Play completed matchups from the archive. Same game, same scoring — you just
-            don't have to wait for the market to close.
+            Play completed matchups from the archive. Scored the same way as the live game, instantly.
           </p>
         </div>
 

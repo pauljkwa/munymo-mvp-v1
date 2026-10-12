@@ -1503,3 +1503,63 @@ describe("unsubscribe tokens", () => {
     expect(buildUnsubscribeUrl(42)).toMatch(/^https:\/\/munymo\.com\/api\/unsubscribe\?u=42&t=[0-9a-f]{32}$/);
   });
 });
+
+// ─── Practice on Scoring v2 (2026-10-12) ─────────────────────────────────────
+import { scorePracticeV2 } from "./highlightedMetrics";
+import { extractHighlightRules, usableMetricLabels } from "./_core/backfillHighlights";
+import { SYSTEM_PROMPT } from "./_core/curationAgent";
+
+describe("scorePracticeV2 — practice settles instantly on v2", () => {
+  const rows = [
+    { label: "AAA Revenue Growth", value: "+30%" },
+    { label: "BBB Revenue Growth", value: "+10%" },
+    { label: "AAA Beta", value: "1.2" },
+    { label: "BBB Beta", value: "0.8" },
+  ];
+  const base = {
+    winner: "A" as const, correctAnswer: "Yes", validationAnswer: "Yes",
+    metricRows: rows, tickerA: "AAA", tickerB: "BBB",
+  };
+
+  it("right call + consistent reason + confident + check right = 100", () => {
+    const r = scorePracticeV2({ ...base, finalSelection: "A", reasonMetric: "Revenue Growth", reasonSide: "A", confidence: "confident" });
+    expect(r.totalScore).toBe(100);
+  });
+
+  it("inconsistent reason scores 0 on the reason only", () => {
+    const r = scorePracticeV2({ ...base, finalSelection: "A", reasonMetric: "Beta", reasonSide: "B", confidence: "confident" });
+    expect(r.reasonScore).toBe(0);
+    expect(r.totalScore).toBe(r.predictionScore + r.confidenceScore + r.validationScore);
+    expect(r.totalScore).toBe(75);
+  });
+
+  it("objective Revenue Growth direction is enforced from the stored panel", () => {
+    const r = scorePracticeV2({ ...base, finalSelection: "B", reasonMetric: "Revenue Growth", reasonSide: "B", confidence: "leaning" });
+    expect(r.reasonScore).toBe(0); // A grows faster, so B-favouring reason misses
+  });
+
+  it("legacy game is unchanged: calculateScore still 80/20", () => {
+    const legacy = calculateScore("A", "A", "Yes", "Yes", 5000);
+    expect(legacy.dailyScore).toBe(100);
+    expect(legacy.predictionScore).toBe(80);
+  });
+});
+
+describe("backfill helpers", () => {
+  it("extracts exactly the highlightedMetrics rules section from the curation prompt", () => {
+    const rules = extractHighlightRules();
+    expect(rules.startsWith("## highlightedMetrics rules")).toBe(true);
+    expect(rules).toContain("NEVER choose a metric where both companies have the same value");
+    expect(rules).not.toContain("## Dates in player-facing content");
+    expect(SYSTEM_PROMPT).toContain(rules);
+  });
+
+  it("usableMetricLabels drops identical, one-sided and Price trend rows", () => {
+    const rows = [
+      { label: "AAA Beta", value: "1.2" }, { label: "BBB Beta", value: "0.8" },
+      { label: "AAA Market Cap", value: "$1T" }, { label: "BBB Market Cap", value: "$1T" },
+      { label: "AAA P/E Ratio", value: "20" },
+    ];
+    expect(usableMetricLabels(rows, "AAA", "BBB")).toEqual(["Beta"]);
+  });
+});

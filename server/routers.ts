@@ -25,7 +25,8 @@ import {
 } from "./email";
 import { z } from "zod";
 import { COOKIE_NAME, PRICE_TREND_LABEL } from "@shared/const";
-import { valuesForMetric, validateHighlightedMetrics, type MetricRow } from "./highlightedMetrics";
+import { valuesForMetric, validateHighlightedMetrics, scorePracticeV2, type MetricRow } from "./highlightedMetrics";
+import { chooseHighlightsForGame, usableMetricLabels } from "./_core/backfillHighlights";
 import { currentSeasonKey, seasonLabel, seasonWindow } from "@shared/leaderboard";
 import { computeGutVsResearch, describeGutVsResearch } from "@shared/insight";
 import type { Candle } from "../drizzle/schema";
@@ -53,6 +54,7 @@ import {
   getCommunityStats,
   getGameById,
   getPublishedGameBySlug,
+  listPublishedGamesForBackfill,
   getLeaderboard,
   getLeaderboardStatForUser,
   getProvisionalLeaderboard,
@@ -143,6 +145,8 @@ async function assertNotLocked(gameId: number) {
 }
 
 // calculateScore, checkLockout, computeNewStreak imported from ./scoring
+let backfillInFlight = false; // admin.backfillHighlights guard
+const backfillFailedGameIds = new Set<number>(); // games Mo failed on this process; sent to the back of the queue
 
 // ─── Games Router ─────────────────────────────────────────────────────────────
 
@@ -481,6 +485,16 @@ const practiceRouter = router({
         researchSummary: research?.researchSummary ?? null,
         researchContent: research?.researchSnapshot ?? research?.content ?? null,
         researchMetrics: research?.metricsSnapshot ?? research?.researchMetrics ?? null,
+        // Scoring v2: non-null means this practice play uses the v2 flow.
+        highlightedMetrics: game.highlightedMetrics ?? null,
+        // Day kind derives from the perfs but is only a label ("coin_toss" /
+        // "clear" / "decisive"); withheld until finished like the perfs.
+        dayKind: finished
+          ? game.dayKind ??
+            (game.companyAPerf != null && game.companyBPerf != null
+              ? classifyDay(Number(game.companyAPerf), Number(game.companyBPerf))
+              : null)
+          : null,
         // Frozen daily candles ending the day BEFORE the game — see
         // truncateCandlesBeforeGameDate. Null for games published before chart
         // snapshotting existed, or where capture failed; the UI hides the chart
@@ -524,8 +538,21 @@ const practiceRouter = router({
     }),
 
   submitFinal: protectedProcedure
-    .input(z.object({ gameId: z.number(), selection: z.enum(["A", "B"]) }))
+    .input(
+      z.object({
+        gameId: z.number(),
+        selection: z.enum(["A", "B"]),
+        // Scoring v2 — required below when the game has highlightedMetrics.
+        reasonMetric: z.string().max(64).optional(),
+        reasonSide: z.enum(["A", "B"]).optional(),
+        confidence: z.enum(["tossup", "leaning", "confident"]).optional(),
+      })
+    )
     .mutation(async ({ ctx, input }) => {
+      const game = await getGameById(input.gameId);
+      if (!game || game.status !== "result_published") {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Not an archived game" });
+      }
       const pick = await getPracticePick(ctx.user.id, input.gameId);
       if (!pick?.gutSelection) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Make a gut selection first" });
@@ -533,9 +560,25 @@ const practiceRouter = router({
       if (pick.completedAt) {
         throw new TRPCError({ code: "CONFLICT", message: "Already practised this game" });
       }
+      const highlighted = game.highlightedMetrics;
+      let v2: { reasonMetric: string; reasonSide: "A" | "B"; confidence: "tossup" | "leaning" | "confident" } | undefined;
+      if (highlighted && highlighted.length > 0) {
+        if (!input.reasonMetric || !input.reasonSide || !input.confidence) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Pick your reason (a highlighted metric and the company it favors) and your confidence before locking in",
+          });
+        }
+        const chosen = highlighted.find((m) => m.toLowerCase() === input.reasonMetric!.trim().toLowerCase());
+        if (!chosen) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Your reason must be one of today's highlighted metrics" });
+        }
+        v2 = { reasonMetric: chosen, reasonSide: input.reasonSide, confidence: input.confidence };
+      }
       await upsertPracticePick(ctx.user.id, input.gameId, {
         finalSelection: input.selection,
         finalSubmittedAt: new Date(),
+        ...(v2 ?? {}),
       });
       return { success: true };
     }),
@@ -568,26 +611,76 @@ const practiceRouter = router({
       }
 
       const question = await getValidationQuestion(input.gameId);
-      const scored = calculateScore(
-        pick.finalSelection,
-        game.winner,
-        input.answer,
-        question?.correctAnswer ?? "",
-        input.answerTimeMs ?? null
-      );
+      const isV2 = !!(game.highlightedMetrics && game.highlightedMetrics.length > 0);
+      const dayKind =
+        game.dayKind ??
+        (game.companyAPerf != null && game.companyBPerf != null
+          ? classifyDay(Number(game.companyAPerf), Number(game.companyBPerf))
+          : null);
+      const margin =
+        game.companyAPerf != null && game.companyBPerf != null
+          ? Math.abs(Number(game.companyAPerf) - Number(game.companyBPerf))
+          : null;
+
+      let breakdown: {
+        predictionScore: number;
+        reasonScore: number | null;
+        confidenceScore: number | null;
+        validationScore: number;
+        totalScore: number;
+      };
+      if (isV2) {
+        // v2 plays always carry reason/confidence (submitFinal enforces it).
+        const research = await getResearchByGameId(input.gameId);
+        const rows = (research?.metricsSnapshot ?? research?.researchMetrics ?? []) as MetricRow[];
+        const s2 = scorePracticeV2({
+          finalSelection: pick.finalSelection,
+          winner: game.winner,
+          reasonMetric: pick.reasonMetric,
+          reasonSide: pick.reasonSide,
+          confidence: pick.confidence,
+          validationAnswer: input.answer,
+          correctAnswer: question?.correctAnswer ?? "",
+          metricRows: rows,
+          tickerA: game.companyATicker,
+          tickerB: game.companyBTicker,
+        });
+        breakdown = s2;
+      } else {
+        const scored = calculateScore(
+          pick.finalSelection,
+          game.winner,
+          input.answer,
+          question?.correctAnswer ?? "",
+          input.answerTimeMs ?? null
+        );
+        breakdown = {
+          predictionScore: scored.predictionScore,
+          reasonScore: null,
+          confidenceScore: null,
+          validationScore: scored.validationScore,
+          totalScore: scored.dailyScore,
+        };
+      }
 
       await upsertPracticePick(ctx.user.id, input.gameId, {
         validationAnswer: input.answer,
         validationAnswerTimeMs: input.answerTimeMs ?? null,
         validationSubmittedAt: new Date(),
-        predictionScore: scored.predictionScore,
-        validationScore: scored.validationScore,
-        totalScore: scored.dailyScore,
+        predictionScore: breakdown.predictionScore,
+        validationScore: breakdown.validationScore,
+        ...(isV2 ? { reasonScore: breakdown.reasonScore, confidenceScore: breakdown.confidenceScore } : {}),
+        totalScore: breakdown.totalScore,
         completedAt: new Date(),
       });
 
       return {
-        ...scored,
+        ...breakdown,
+        isV2,
+        // legacy field kept for the old client result card
+        dailyScore: breakdown.totalScore,
+        dayKind,
+        margin,
         winner: game.winner,
         correctAnswer: question?.correctAnswer ?? null,
         companyAPerf: game.companyAPerf,
@@ -1138,6 +1231,85 @@ const adminRouter = router({
     await writeAuditLog(ctx.user.id, "run_curation_manual", "game");
     void runDailyCuration();
     return { started: true as const, alreadyRunning: false as const };
+  }),
+
+  // Practice-v2 archive backfill (spec 2026-10-12). Click repeatedly until
+  // `remaining` is 0. Batch of 10 Mo calls per click; dayKind is filled for
+  // every published game with both perfs, no Mo call.
+  backfillHighlights: adminProcedure.mutation(async ({ ctx }) => {
+    if (backfillInFlight) {
+      return { alreadyRunning: true as const, processed: 0, filled: 0, skipped: 0, failed: 0, remaining: 0, dayKindsSet: 0 };
+    }
+    backfillInFlight = true;
+    try {
+      await writeAuditLog(ctx.user.id, "backfill_highlights", "game");
+      const games = await listPublishedGamesForBackfill();
+      let dayKindsSet = 0;
+      for (const g of games) {
+        if (g.dayKind == null && g.companyAPerf != null && g.companyBPerf != null) {
+          try {
+            await updateGame(g.id, { dayKind: classifyDay(Number(g.companyAPerf), Number(g.companyBPerf)) });
+            dayKindsSet++;
+          } catch (err) {
+            console.error(`[backfill-highlights] dayKind failed for game ${g.id}:`, err);
+          }
+        }
+      }
+
+      // Classify candidates (null highlights) as eligible or skipped (<4 usable metrics).
+      const eligible: Array<{ game: (typeof games)[number]; rows: MetricRow[] }> = [];
+      let skipped = 0;
+      for (const g of games) {
+        if (g.highlightedMetrics && g.highlightedMetrics.length > 0) continue;
+        const research = await getResearchByGameId(g.id);
+        const rows = (research?.metricsSnapshot ?? research?.researchMetrics ?? []) as MetricRow[];
+        if (usableMetricLabels(rows, g.companyATicker, g.companyBTicker).length < 4) {
+          skipped++;
+          console.log(`[backfill-highlights] game ${g.id} skipped: fewer than 4 usable metrics (stays legacy)`);
+        } else {
+          eligible.push({ game: g, rows });
+        }
+      }
+
+      // Games that failed on an earlier click in this process go to the back of
+      // the queue, so a stubborn one cannot occupy the front of every batch.
+      const batch = [
+        ...eligible.filter((e) => !backfillFailedGameIds.has(e.game.id)),
+        ...eligible.filter((e) => backfillFailedGameIds.has(e.game.id)),
+      ].slice(0, 10);
+      let filled = 0;
+      let failed = 0;
+      for (const { game, rows } of batch) {
+        try {
+          const chosen = await chooseHighlightsForGame(game, rows);
+          if (!chosen) {
+            failed++;
+            backfillFailedGameIds.add(game.id);
+            console.warn(`[backfill-highlights] game ${game.id}: Mo's answer failed validation`);
+            continue;
+          }
+          backfillFailedGameIds.delete(game.id);
+          await updateGame(game.id, { highlightedMetrics: chosen });
+          filled++;
+          console.log(`[backfill-highlights] game ${game.id} filled: ${JSON.stringify(chosen)}`);
+        } catch (err) {
+          failed++;
+          backfillFailedGameIds.add(game.id);
+          console.error(`[backfill-highlights] game ${game.id} failed:`, err);
+        }
+      }
+      return {
+        alreadyRunning: false as const,
+        processed: batch.length,
+        filled,
+        skipped,
+        failed,
+        remaining: eligible.length - filled,
+        dayKindsSet,
+      };
+    } finally {
+      backfillInFlight = false;
+    }
   }),
 
   createGame: adminProcedure

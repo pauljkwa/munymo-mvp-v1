@@ -607,9 +607,19 @@ export const practicePicks = mysqlTable(
     validationAnswerTimeMs: int("validationAnswerTimeMs"),
     validationSubmittedAt: timestamp("validationSubmittedAt"),
 
-    // Computed server-side at completion, same 80/20 model as live play.
+    // Scoring v2 for practice (approved by Paul 2026-10-12): same "your reason"
+    // and confidence as live play, scored at the moment the check is answered
+    // because the result is already known. Null on plays made before v2.
+    reasonMetric: varchar("reasonMetric", { length: 64 }),
+    reasonSide: mysqlEnum("reasonSide", ["A", "B"]),
+    confidence: mysqlEnum("confidence", ["tossup", "leaning", "confident"]),
+
+    // Computed server-side at completion. v2 when the game has
+    // highlightedMetrics (SCORE_WEIGHTS), otherwise the legacy 80/20 model.
     predictionScore: int("predictionScore"),
     validationScore: int("validationScore"),
+    reasonScore: int("reasonScore"),
+    confidenceScore: int("confidenceScore"),
     totalScore: int("totalScore"),
     // Set once the play is finished and the result revealed. Null means the
     // player started this archived game but hasn't finished it.

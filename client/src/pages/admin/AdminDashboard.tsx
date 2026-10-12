@@ -47,6 +47,18 @@ export default function AdminDashboard() {
     onError: (e: { message: string }) => toast.error(e.message),
   });
 
+  const backfillHighlights = trpc.admin.backfillHighlights.useMutation({
+    onSuccess: (r) => {
+      const counts = `${r.processed} processed, ${r.filled} filled, ${r.skipped} skipped, ${r.failed} failed, ${r.remaining} remaining.`;
+      if (r.remaining > 0) {
+        toast.success(`Backfill batch done: ${counts} Click again to continue.`, { duration: 15000 });
+      } else {
+        toast.success(`Backfill complete: ${counts}`, { duration: 15000 });
+      }
+    },
+    onError: (e: { message: string }) => toast.error(e.message),
+  });
+
   const sendTestPush = trpc.admin.sendTestPush.useMutation({
     onSuccess: (r: { sent: number; expired: number; errors: number }) => {
       if (r.sent > 0) {
@@ -185,6 +197,19 @@ export default function AdminDashboard() {
           >
             {runCuration.isPending ? <Loader2 size={13} className="animate-spin" /> : <Bot size={13} />}
             Run Curation Now
+          </button>
+          <button
+            onClick={() => {
+              if (window.confirm("Ask Mo to choose highlighted metrics for archived games that don't have them? It processes up to 10 games per click and uses a little API budget. Click again while games remain.")) {
+                backfillHighlights.mutate();
+              }
+            }}
+            disabled={backfillHighlights.isPending}
+            className="btn-ghost text-xs py-1 px-3 flex items-center gap-1"
+            style={{ color: "var(--color-brand)" }}
+          >
+            {backfillHighlights.isPending ? <Loader2 size={13} className="animate-spin" /> : <Bot size={13} />}
+            Backfill highlights for the archive
           </button>
           <span className="text-xs" style={{ color: "var(--color-subtle)" }}>
             Recovery for a failed overnight run — the agent scores the concluded game and curates the next one, exactly like the nightly cron.

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, gte, inArray, isNotNull, lt, lte, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, notInArray, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -358,6 +358,17 @@ export async function listPublishedGames(limit = 20, offset = 0) {
     .orderBy(desc(dailyGames.gameDate))
     .limit(limit)
     .offset(offset);
+}
+
+/** Published games still missing highlightedMetrics or dayKind (practice-v2 backfill). Oldest first. */
+export async function listPublishedGamesForBackfill() {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(dailyGames)
+    .where(and(eq(dailyGames.status, "result_published"), or(isNull(dailyGames.highlightedMetrics), isNull(dailyGames.dayKind))))
+    .orderBy(asc(dailyGames.gameDate));
 }
 
 export async function createGame(data: Omit<typeof dailyGames.$inferInsert, "id" | "createdAt" | "updatedAt">): Promise<number> {
