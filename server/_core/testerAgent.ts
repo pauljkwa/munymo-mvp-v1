@@ -1,5 +1,5 @@
 /**
- * Tester Agent — simulates 6 synthetic players making daily picks.
+ * Tester Agent — plays the "Coin Flip" benchmark bot's daily picks.
  *
  * Called internally via node-cron at 22:00 UTC (6:00 AM Perth) Monday–Friday.
  * For each tester account it submits: gut pick → final pick → validation answer.
@@ -11,11 +11,11 @@
 import type { Express, Request, Response } from "express";
 import { notifyOwner } from "./notification";
 import { ENV } from "./env";
-import { TESTER_BOT_IDS } from "@shared/const";
+import { ACTIVE_BOT_IDS } from "@shared/const";
 
-// Shared with the public-surface filters: one of these is shown as the
-// "Coin Flip" benchmark, the rest are hidden. They all keep playing.
-const TESTER_IDS: readonly number[] = TESTER_BOT_IDS;
+// Only the "Coin Flip" benchmark still plays; the hidden bots were retired
+// 2026-10-12 (see ACTIVE_BOT_IDS in shared/const.ts).
+const TESTER_IDS: readonly number[] = ACTIVE_BOT_IDS;
 
 function randomPick(): "A" | "B" {
   return Math.random() < 0.5 ? "A" : "B";
@@ -108,10 +108,10 @@ export async function runTesterPicks(): Promise<void> {
   const summary = results.map(r => `User ${r.userId}: ${r.status}`).join("\n");
   console.log("[tester-agent]", summary);
 
-  const successCount = results.filter(r => r.status === "ok").length;
-  if (successCount > 0) {
+  // Routine success is silent; only email when a bot errored.
+  if (results.some(r => r.status.startsWith("error"))) {
     await notifyOwner({
-      title: `🤖 Tester picks submitted — ${successCount}/${TESTER_IDS.length} played`,
+      title: "🤖 Coin Flip bot failed to play today",
       content: summary,
     });
   }

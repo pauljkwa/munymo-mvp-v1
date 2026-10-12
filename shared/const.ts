@@ -30,6 +30,12 @@ export const TESTER_BOT_IDS = [870002, 870004, 870006, 870008, 870010, 870012] a
 export const BENCHMARK_BOT_ID = 870002;
 export const BENCHMARK_BOT_NAME = "Coin Flip";
 export const HIDDEN_BOT_IDS: number[] = TESTER_BOT_IDS.filter((id) => id !== BENCHMARK_BOT_ID);
+/**
+ * Bots that still play each day. The five hidden accounts are retired (Paul,
+ * 2026-10-12): they stay in TESTER_BOT_IDS/HIDDEN_BOT_IDS so their history is
+ * still excluded from public boards and community stats, but they no longer pick.
+ */
+export const ACTIVE_BOT_IDS: readonly number[] = [BENCHMARK_BOT_ID];
 
 /** Below this many players a "Top N%" figure reads as a joke, so the UI shows rank only. */
 export const PERCENTILE_MIN_PLAYERS = 20;
