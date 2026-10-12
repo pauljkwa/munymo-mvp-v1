@@ -1,6 +1,4 @@
-import { useState } from "react";
-import { Share2, Check } from "lucide-react";
-import { toast } from "sonner";
+import ShareActions from "@/components/ShareActions";
 import { archivePath } from "@shared/slugs";
 import { shareQuery, type ShareParams } from "@shared/shareParams";
 
@@ -61,39 +59,16 @@ export function buildShareText(r: ShareResultInput): string {
 }
 
 export default function ShareResultButton(props: ShareResultInput) {
-  const [done, setDone] = useState(false);
-  const text = buildShareText(props);
   const url = buildShareUrl(props);
-  const clipboardText = `${text}\n${url}`;
-
-  async function share() {
-    try {
-      if (typeof navigator !== "undefined" && "share" in navigator && typeof navigator.share === "function") {
-        // Separate url so chat apps unfurl it into the preview card.
-        await navigator.share({ text, url });
-        setDone(true);
-        return;
-      }
-      await navigator.clipboard.writeText(clipboardText);
-      setDone(true);
-      toast.success("Copied — paste it anywhere.");
-    } catch (err) {
-      // A dismissed share sheet throws AbortError; that is not a failure.
-      if ((err as { name?: string })?.name === "AbortError") return;
-      try {
-        await navigator.clipboard.writeText(clipboardText);
-        setDone(true);
-        toast.success("Copied — paste it anywhere.");
-      } catch {
-        toast.error("Couldn't share from this browser.");
-      }
-    }
-  }
-
+  const { pathname, search } = new URL(url);
+  const slug = pathname.replace("/research/", "");
   return (
-    <button type="button" onClick={share} className="btn-ghost text-sm inline-flex items-center gap-2">
-      {done ? <Check size={15} /> : <Share2 size={15} />}
-      {done ? "Shared" : "Share result"}
-    </button>
+    <ShareActions
+      text={buildShareText(props)}
+      url={url}
+      imagePath={`/og/${slug}.png${search}`}
+      imageFileName={`munymo-${slug}.png`}
+      label="Share result"
+    />
   );
 }

@@ -5,8 +5,8 @@ import { withReferralParams } from "@/lib/utils";
 import { useParams } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
 import { Link } from "wouter";
-import { ArrowLeft, ArrowRight, Trophy, BookOpen, Users, Loader2, HelpCircle, Lightbulb, ExternalLink, BarChart2, Share2, Check } from "lucide-react";
-import { toast } from "sonner";
+import { ArrowLeft, ArrowRight, ArrowDown, Trophy, BookOpen, Users, Loader2, HelpCircle, Lightbulb, ExternalLink, BarChart2 } from "lucide-react";
+import ShareActions from "@/components/ShareActions";
 import ResearchMetricsPanel from "@/components/ResearchMetricsPanel";
 import { ChartSheet } from "@/components/ChartSheet";
 import { useEffect, useState } from "react";
@@ -49,7 +49,6 @@ export default function ArchiveGame() {
   const { data: communityStats } = trpc.games.getCommunityStats.useQuery({ gameId }, { enabled: !!gameId });
   const { data: validationQ } = trpc.games.getValidationQuestion.useQuery({ gameId }, { enabled: !!gameId });
   const { data: related } = trpc.games.getRelated.useQuery({ gameId }, { enabled: !!gameId });
-  const [shared, setShared] = useState(false);
   // Fire-and-forget: log clicks on the source-article link for referral reporting.
   const recordOutboundClick = trpc.games.recordOutboundClick.useMutation();
   const [chartTicker, setChartTicker] = useState<string | null>(null);
@@ -86,26 +85,6 @@ export default function ArchiveGame() {
         </div>
       </PublicLayout>
     );
-  }
-
-  // Share the page itself (no personal result): the link unfurls into the
-  // matchup card from server/_core/shareCard.ts.
-  async function sharePage() {
-    if (!game) return;
-    const url = `https://munymo.com${archivePath(game)}`;
-    const text = `${game.companyATicker} vs ${game.companyBTicker}: which stock would you have picked? The research and the result on Munymo.`;
-    try {
-      if (typeof navigator.share === "function") {
-        await navigator.share({ text, url });
-      } else {
-        await navigator.clipboard.writeText(`${text}\n${url}`);
-        toast.success("Link copied — paste it anywhere.");
-      }
-      setShared(true);
-    } catch (err) {
-      if ((err as { name?: string })?.name === "AbortError") return;
-      toast.error("Couldn't share from this browser.");
-    }
   }
 
   const winnerName = game.winner === "A" ? game.companyAName : game.companyBName;
@@ -172,6 +151,18 @@ export default function ArchiveGame() {
               <p className="font-semibold" style={{ color: "var(--color-foreground)" }}>
                 {winnerTicker} — {winnerName}
               </p>
+              {/* The payoff sits a long scroll down on a phone; let the
+                  reader jump straight to it. */}
+              {research?.hindsightSpotlight && (
+                <button
+                  type="button"
+                  onClick={() => document.getElementById("hindsight")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                  className="text-sm font-semibold inline-flex items-center gap-1 mt-1.5"
+                  style={{ color: "var(--color-brand)" }}
+                >
+                  Why {winnerTicker} won <ArrowDown size={14} />
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -299,8 +290,9 @@ export default function ArchiveGame() {
         {/* Hindsight Spotlight */}
         {research?.hindsightSpotlight && (
           <div
+            id="hindsight"
             className="card-glass p-6 mb-5 animate-fade-up delay-175"
-            style={{ borderColor: "oklch(0.65 0.18 145)", background: "oklch(0.97 0.02 145 / 0.4)" }}
+            style={{ borderColor: "oklch(0.65 0.18 145)", background: "oklch(0.97 0.02 145 / 0.4)", scrollMarginTop: 80 }}
           >
             <div className="flex items-center gap-3 mb-4">
               <Lightbulb size={18} style={{ color: "oklch(0.55 0.18 145)" }} />
@@ -402,14 +394,19 @@ export default function ArchiveGame() {
             A new matchup goes live every US trading day. Read the research, make your call, and see how you did
             when the market closes. Free, no sign-up, about five minutes.
           </p>
-          <div className="flex flex-col sm:flex-row gap-2">
-            <Link href="/game" className="btn-gold text-sm px-5 py-2.5 justify-center">
+          <div className="flex flex-col gap-2">
+            <Link href="/game" className="btn-gold text-sm px-5 py-2.5 justify-center sm:self-start">
               Play today's matchup <ArrowRight size={15} />
             </Link>
-            <button type="button" onClick={sharePage} className="btn-ghost text-sm px-5 py-2.5 inline-flex items-center justify-center gap-2">
-              {shared ? <Check size={15} /> : <Share2 size={15} />}
-              {shared ? "Shared" : "Share this matchup"}
-            </button>
+            {/* The page itself, no personal result: unfurls into the plain
+                matchup card from server/_core/shareCard.ts. */}
+            <ShareActions
+              text={`${game.companyATicker} vs ${game.companyBTicker}: which stock would you have picked? The research and the result on Munymo.`}
+              url={`https://munymo.com${archivePath(game)}`}
+              imagePath={`/og/${archiveSlug(game)}.png`}
+              imageFileName={`munymo-${archiveSlug(game)}.png`}
+              label="Share this matchup"
+            />
           </div>
 
           {related && related.length > 0 && (
