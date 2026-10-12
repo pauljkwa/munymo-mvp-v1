@@ -54,6 +54,7 @@ import {
   getCommunityStats,
   getGameById,
   getPublishedGameBySlug,
+  listRelatedPublishedGames,
   listPublishedGamesForBackfill,
   getLeaderboard,
   getLeaderboardStatForUser,
@@ -174,6 +175,15 @@ const gamesRouter = router({
       const game = await getPublishedGameBySlug(input.slug);
       if (!game) throw new TRPCError({ code: "NOT_FOUND" });
       return game;
+    }),
+
+  // "More matchups" under an archive page. Published games only.
+  getRelated: publicProcedure
+    .input(z.object({ gameId: z.number() }))
+    .query(async ({ input }) => {
+      const game = await getGameById(input.gameId);
+      if (!game || game.status !== "result_published") return [];
+      return listRelatedPublishedGames(game.id, game.sector ?? null, 4);
     }),
 
   getResearch: publicProcedure

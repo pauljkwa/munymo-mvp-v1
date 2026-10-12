@@ -337,6 +337,32 @@ export async function getPublishedGameBySlug(slug: string) {
   return game;
 }
 
+/**
+ * Other published matchups to suggest under an archive page: same sector
+ * first (a reader of CEG vs VST wants more utilities), then the newest.
+ */
+export async function listRelatedPublishedGames(gameId: number, sector: string | null, limit = 4) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      id: dailyGames.id,
+      gameDate: dailyGames.gameDate,
+      companyATicker: dailyGames.companyATicker,
+      companyBTicker: dailyGames.companyBTicker,
+      companyAName: dailyGames.companyAName,
+      companyBName: dailyGames.companyBName,
+      sector: dailyGames.sector,
+    })
+    .from(dailyGames)
+    .where(and(eq(dailyGames.status, "result_published"), sql`${dailyGames.id} <> ${gameId}`))
+    .orderBy(
+      sector ? sql`(${dailyGames.sector} = ${sector}) desc` : desc(dailyGames.gameDate),
+      desc(dailyGames.gameDate)
+    )
+    .limit(limit);
+}
+
 export async function listGames(limit = 20, offset = 0) {
   const db = await getDb();
   if (!db) return [];
@@ -1162,10 +1188,22 @@ export async function computeAndStoreCommunityStats(gameId: number) {
 
   const total = picks.length;
   if (total === 0) {
+    // Reset the splits too: a row first computed while bots still counted
+    // kept its old percentages, so the archive showed "0 participants" next
+    // to a 20% / 80% split (found 2026-10-12).
+    const zero = {
+      totalParticipants: 0,
+      gutPctA: "0.00",
+      gutPctB: "0.00",
+      finalPctA: "0.00",
+      finalPctB: "0.00",
+      validationCorrectPct: "0.00",
+      computedAt: new Date(),
+    };
     await db
       .insert(gameCommunityStats)
-      .values({ gameId, totalParticipants: 0 })
-      .onDuplicateKeyUpdate({ set: { totalParticipants: 0, computedAt: new Date() } });
+      .values({ gameId, ...zero })
+      .onDuplicateKeyUpdate({ set: zero });
     return;
   }
 

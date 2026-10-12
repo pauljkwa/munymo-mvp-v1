@@ -9,13 +9,8 @@
  * WhatsApp, Facebook and X, so it has to explain itself: two real stocks,
  * who won, by how much, how the sharer did, and that anyone can play free.
  *
- * Optional query params put the sharer's own result on the card. They're
- * user-editable (anyone can type ?s=100), same as a Wordle grid — it's a
- * brag, not a record — so they're validated to a tiny fixed vocabulary and
- * never echo free text into the image.
- *   s  = score 0–100      st = streak 0–999
- *   r  = 1 called it / 0 missed it
- *   c  = t | l | c  (Toss-up / Leaning / Confident)
+ * Optional query params put the sharer's own result on the card — see
+ * shared/shareParams.ts for the format and why it's parsed so strictly.
  *
  * Rendered with satori (layout → SVG) + resvg (SVG → PNG). Only published
  * games render, so a card can never reveal tomorrow's matchup.
@@ -25,52 +20,7 @@ import fs from "fs";
 import { createRequire } from "module";
 import path from "path";
 
-export interface ShareParams {
-  score: number | null;
-  streak: number | null;
-  called: boolean | null;
-  confidence: "Toss-up" | "Leaning" | "Confident" | null;
-}
-
-const CONFIDENCE: Record<string, ShareParams["confidence"]> = {
-  t: "Toss-up",
-  l: "Leaning",
-  c: "Confident",
-};
-
-/** Strict parse of the share query string; anything unexpected is dropped. */
-export function parseShareParams(query: string | URLSearchParams): ShareParams {
-  const q = typeof query === "string" ? new URLSearchParams(query.replace(/^\?/, "")) : query;
-  const int = (k: string, max: number) => {
-    const v = q.get(k);
-    if (v === null || !/^\d{1,3}$/.test(v)) return null;
-    const n = parseInt(v, 10);
-    return n <= max ? n : null;
-  };
-  const r = q.get("r");
-  return {
-    score: int("s", 100),
-    streak: int("st", 999),
-    called: r === "1" ? true : r === "0" ? false : null,
-    confidence: CONFIDENCE[q.get("c") ?? ""] ?? null,
-  };
-}
-
-export function hasShareParams(p: ShareParams): boolean {
-  return p.score !== null || p.called !== null;
-}
-
-/** Canonical query string for a share — the inverse of parseShareParams. */
-export function shareQuery(p: ShareParams): string {
-  const q = new URLSearchParams();
-  if (p.score !== null) q.set("s", String(p.score));
-  if (p.called !== null) q.set("r", p.called ? "1" : "0");
-  if (p.streak !== null && p.streak > 1) q.set("st", String(p.streak));
-  const c = Object.entries(CONFIDENCE).find(([, v]) => v === p.confidence)?.[0];
-  if (c) q.set("c", c);
-  const s = q.toString();
-  return s ? `?${s}` : "";
-}
+import { hasShareParams, parseShareParams, shareQuery, type ShareParams } from "@shared/shareParams";
 
 // ── rendering ────────────────────────────────────────────────────────────────
 
@@ -125,6 +75,15 @@ function fmtMove(v: string | null): { text: string; color: string } {
   return { text: `${n > 0 ? "+" : ""}${n.toFixed(2)}%`, color: n >= 0 ? C.emerald : C.red };
 }
 
+/** "Constellation Energy Corporation" → "Constellation Energy". */
+export function shortCompanyName(name: string): string {
+  const short = name
+    .replace(/,?\s+(Incorporated|Inc\.?|Corporation|Corp\.?|Company|Co\.?|Holdings?|Ltd\.?|Limited|plc|PLC|N\.V\.|S\.A\.|AG|SE)$/, "")
+    .replace(/,\s*$/, "")
+    .trim();
+  return short || name;
+}
+
 function clip(s: string, n: number): string {
   return s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s;
 }
@@ -161,7 +120,7 @@ function companyPanel(ticker: string, name: string, perf: string | null, isWinne
           )
         : null
     ),
-    h("div", { fontSize: 24, color: C.muted, marginTop: 8 }, clip(name, 30)),
+    h("div", { fontSize: 24, color: C.muted, marginTop: 8 }, clip(shortCompanyName(name), 30)),
     h("div", { fontSize: 56, fontWeight: 800, color: move.color, marginTop: 14, lineHeight: 1 }, move.text),
     h("div", { fontSize: 18, color: C.subtle, marginTop: 6 }, "on the day")
   );
@@ -232,6 +191,7 @@ const svgUri = (d: string) =>
   ).toString("base64")}`;
 const TICK = svgUri("M4 12.5l5 5L20 6.5");
 const CROSS = svgUri("M6 6l12 12M18 6L6 18");
+const ARROW = svgUri("M4 12h15M13 6l6 6-6 6");
 
 export function cardTree(g: CardGame, p: ShareParams, logoDataUri: string | null): Node {
   const personal = hasShareParams(p);
@@ -301,6 +261,7 @@ export function cardTree(g: CardGame, p: ShareParams, logoDataUri: string | null
       h(
         "div",
         {
+          alignItems: "center",
           fontSize: 26,
           fontWeight: 800,
           color: C.bg,
@@ -308,7 +269,8 @@ export function cardTree(g: CardGame, p: ShareParams, logoDataUri: string | null
           padding: "16px 28px",
           borderRadius: 999,
         },
-        personal ? "Can you beat me? →" : "Play today's →"
+        personal ? (p.called === false ? "Can you do better?" : "Can you beat me?") : "Play today's game",
+        { type: "img", props: { src: ARROW, width: 26, height: 26, style: { marginLeft: 10 } } }
       )
     )
   );

@@ -21,7 +21,8 @@ import type { Express, Request, Response } from "express";
 // directly — unlike client components. If a lesson file ever imports runtime
 // client code, the server build breaks: split the data into shared/ instead.
 import { ALL_LEVELS } from "../../client/src/content/lessons";
-import { archivePath, archiveSlugDate, lessonIdFromSegment, lessonPath } from "@shared/slugs";
+import { archivePath, archiveSlug, archiveSlugDate, lessonIdFromSegment, lessonPath } from "@shared/slugs";
+import { hasShareParams, parseShareParams, shareQuery } from "@shared/shareParams";
 
 const BASE_URL = "https://munymo.com";
 
@@ -48,6 +49,7 @@ export interface ArchiveGame {
   gameDate: string;
   companyATicker: string;
   companyBTicker: string;
+  sector: string | null;
 }
 
 // The published-game list backs both the sitemap and the crawlable link list,
@@ -74,6 +76,7 @@ async function getPublishedGames(): Promise<ArchiveGame[]> {
         gameDate: dailyGames.gameDate,
         companyATicker: dailyGames.companyATicker,
         companyBTicker: dailyGames.companyBTicker,
+        sector: dailyGames.sector,
       })
       .from(dailyGames)
       .where(eq(dailyGames.status, "result_published"))
@@ -149,6 +152,11 @@ export interface PageMeta {
   canonical: string | null;
   /** Auth-gated or nonexistent pages: tell crawlers not to index the shell. */
   noindex: boolean;
+  /** Link-preview image (absolute URL); null keeps the site-wide card. */
+  image?: string | null;
+  /** og:/twitter: title and description when they should differ from the page's own. */
+  socialTitle?: string | null;
+  socialDescription?: string | null;
 }
 
 // Public routes with a fixed title/description — mirrors the usePageMeta call
@@ -208,6 +216,7 @@ const ALL_LESSONS = ALL_LEVELS.flatMap((level) => level.lessons);
 export async function resolvePageMeta(rawPath: string): Promise<PageMeta> {
   try {
     // Strip query/hash, collapse trailing slashes (/demo/ → /demo).
+    const query = rawPath.split("#")[0].split("?")[1] ?? "";
     let p = rawPath.split("?")[0].split("#")[0];
     if (p.length > 1) p = p.replace(/\/+$/, "");
     if (p === "") p = "/";
@@ -245,7 +254,7 @@ export async function resolvePageMeta(rawPath: string): Promise<PageMeta> {
     }
 
     const gameMatch = p.match(/^\/research\/([^/]+)$/);
-    if (gameMatch) return resolveArchiveGameMeta(gameMatch[1], p);
+    if (gameMatch) return resolveArchiveGameMeta(gameMatch[1], p, query);
 
     // Anything else isn't a route the app knows — the SPA shell renders
     // NotFound, and the 404 status stops Google indexing soft-404s.
@@ -268,7 +277,7 @@ async function findArchiveGame(segment: string) {
   return getPublishedGameBySlug(segment);
 }
 
-async function resolveArchiveGameMeta(segment: string, p: string): Promise<PageMeta> {
+async function resolveArchiveGameMeta(segment: string, p: string, query = ""): Promise<PageMeta> {
   try {
     // Not a numeric id or a well-formed slug → can't be a game, DB or not.
     if (!/^\d+$/.test(segment) && !archiveSlugDate(segment)) {
@@ -287,10 +296,24 @@ async function resolveArchiveGameMeta(segment: string, p: string): Promise<PageM
     // default meta so tomorrow's matchup never leaks through the html head.
     if (game.status !== "result_published") return defaults({ noindex: true });
 
+    // A shared result link (?s=100&r=1…) unfurls as the sharer's own card;
+    // the canonical ignores the query, so it's still one page to Google.
+    const share = parseShareParams(query);
+    const vs = `${game.companyATicker} vs ${game.companyBTicker}`;
+    const personal = hasShareParams(share);
+    const scoreText = share.score !== null ? ` — ${share.score}/100` : "";
     return defaults({
-      title: `${game.companyATicker} vs ${game.companyBTicker} — Which Stock Performed Better? | Munymo`,
+      title: `${vs} — Which Stock Performed Better? | Munymo`,
       description: `${game.companyAName} (${game.companyATicker}) vs ${game.companyBName} (${game.companyBTicker}), ${game.gameDate}: research brief, result, and community stats from Munymo's daily stock market game.`,
       canonical: `${BASE_URL}${archivePath(game)}`,
+      image: `${BASE_URL}/og/${archiveSlug(game)}.png${shareQuery(share)}`,
+      socialTitle: personal
+        ? share.called === false
+          ? `I missed ${vs} on Munymo${scoreText}. Can you do better?`
+          : `I called ${vs} on Munymo${scoreText}. Can you beat me?`
+        : `${vs}: which stock would you have picked? | Munymo`,
+      socialDescription:
+        "Every trading day, two real stocks go head to head and you call the winner. Free stock market game, no sign-up.",
     });
   } catch (err) {
     console.error("[seo] archive game meta lookup failed:", err);
@@ -487,8 +510,12 @@ export async function buildCrawlContent(path: string): Promise<string> {
       // Sibling + hub links so a crawler landing here has somewhere to go, and
       // the archive gains an internal link graph rather than a flat sitemap.
       const games = await getPublishedGames();
-      const siblings = games
-        .filter((g) => g.id !== game.id)
+      // Same sector first (the reader's likely next interest), then newest.
+      const others = games.filter((g) => g.id !== game.id);
+      const siblings = [
+        ...others.filter((g) => game.sector && g.sector === game.sector),
+        ...others.filter((g) => !game.sector || g.sector !== game.sector),
+      ]
         .slice(0, MAX_SIBLING_LINKS)
         .map(gameLink);
       return (
@@ -605,7 +632,27 @@ export function injectPageMeta(html: string, meta: PageMeta): string {
       .replace(/(<meta[^>]*name="twitter:description"[^>]*content=")[^"]*(")/, `$1${desc}$2`);
   }
 
+  if (meta.socialTitle) {
+    const t = htmlEscape(meta.socialTitle);
+    out = out
+      .replace(/(<meta[^>]*property="og:title"[^>]*content=")[^"]*(")/, `$1${t}$2`)
+      .replace(/(<meta[^>]*name="twitter:title"[^>]*content=")[^"]*(")/, `$1${t}$2`);
+  }
+  if (meta.socialDescription) {
+    const d = htmlEscape(meta.socialDescription);
+    out = out
+      .replace(/(<meta[^>]*property="og:description"[^>]*content=")[^"]*(")/, `$1${d}$2`)
+      .replace(/(<meta[^>]*name="twitter:description"[^>]*content=")[^"]*(")/, `$1${d}$2`);
+  }
   const extra: string[] = [];
+  if (meta.image) {
+    const img = htmlEscape(meta.image);
+    out = out
+      .replace(/(<meta[^>]*property="og:image"[^>]*content=")[^"]*(")/, `$1${img}$2`)
+      .replace(/(<meta[^>]*name="twitter:image"[^>]*content=")[^"]*(")/, `$1${img}$2`)
+      .replace(/(<meta[^>]*name="twitter:card"[^>]*content=")[^"]*(")/, `$1summary_large_image$2`);
+    extra.push(`<meta property="og:image:width" content="1200" />`, `<meta property="og:image:height" content="630" />`);
+  }
   if (meta.canonical) {
     const href = htmlEscape(meta.canonical);
     extra.push(`<link rel="canonical" href="${href}" />`);
@@ -693,10 +740,11 @@ export async function buildPrefetch(rawUrl: string): Promise<string> {
     const caller = appRouter.createCaller({ req: null as never, res: null as never, user: null });
     const gameId = game.id;
     const settle = <T>(pr: Promise<T>) => pr.catch(() => undefined);
-    const [research, communityStats, validationQ] = await Promise.all([
+    const [research, communityStats, validationQ, related] = await Promise.all([
       settle(caller.games.getResearch({ gameId })),
       settle(caller.games.getCommunityStats({ gameId })),
       settle(caller.games.getValidationQuestion({ gameId })),
+      settle(caller.games.getRelated({ gameId })),
     ]);
 
     const entries: { path: string[]; input: unknown; data: unknown }[] = [
@@ -705,6 +753,7 @@ export async function buildPrefetch(rawUrl: string): Promise<string> {
     if (research !== undefined) entries.push({ path: ["games", "getResearch"], input: { gameId }, data: research });
     if (communityStats !== undefined) entries.push({ path: ["games", "getCommunityStats"], input: { gameId }, data: communityStats });
     if (validationQ !== undefined) entries.push({ path: ["games", "getValidationQuestion"], input: { gameId }, data: validationQ });
+    if (related !== undefined) entries.push({ path: ["games", "getRelated"], input: { gameId }, data: related });
 
     // Escaping "<" as \u003c (still valid JSON) stops "</script>" or "<!--"
     // inside the research text from ending the tag early.

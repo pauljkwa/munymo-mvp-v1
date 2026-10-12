@@ -5,7 +5,8 @@ import { withReferralParams } from "@/lib/utils";
 import { useParams } from "wouter";
 import PublicLayout from "@/components/PublicLayout";
 import { Link } from "wouter";
-import { ArrowLeft, Trophy, BookOpen, Users, Loader2, HelpCircle, Lightbulb, ExternalLink, BarChart2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Trophy, BookOpen, Users, Loader2, HelpCircle, Lightbulb, ExternalLink, BarChart2, Share2, Check } from "lucide-react";
+import { toast } from "sonner";
 import ResearchMetricsPanel from "@/components/ResearchMetricsPanel";
 import { ChartSheet } from "@/components/ChartSheet";
 import { useEffect, useState } from "react";
@@ -47,6 +48,8 @@ export default function ArchiveGame() {
   );
   const { data: communityStats } = trpc.games.getCommunityStats.useQuery({ gameId }, { enabled: !!gameId });
   const { data: validationQ } = trpc.games.getValidationQuestion.useQuery({ gameId }, { enabled: !!gameId });
+  const { data: related } = trpc.games.getRelated.useQuery({ gameId }, { enabled: !!gameId });
+  const [shared, setShared] = useState(false);
   // Fire-and-forget: log clicks on the source-article link for referral reporting.
   const recordOutboundClick = trpc.games.recordOutboundClick.useMutation();
   const [chartTicker, setChartTicker] = useState<string | null>(null);
@@ -85,6 +88,26 @@ export default function ArchiveGame() {
     );
   }
 
+  // Share the page itself (no personal result): the link unfurls into the
+  // matchup card from server/_core/shareCard.ts.
+  async function sharePage() {
+    if (!game) return;
+    const url = `https://munymo.com${archivePath(game)}`;
+    const text = `${game.companyATicker} vs ${game.companyBTicker}: which stock would you have picked? The research and the result on Munymo.`;
+    try {
+      if (typeof navigator.share === "function") {
+        await navigator.share({ text, url });
+      } else {
+        await navigator.clipboard.writeText(`${text}\n${url}`);
+        toast.success("Link copied — paste it anywhere.");
+      }
+      setShared(true);
+    } catch (err) {
+      if ((err as { name?: string })?.name === "AbortError") return;
+      toast.error("Couldn't share from this browser.");
+    }
+  }
+
   const winnerName = game.winner === "A" ? game.companyAName : game.companyBName;
   const winnerTicker = game.winner === "A" ? game.companyATicker : game.companyBTicker;
 
@@ -113,6 +136,23 @@ export default function ArchiveGame() {
               {game.sector}
             </p>
           )}
+        </div>
+
+        {/* What this page is — most readers arrive from a search and have
+            never heard of Munymo. One line, one way in. */}
+        <div
+          className="card-glass p-4 mb-5 flex flex-col sm:flex-row sm:items-center gap-3 animate-fade-up"
+          style={{ borderColor: "var(--color-gold)" }}
+        >
+          <p className="text-sm flex-1" style={{ color: "var(--color-muted)" }}>
+            <span className="font-semibold" style={{ color: "var(--color-foreground)" }}>
+              This is a past Munymo matchup.
+            </span>{" "}
+            Every trading day we pick two real stocks and you call which does better. Free, no sign-up.
+          </p>
+          <Link href="/game" className="btn-gold text-sm px-5 py-2.5 whitespace-nowrap justify-center">
+            Play today's matchup <ArrowRight size={15} />
+          </Link>
         </div>
 
         {/* Result */}
@@ -292,8 +332,9 @@ export default function ArchiveGame() {
           </div>
         )}
 
-        {/* Community stats */}
-        {communityStats && (
+        {/* Community stats — hidden until real players took part: "0
+            participants" reads as a dead site to a first-time visitor. */}
+        {communityStats && communityStats.totalParticipants > 0 && (
           <div className="card-glass p-6 animate-fade-up delay-200">
             <div className="flex items-center gap-2 mb-4">
               <Users size={16} style={{ color: "var(--color-brand)" }} />
@@ -350,6 +391,51 @@ export default function ArchiveGame() {
             </div>
           </div>
         )}
+
+        {/* Where next — the reader just finished a full matchup; give them
+            today's, more like this one, and a way to pass it on. */}
+        <div className="card-glass p-6 mt-5 animate-fade-up delay-200" style={{ borderColor: "var(--color-gold)" }}>
+          <p className="font-display text-xl mb-1" style={{ color: "var(--color-foreground)" }}>
+            Think you'd have called it?
+          </p>
+          <p className="text-sm mb-4" style={{ color: "var(--color-muted)" }}>
+            A new matchup goes live every US trading day. Read the research, make your call, and see how you did
+            when the market closes. Free, no sign-up, about five minutes.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Link href="/game" className="btn-gold text-sm px-5 py-2.5 justify-center">
+              Play today's matchup <ArrowRight size={15} />
+            </Link>
+            <button type="button" onClick={sharePage} className="btn-ghost text-sm px-5 py-2.5 inline-flex items-center justify-center gap-2">
+              {shared ? <Check size={15} /> : <Share2 size={15} />}
+              {shared ? "Shared" : "Share this matchup"}
+            </button>
+          </div>
+
+          {related && related.length > 0 && (
+            <div className="mt-6">
+              <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--color-brand)" }}>
+                More matchups{game.sector && related.some((r) => r.sector === game.sector) ? ` · ${game.sector}` : ""}
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {related.map((r) => (
+                  <Link
+                    key={r.id}
+                    href={archivePath(r)}
+                    className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm"
+                    style={{ background: "var(--color-surface-raised)", color: "var(--color-foreground)" }}
+                  >
+                    <span className="font-semibold">{r.companyATicker} vs {r.companyBTicker}</span>
+                    <span className="ml-auto text-xs" style={{ color: "var(--color-subtle)" }}>{r.gameDate}</span>
+                  </Link>
+                ))}
+              </div>
+              <Link href="/research" className="text-sm font-semibold inline-flex items-center gap-1 mt-3" style={{ color: "var(--color-brand)" }}>
+                Browse all matchups <ArrowRight size={14} />
+              </Link>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Rendered at the top level so the sheet covers the full viewport on iOS. */}

@@ -8,6 +8,7 @@ import { registerOAuthRoutes } from "./oauth";
 import { registerMagicLinkRedirect } from "./magicLinkRedirect";
 import { registerScheduledCuration } from "./scheduledCuration";
 import { registerUnsubscribe } from "../unsubscribe";
+import { registerShareCard } from "./shareCard";
 import { registerSeo } from "./seo";
 import { registerTesterAgent } from "./testerAgent";
 import { registerCurationAgent } from "./curationAgent";
@@ -50,6 +51,7 @@ async function startServer() {
   registerMagicLinkRedirect(app);
   registerUnsubscribe(app);
   registerSeo(app);
+  registerShareCard(app);
   registerScheduledCuration(app);
   registerTesterAgent(app);
   registerCurationAgent(app);
