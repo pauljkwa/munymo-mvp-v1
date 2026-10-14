@@ -105,6 +105,11 @@ export function selectLessonOfTheDay(input: LessonOfTheDayInput): Lesson | null 
     .filter((l) => l.tags.some((t) => ROTATION_TAGS.includes(t)) && !completed.has(l.id))
     .sort(byLevelOrder);
   if (eligible.length === 0) return null;
-  const index = ((input.gameId % eligible.length) + eligible.length) % eligible.length;
+  // Rotate by the game DATE, not the id: TiDB hands out ids in blocks of
+  // 30,000, so consecutive games differ by a multiple of 30,000 and
+  // `id % n` is the same lesson every day for almost any pool size.
+  const dayIndex = Math.floor(Date.parse(`${input.gameDate}T00:00:00Z`) / 86_400_000);
+  const seed = Number.isFinite(dayIndex) ? dayIndex : input.gameId;
+  const index = ((seed % eligible.length) + eligible.length) % eligible.length;
   return eligible[index];
 }
