@@ -1303,7 +1303,7 @@ export default function DailyGame() {
         {step === "submitted" && isV2 && (
           <EarlierLessonCard
             key={game.id}
-            gameId={game.id}
+            gameDate={game.gameDate}
             completedLessonIds={(learnProgress ?? []).map((p) => p.lessonId)}
           />
         )}
@@ -1908,10 +1908,16 @@ function YourDayCard({
  * Optional, unscored retrieval practice from a lesson the player already knows.
  * Deliberately never calls learn.markComplete; answer state is local only.
  */
-function EarlierLessonCard({ gameId, completedLessonIds }: { gameId: number; completedLessonIds: string[] }) {
+function EarlierLessonCard({ gameDate, completedLessonIds }: { gameDate: string; completedLessonIds: string[] }) {
   const [picked, setPicked] = useState<string | null>(null);
+  // Rotate by the game DATE, not the game id: ids step by 30,000 a day, so
+  // `id % n` landed on the same lesson every day for almost any pool size.
+  // A player with no finished lessons draws from the whole curriculum rather
+  // than seeing Lesson 1 forever.
   const done = ALL_LESSONS_FLAT.filter((l) => completedLessonIds.includes(l.id));
-  const lesson = done.length > 0 ? done[gameId % done.length] : ALL_LESSONS_FLAT.find((l) => l.level === 100);
+  const pool = done.length > 0 ? done : ALL_LESSONS_FLAT;
+  const dayIndex = Math.floor(Date.parse(`${gameDate}T00:00:00Z`) / 86_400_000);
+  const lesson = pool.length > 0 ? pool[((dayIndex % pool.length) + pool.length) % pool.length] : undefined;
   if (!lesson) return null;
   const { quiz } = lesson;
   const options = quiz.questionType === "multiple_choice" ? (quiz.options ?? []) : ["True", "False"];
