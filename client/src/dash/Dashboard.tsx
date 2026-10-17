@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, Moon, RefreshCw, Sun } from "lucide-react";
+import { useTheme } from "@/contexts/ThemeContext";
 import type { inferRouterOutputs } from "@trpc/server";
 import { trpc } from "@/lib/trpc";
 import type { AppRouter } from "../../../server/routers";
@@ -380,6 +381,7 @@ function PerGameDaySection({ rows }: { rows: DashboardData["money"]["byGameDate"
 }
 
 export default function Dashboard({ onSignOut }: { onSignOut: () => void }) {
+  const { theme, toggleTheme } = useTheme();
   const now = useNow(60_000);
   const query = trpc.owner.dashboard.useQuery(undefined, {
     refetchInterval: REFRESH_MS,
@@ -398,6 +400,15 @@ export default function Dashboard({ onSignOut }: { onSignOut: () => void }) {
           <span className="text-xs" style={{ color: "var(--color-muted)" }}>
             {data ? `updated ${formatClock(data.generatedAt)}` : query.isError ? "update failed" : "loading"}
           </span>
+          <button
+            type="button"
+            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            onClick={toggleTheme}
+            className="btn-ghost p-2"
+            style={{ color: "var(--color-muted)" }}
+          >
+            {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
           <button
             type="button"
             aria-label="Refresh"

@@ -112,8 +112,9 @@ function Gate() {
 export default function DashApp() {
   return (
     <ErrorBoundary>
-      {/* Dark by default and not switchable, so it never writes a theme to storage. */}
-      <ThemeProvider defaultTheme="dark">
+      {/* Dark by default; the header's sun/moon button switches. The choice is
+          remembered under the dash origin's own localStorage, separate from munymo.com's. */}
+      <ThemeProvider defaultTheme="dark" switchable>
         <Toaster richColors position="top-center" />
         <Switch>
           <Route path="/" component={Gate} />
