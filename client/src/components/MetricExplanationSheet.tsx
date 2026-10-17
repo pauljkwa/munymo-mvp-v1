@@ -92,10 +92,14 @@ export function MetricExplanationSheet({ metricLabel }: MetricExplanationSheetPr
 
         <Drawer open={open} onOpenChange={setOpen}>
           <DrawerContent>
-            <DrawerHeader className="flex items-center justify-between pb-2">
+            {/* flex-row is needed: DrawerHeader's base class is flex-col, so without
+                it the X stacked under the title and sat on top of the first metric
+                label, where taps on it were swallowed (found by the demo-video
+                recorder, 2026-10-17). */}
+            <DrawerHeader className="flex flex-row items-center justify-between pb-2">
               <DrawerTitle className="text-base">Understanding this metric</DrawerTitle>
               <DrawerClose asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
+                <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Close">
                   <X className="h-4 w-4" />
                 </Button>
               </DrawerClose>
