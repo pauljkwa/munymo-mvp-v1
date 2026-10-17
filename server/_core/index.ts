@@ -102,7 +102,7 @@ async function startServer() {
     console.log("[curation-staging] Cron triggered");
     try {
       const { runStagingCuration } = await import("./curationAgent");
-      await runStagingCuration({ finalAttempt: false });
+      await runStagingCuration({ finalAttempt: false, trigger: "cron-1445" });
     } catch (err) {
       console.error("[curation-staging] Cron error:", err);
     }
@@ -118,7 +118,7 @@ async function startServer() {
       const { stagingOutstanding, runStagingCuration } = await import("./curationAgent");
       if (await stagingOutstanding()) {
         console.log("[curation-staging-watchdog] No staged game yet — re-running staging");
-        await runStagingCuration({ finalAttempt: true });
+        await runStagingCuration({ finalAttempt: true, trigger: "cron-1530-watchdog" });
       } else {
         console.log("[curation-staging-watchdog] Staged game already exists (or window closed) — no-op");
       }
@@ -139,7 +139,7 @@ async function startServer() {
     console.log("[curation-agent] Cron triggered");
     try {
       const { runDailyCuration } = await import("./curationAgent");
-      await runDailyCuration({ finalAttempt: false });
+      await runDailyCuration({ finalAttempt: false, trigger: "cron-1615" });
     } catch (err) {
       console.error("[curation-agent] Cron error:", err);
     }

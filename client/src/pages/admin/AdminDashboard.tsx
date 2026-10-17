@@ -15,6 +15,7 @@ import {
   Bell,
   Bot,
   Globe,
+  Receipt,
 } from "lucide-react";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
@@ -214,6 +215,16 @@ export default function AdminDashboard() {
           <span className="text-xs" style={{ color: "var(--color-subtle)" }}>
             Recovery for a failed overnight run — the agent scores the concluded game and curates the next one, exactly like the nightly cron.
           </span>
+        </div>
+
+        {/* Running costs ledger */}
+        <div className="card-glass p-4 mb-6 flex items-center gap-3 flex-wrap" style={{ borderColor: "var(--color-subtle)" }}>
+          <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-subtle)" }}>Costs</span>
+          <Link href="/admin/costs" className="btn-ghost text-xs py-1 px-3 flex items-center gap-1" style={{ color: "var(--color-brand)" }}>
+            <Receipt size={13} />
+            Running costs
+          </Link>
+          <span className="text-xs" style={{ color: "var(--color-subtle)" }}>AI spend per game day, plus the monthly vendor ledger. <Link href="/admin/audit" style={{ color: "var(--color-brand)" }}>Audit log</Link></span>
         </div>
 
         {/* Notifications test */}

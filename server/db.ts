@@ -3,6 +3,7 @@ import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
   adminAuditLog,
+  aiUsageLog,
   dailyGames,
   dailyScores,
   gameCommunityStats,
@@ -18,6 +19,7 @@ import {
   streakRecords,
   users,
   validationQuestions,
+  vendorCosts,
   type InsertMarketVote,
   type InsertOutboundClick,
   type InsertPracticePick,
@@ -1276,6 +1278,67 @@ export async function getAuditLog(limit = 50, offset = 0) {
     .orderBy(desc(adminAuditLog.createdAt))
     .limit(limit)
     .offset(offset);
+}
+
+// ─── Running costs (AI usage log + vendor ledger) ─────────────────────────────
+// Spec: references/running-costs-ledger-spec.md. Aggregation maths lives in
+// shared/aiUsage.ts; these helpers only fetch and store rows.
+
+/** ai_usage_log rows created at or after `since` (both turn and run rows). */
+export async function getAiUsageRowsSince(since: Date) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(aiUsageLog).where(gte(aiUsageLog.createdAt, since)).orderBy(desc(aiUsageLog.createdAt));
+}
+
+/** Vendor ledger rows for the given months (YYYY-MM, inclusive range). */
+export async function getVendorCostRows(fromMonth: string, toMonth: string) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(vendorCosts)
+    .where(and(gte(vendorCosts.month, fromMonth), lte(vendorCosts.month, toMonth)))
+    .orderBy(desc(vendorCosts.month), asc(vendorCosts.vendor));
+}
+
+/** Insert-or-replace one (month, vendor) ledger entry. Throws if the database is unavailable. */
+export async function upsertVendorCost(
+  data: Omit<typeof vendorCosts.$inferInsert, "id" | "createdAt" | "updatedAt">
+): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable — entry not saved");
+  await db
+    .insert(vendorCosts)
+    .values(data)
+    .onDuplicateKeyUpdate({
+      set: {
+        category: data.category,
+        amount: data.amount,
+        currency: data.currency,
+        note: data.note ?? null,
+        enteredBy: data.enteredBy,
+      },
+    });
+  const [row] = await db
+    .select({ id: vendorCosts.id })
+    .from(vendorCosts)
+    .where(and(eq(vendorCosts.month, data.month), eq(vendorCosts.vendor, data.vendor)))
+    .limit(1);
+  return row?.id ?? 0;
+}
+
+export async function deleteVendorCost(id: number): Promise<{ month: string; vendor: string } | null> {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable — nothing deleted");
+  const [row] = await db
+    .select({ month: vendorCosts.month, vendor: vendorCosts.vendor })
+    .from(vendorCosts)
+    .where(eq(vendorCosts.id, id))
+    .limit(1);
+  if (!row) return null;
+  await db.delete(vendorCosts).where(eq(vendorCosts.id, id));
+  return row;
 }
 
 // ─── Metric Explanations ────────────────────────────────────────────────────────

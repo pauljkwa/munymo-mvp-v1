@@ -24,6 +24,7 @@ import AdminEditGame from "./pages/admin/AdminEditGame";
 import AdminPublishResult from "./pages/admin/AdminPublishResult";
 import AdminPlayers from "./pages/admin/AdminPlayers";
 import AdminAuditLog from "./pages/admin/AdminAuditLog";
+import AdminCosts from "./pages/admin/AdminCosts";
 import AdminEndOfDay from "./pages/admin/AdminEndOfDay";
 import MyDashboard from "./pages/MyDashboard";
 import TermsOfUse from "./pages/legal/TermsOfUse";
@@ -72,6 +73,7 @@ function Router() {
       <Route path="/admin/games/:id/result" component={AdminPublishResult} />
       <Route path="/admin/players" component={AdminPlayers} />
       <Route path="/admin/audit" component={AdminAuditLog} />
+      <Route path="/admin/costs" component={AdminCosts} />
       <Route path="/admin/end-of-day" component={AdminEndOfDay} />
 
       <Route path="/email-landing" component={EmailLanding} />

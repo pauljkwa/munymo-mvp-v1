@@ -2,6 +2,7 @@ import {
   bigint,
   boolean,
   decimal,
+  index,
   int,
   json,
   mysqlEnum,
@@ -681,3 +682,105 @@ export const marketVotes = mysqlTable(
 
 export type MarketVote = typeof marketVotes.$inferSelect;
 export type InsertMarketVote = typeof marketVotes.$inferInsert;
+
+// ─── Running costs: AI usage log + vendor bills ───────────────────────────────
+// Spec: references/running-costs-ledger-spec.md. Both tables are additive.
+
+/**
+ * One row per Anthropic API call made by the app (`rowKind = 'turn'`) plus one
+ * summary row per run (`rowKind = 'run'`), with token counts and an estimated
+ * dollar cost computed at write time (shared/aiPricing.ts). Aggregations must
+ * filter on rowKind: a run row's cost is the sum of its turns, so summing both
+ * kinds double-counts. No user id on purpose — a metric explanation is
+ * triggered by a player but we record only that the call happened.
+ */
+export const aiUsageLog = mysqlTable(
+  "ai_usage_log",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    // 'turn' (one API call) or 'run' (one summary row written when a run ends)
+    rowKind: varchar("rowKind", { length: 8 }).notNull(),
+    // Groups the turns of one run with its summary row:
+    // `<runKind>-<epoch ms>-<4 random hex>`
+    runId: varchar("runId", { length: 40 }).notNull(),
+    // daily_combined | daily_results_only | staging | backfill_highlights | metric_explanation
+    runKind: varchar("runKind", { length: 32 }).notNull(),
+    // What started it: cron-1445, cron-1530-watchdog, cron-1615, watchdog-1715ET,
+    // boot-sweep, admin-button, api-endpoint, admin-backfill, player-request, ...
+    trigger: varchar("trigger", { length: 32 }).notNull(),
+    // US-Eastern trading date the run was told (todayEt); null for one-off calls.
+    // The key for "cost per game day".
+    gameDate: varchar("gameDate", { length: 10 }),
+    // The model that actually served the call, after any failover. Null on run rows.
+    model: varchar("model", { length: 40 }),
+    // 1-based position within the run. Null on run rows.
+    turnIndex: int("turnIndex"),
+    inputTokens: int("inputTokens"),
+    cacheReadTokens: int("cacheReadTokens"),
+    cacheWrite5mTokens: int("cacheWrite5mTokens"),
+    cacheWrite1hTokens: int("cacheWrite1hTokens"),
+    outputTokens: int("outputTokens"),
+    webSearchRequests: int("webSearchRequests"),
+    // end_turn | pause_turn | tool_use | max_tokens | refusal
+    stopReason: varchar("stopReason", { length: 24 }),
+    // Transient-error retries that preceded this successful turn
+    retries: int("retries"),
+    // True when the turn ran on the fallback model
+    failedOver: boolean("failedOver").default(false).notNull(),
+    // Null when the model was not in the rate table ("unpriced"). On run rows:
+    // the sum of the run's turns.
+    estimatedCostUsd: decimal("estimatedCostUsd", { precision: 10, scale: 6 }),
+    // effectiveDate of the rate table used, so rows can be re-priced later
+    pricingVersion: varchar("pricingVersion", { length: 10 }),
+    // Run rows only: success | failed | skipped
+    outcome: varchar("outcome", { length: 16 }),
+    // Run rows only: the final error's message when failed
+    errorMessage: text("errorMessage"),
+    // Run rows only: how many payload submissions it took (freshness retries)
+    submitAttempts: int("submitAttempts"),
+    // Turn rows: wall time of the API call. Run rows: the whole run.
+    durationMs: int("durationMs"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  (table) => ({
+    createdAtIdx: index("ai_usage_log_createdAt_idx").on(table.createdAt),
+    runIdIdx: index("ai_usage_log_runId_idx").on(table.runId),
+    gameDateIdx: index("ai_usage_log_gameDate_idx").on(table.gameDate),
+  })
+);
+
+export type AiUsageLog = typeof aiUsageLog.$inferSelect;
+export type InsertAiUsageLog = typeof aiUsageLog.$inferInsert;
+
+/**
+ * Monthly ledger Paul fills in by hand from each vendor invoice. `category`
+ * separates what Munymo costs to operate ('run') from what Paul pays to build
+ * it ('build', e.g. the Claude Max plan). One row per (month, vendor): entering
+ * the same vendor for the same month again replaces the figure.
+ */
+export const vendorCosts = mysqlTable(
+  "vendor_costs",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    // Billing month on the invoice, YYYY-MM
+    month: varchar("month", { length: 7 }).notNull(),
+    vendor: varchar("vendor", { length: 40 }).notNull(),
+    // 'run' or 'build'
+    category: varchar("category", { length: 8 }).notNull(),
+    // As printed on the invoice
+    amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+    // Totals are shown per currency; no conversion is attempted
+    currency: varchar("currency", { length: 3 }).default("USD").notNull(),
+    note: varchar("note", { length: 200 }),
+    // users.id of the admin who entered it
+    enteredBy: int("enteredBy").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  (table) => ({
+    monthVendorUnique: uniqueIndex("vendor_costs_month_vendor_unique").on(table.month, table.vendor),
+  })
+);
+
+export type VendorCost = typeof vendorCosts.$inferSelect;
+export type InsertVendorCost = typeof vendorCosts.$inferInsert;

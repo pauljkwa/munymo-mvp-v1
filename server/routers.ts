@@ -27,6 +27,7 @@ import { z } from "zod";
 import { COOKIE_NAME, PRICE_TREND_LABEL } from "@shared/const";
 import { valuesForMetric, validateHighlightedMetrics, scorePracticeV2, type MetricRow } from "./highlightedMetrics";
 import { chooseHighlightsForGame, usableMetricLabels } from "./_core/backfillHighlights";
+import { newRunId, recordAiRun, recordAiTurn, type AiRunContext } from "./_core/aiUsage";
 import { currentSeasonKey, seasonLabel, seasonWindow } from "@shared/leaderboard";
 import { computeGutVsResearch, describeGutVsResearch } from "@shared/insight";
 import type { Candle } from "../drizzle/schema";
@@ -101,6 +102,10 @@ import {
   getOutboundClickStats,
   recordMarketVote,
   getMarketVoteStats,
+  getAiUsageRowsSince,
+  getVendorCostRows,
+  upsertVendorCost,
+  deleteVendorCost,
   getLessonProgressForUser,
   markLessonComplete,
   getSeasonStandings,
@@ -109,6 +114,8 @@ import {
   publicPlayerName,
 } from "./db";
 import { ALL_LESSON_IDS } from "@shared/lessonIds";
+import { aiCostByMonth, groupVendorCosts, monthKey, summarizeTurns } from "@shared/aiUsage";
+import { vendorCostInputSchema } from "@shared/vendorCostSchema";
 import { pingIndexNow } from "./_core/indexNow";
 import { archivePath } from "@shared/slugs";
 import {
@@ -1218,7 +1225,63 @@ async function closeAndScoreGame(
 
 // ─── Admin Router ─────────────────────────────────────────────────────────────
 
+/** Running-costs ledger (spec: references/running-costs-ledger-spec.md §6). */
+const adminCostsRouter = router({
+  aiSummary: adminProcedure
+    .input(z.object({ days: z.number().int().min(1).max(365).default(30) }).default({ days: 30 }))
+    .query(async ({ input }) => {
+      const now = new Date();
+      // Cover the longest of: the requested window, the last 30 days, and the calendar month so far (UTC).
+      const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+      const windowStart = new Date(now.getTime() - Math.max(input.days, 30) * 24 * 60 * 60 * 1000);
+      const since = monthStart < windowStart ? monthStart : windowStart;
+      const rows = await getAiUsageRowsSince(since);
+      return summarizeTurns(rows, { now, days: input.days });
+    }),
+
+  vendorList: adminProcedure
+    .input(z.object({ months: z.number().int().min(1).max(36).default(12) }).default({ months: 12 }))
+    .query(async ({ input }) => {
+      const now = new Date();
+      const first = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (input.months - 1), 1));
+      const [vendorRows, usageRows] = await Promise.all([
+        getVendorCostRows(monthKey(first), monthKey(now)),
+        getAiUsageRowsSince(first),
+      ]);
+      return { months: groupVendorCosts(vendorRows, aiCostByMonth(usageRows)) };
+    }),
+
+  vendorUpsert: adminProcedure.input(vendorCostInputSchema).mutation(async ({ ctx, input }) => {
+    const id = await upsertVendorCost({
+      month: input.month,
+      vendor: input.vendor,
+      category: input.category,
+      amount: input.amount.toFixed(2),
+      currency: input.currency,
+      note: input.note ? input.note : null,
+      enteredBy: ctx.user.id,
+    });
+    await writeAuditLog(
+      ctx.user.id,
+      "vendor_cost_upsert",
+      "vendor_cost",
+      id || undefined,
+      `${input.month} ${input.vendor} ${input.amount.toFixed(2)} ${input.currency} (${input.category})`
+    );
+    return { ok: true as const };
+  }),
+
+  vendorDelete: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+    const removed = await deleteVendorCost(input.id);
+    if (!removed) throw new TRPCError({ code: "NOT_FOUND", message: "That entry no longer exists" });
+    await writeAuditLog(ctx.user.id, "vendor_cost_delete", "vendor_cost", input.id, `${removed.month} ${removed.vendor}`);
+    return { ok: true as const };
+  }),
+});
+
 const adminRouter = router({
+  costs: adminCostsRouter,
+
   // Outbound-referral reporting: total clicks sent to publishers + per-publisher
   // breakdown. Ammunition for "we sent you N thousand readers" partnership pitches.
   outboundClickStats: adminProcedure.query(async () => {
@@ -1239,7 +1302,7 @@ const adminRouter = router({
       return { started: false as const, alreadyRunning: true as const };
     }
     await writeAuditLog(ctx.user.id, "run_curation_manual", "game");
-    void runDailyCuration();
+    void runDailyCuration({ trigger: "admin-button" });
     return { started: true as const, alreadyRunning: false as const };
   }),
 
@@ -1289,9 +1352,20 @@ const adminRouter = router({
       ].slice(0, 10);
       let filled = 0;
       let failed = 0;
+      // Running-costs ledger: one runId per button press; each game's call is
+      // one turn, with the cost landing on that game's date.
+      const batchStartedAt = Date.now();
+      const usageRunId = newRunId("backfill_highlights");
+      let usageTurn = 0;
       for (const { game, rows } of batch) {
         try {
-          const chosen = await chooseHighlightsForGame(game, rows);
+          const usageCtx: AiRunContext = {
+            runId: usageRunId,
+            runKind: "backfill_highlights",
+            trigger: "admin-backfill",
+            gameDate: game.gameDate ?? undefined,
+          };
+          const chosen = await chooseHighlightsForGame(game, rows, { ctx: usageCtx, turnIndex: ++usageTurn });
           if (!chosen) {
             failed++;
             backfillFailedGameIds.add(game.id);
@@ -1307,6 +1381,12 @@ const adminRouter = router({
           backfillFailedGameIds.add(game.id);
           console.error(`[backfill-highlights] game ${game.id} failed:`, err);
         }
+      }
+      if (batch.length > 0) {
+        await recordAiRun(
+          { runId: usageRunId, runKind: "backfill_highlights", trigger: "admin-backfill" },
+          { outcome: "success", durationMs: Date.now() - batchStartedAt }
+        );
       }
       return {
         alreadyRunning: false as const,
@@ -2435,6 +2515,7 @@ const metricsRouter = router({
       try {
         const { default: AnthropicClient } = await import("@anthropic-ai/sdk");
         const client = new AnthropicClient({ apiKey: ENV.anthropicApiKey });
+        const explanationStartedAt = Date.now();
         const response = await client.messages.create({
           model: "claude-opus-4-8",
           max_tokens: 400,
@@ -2448,6 +2529,19 @@ const metricsRouter = router({
             { role: "user", content: `Please explain the financial metric: "${input.metricLabel}"` },
           ],
         });
+        // Running-costs ledger: one turn, its own runId, no user id (never throws).
+        await recordAiTurn(
+          { runId: newRunId("metric_explanation"), runKind: "metric_explanation", trigger: "player-request" },
+          {
+            model: "claude-opus-4-8",
+            turnIndex: 1,
+            usage: response.usage,
+            stopReason: response.stop_reason,
+            retries: 0,
+            failedOver: false,
+            durationMs: Date.now() - explanationStartedAt,
+          }
+        );
         const textBlock = response.content.find(
           (b): b is Anthropic.TextBlock => b.type === "text"
         );

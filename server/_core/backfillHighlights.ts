@@ -9,6 +9,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { ENV } from "./env";
 import { MODEL, SYSTEM_PROMPT } from "./curationAgent";
+import { recordAiTurn, type AiRunContext } from "./aiUsage";
 import {
   splitMetricLabel,
   valuesForMetric,
@@ -67,7 +68,10 @@ export async function chooseHighlightsForGame(game: {
   companyATicker: string;
   companyBName: string;
   companyBTicker: string;
-}, rows: MetricRow[]): Promise<string[] | null> {
+}, rows: MetricRow[],
+// Running-costs ledger: the batch's context (one runId per button press) and
+// this call's 1-based position in the batch. Optional so tests/tools can call without it.
+usage?: { ctx: AiRunContext; turnIndex: number }): Promise<string[] | null> {
   client ??= new Anthropic({ apiKey: ENV.anthropicApiKey, timeout: 2 * 60 * 1000 });
   const usable = usableMetricLabels(rows, game.companyATicker, game.companyBTicker);
   const lines = usable.map((lower) => {
@@ -77,12 +81,25 @@ export async function chooseHighlightsForGame(game: {
   const userText =
     `Company A: ${game.companyAName} (${game.companyATicker})\nCompany B: ${game.companyBName} (${game.companyBTicker})\n\n` +
     `Candidate metrics (use these exact labels):\n${lines.join("\n")}`;
+  const startedAt = Date.now();
   const msg = await client.messages.create({
     model: MODEL,
     max_tokens: 1000,
     system: [{ type: "text", text: buildBackfillSystemPrompt(), cache_control: { type: "ephemeral", ttl: "1h" } }],
     messages: [{ role: "user", content: userText }],
   });
+  // Logged before parsing: a call whose answer fails validation still cost money.
+  if (usage) {
+    await recordAiTurn(usage.ctx, {
+      model: MODEL,
+      turnIndex: usage.turnIndex,
+      usage: msg.usage,
+      stopReason: msg.stop_reason,
+      retries: 0,
+      failedOver: false,
+      durationMs: Date.now() - startedAt,
+    });
+  }
   const text = msg.content
     .filter((b): b is Anthropic.TextBlock => b.type === "text")
     .map((b) => b.text)

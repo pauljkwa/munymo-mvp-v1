@@ -36,6 +36,7 @@ import type { Express, Request, Response } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { ENV } from "./env";
 import { notifyOwner } from "./notification";
+import { newRunId, nextTurnIndex, recordAiRun, recordAiTurn, type AiRunContext, type AiRunKind } from "./aiUsage";
 
 export const MODEL = "claude-sonnet-5"; // Sonnet 5 ≈ 60% cheaper than Opus 4.8; switched 2026-07-18 to keep curation under the API spend limit
 // Failsafe (2026-07-30, after an overload storm killed the night): 529
@@ -461,7 +462,7 @@ async function runTurnWithRetry(
   // all three conversation types (full combined, Phase A staging, Phase B
   // results-only) — only the system prompt text differs per caller.
   systemPrompt: string
-): Promise<Anthropic.Message> {
+): Promise<{ message: Anthropic.Message; model: string; retries: number; durationMs: number }> {
   for (let retry = 0; ; retry++) {
     // Model failover: retries 0-1 stay on the primary (blips resolve in
     // seconds); from retry 2 the pool is genuinely struggling — switch to the
@@ -471,9 +472,11 @@ async function runTurnWithRetry(
       fallbackUntil = Date.now() + FALLBACK_STICKY_MS;
       console.warn(`[curation-agent] Primary model failing repeatedly — failing over to ${MODEL_FALLBACK} for ${FALLBACK_STICKY_MS / 60000} min`);
     }
+    const model = useFallback ? MODEL_FALLBACK : MODEL;
+    const turnStartedAt = Date.now();
     try {
       const stream = client.messages.stream({
-        model: useFallback ? MODEL_FALLBACK : MODEL,
+        model,
         max_tokens: MAX_OUTPUT_TOKENS,
         thinking: { type: "adaptive" },
         cache_control: { type: "ephemeral", ttl: "1h" },
@@ -493,7 +496,10 @@ async function runTurnWithRetry(
           containerRef.id = event.delta.container.id;
         }
       });
-      return await stream.finalMessage();
+      const message = await stream.finalMessage();
+      // Reported to research() so the usage log records the model that actually
+      // served the turn (after any failover), the retries it took, and its wall time.
+      return { message, model, retries: retry, durationMs: Date.now() - turnStartedAt };
     } catch (err: any) {
       if (retry >= TURN_RETRY_BACKOFF_MS.length || !isTransientApiError(err)) throw err;
       const delayMs = TURN_RETRY_BACKOFF_MS[retry];
@@ -524,7 +530,9 @@ async function research(
   // Phase A staging, Phase B results-only) — everything else about the
   // research loop (tools, retry/failover, pause_turn/tool_use handling) is
   // identical across all three.
-  systemPrompt: string
+  systemPrompt: string,
+  // Running-costs ledger (server/_core/aiUsage.ts): shared by every turn of the run.
+  usageCtx: AiRunContext
 ): Promise<Anthropic.Message> {
   const tools = [
     { type: "web_search_20260209", name: "web_search", max_uses: 15 } as unknown as Anthropic.ToolUnion,
@@ -532,7 +540,8 @@ async function research(
   ];
 
   for (let i = 0; i < MAX_PAUSE_TURNS; i++) {
-    const response = await runTurnWithRetry(client, messages, tools, containerRef, systemPrompt);
+    const turn = await runTurnWithRetry(client, messages, tools, containerRef, systemPrompt);
+    const response = turn.message;
     // Cache verification: cache_read should be large (and input small) on every
     // turn after the first. All-zero cache fields across a run = a silent
     // invalidator crept into the prefix.
@@ -541,6 +550,15 @@ async function research(
       `[curation-agent] turn ${i + 1}: input=${u.input_tokens} cache_read=${u.cache_read_input_tokens ?? 0} ` +
         `cache_write=${u.cache_creation_input_tokens ?? 0} output=${u.output_tokens}`
     );
+    await recordAiTurn(usageCtx, {
+      model: turn.model,
+      turnIndex: nextTurnIndex(usageCtx),
+      usage: u,
+      stopReason: response.stop_reason,
+      retries: turn.retries,
+      failedOver: turn.model === MODEL_FALLBACK,
+      durationMs: turn.durationMs,
+    });
     messages.push({ role: "assistant", content: response.content });
     if (response.container?.id) containerRef.id = response.container.id;
 
@@ -637,11 +655,12 @@ async function researchAndSubmitWithRetry(
   messages: Anthropic.MessageParam[],
   systemPrompt: string,
   submit: (payload: unknown) => Promise<{ status: number; body: any }>,
-  logPrefix: string
+  logPrefix: string,
+  usageCtx: AiRunContext
 ): Promise<{ status: number; body: any; attempt: number }> {
   const containerRef: { id: string | undefined } = { id: undefined };
   for (let attempt = 1; attempt <= MAX_SUBMIT_ATTEMPTS; attempt++) {
-    const finalMessage = await research(client, messages, containerRef, systemPrompt);
+    const finalMessage = await research(client, messages, containerRef, systemPrompt, usageCtx);
     const text = extractText(finalMessage);
     const payload = parsePayload(text);
 
@@ -686,7 +705,11 @@ export function isCurationRunInFlight(): boolean {
 /** How a run should report failure: watchdog re-runs are still scheduled after
  *  a non-final attempt, so its failure email is a calm "no action needed" note
  *  instead of the manual-recovery alarm. */
-export type CurationRunOptions = { finalAttempt?: boolean };
+export type CurationRunOptions = {
+  finalAttempt?: boolean;
+  /** What started the run (cron-1445, watchdog-1715ET, admin-button, ...), recorded in ai_usage_log. */
+  trigger?: string;
+};
 
 /** Shared in-flight guard for runDailyCuration/runStagingCuration — both
  *  check/set the SAME module-level runInFlight flag above. */
@@ -704,14 +727,14 @@ async function withCurationLock(label: string, fn: () => Promise<void>): Promise
 }
 
 export async function runDailyCuration(opts: CurationRunOptions = {}): Promise<void> {
-  await withCurationLock("curation-agent", () => runDailyCurationInner(opts.finalAttempt ?? true));
+  await withCurationLock("curation-agent", () => runDailyCurationInner(opts.finalAttempt ?? true, opts.trigger ?? "unknown"));
 }
 
 /** Phase A entry point — the 14:45 ET cron and the 15:30 ET staging watchdog
  *  both funnel through here. Shares runDailyCuration's in-flight guard,
  *  retry ladder, and model failover; see runStagingCurationInner. */
 export async function runStagingCuration(opts: CurationRunOptions = {}): Promise<void> {
-  await withCurationLock("curation-staging", () => runStagingCurationInner(opts.finalAttempt ?? true));
+  await withCurationLock("curation-staging", () => runStagingCurationInner(opts.finalAttempt ?? true, opts.trigger ?? "unknown"));
 }
 
 /**
@@ -774,7 +797,7 @@ export async function runCurationIfOutstanding(trigger: string, opts: CurationRu
     return;
   }
   console.log(`[curation-watchdog] (${trigger}) concluded game is unscored — starting curation run`);
-  await runDailyCuration(opts);
+  await runDailyCuration({ ...opts, trigger: opts.trigger ?? trigger });
 }
 
 /** Pure time-gate for the 15:30 ET staging watchdog: true only during the
@@ -816,9 +839,23 @@ export async function stagingOutstanding(): Promise<boolean> {
   return !existing;
 }
 
-async function runDailyCurationInner(finalAttempt: boolean): Promise<void> {
+/** The US-Eastern (market-calendar) date, YYYY-MM-DD — the key the usage log groups cost by. */
+function todayEtDate(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
+}
+
+/** One context per run (NOT per FULL_RUN_ATTEMPTS attempt): a second full attempt keeps the same runId. */
+function newUsageContext(runKind: AiRunKind, trigger: string): AiRunContext {
+  return { runId: newRunId(runKind), runKind, trigger, gameDate: todayEtDate() };
+}
+
+async function runDailyCurationInner(finalAttempt: boolean, trigger: string): Promise<void> {
+  // Starts as the combined flow; attemptDailyCuration flips runKind to
+  // daily_results_only when it finds a staged draft.
+  const usageCtx = newUsageContext("daily_combined", trigger);
   if (!ENV.anthropicApiKey) {
     console.error("[curation-agent] ANTHROPIC_API_KEY not set — skipping");
+    await recordAiRun(usageCtx, { outcome: "skipped", errorMessage: "ANTHROPIC_API_KEY not set", durationMs: 0 });
     await notifyOwner({
       title: "❌ Daily curation FAILED",
       content: "ANTHROPIC_API_KEY is not configured. Run End of Day manually before 9:00 PM Perth time.",
@@ -827,6 +864,7 @@ async function runDailyCurationInner(finalAttempt: boolean): Promise<void> {
   }
   if (!ENV.curationAgentSecret) {
     console.error("[curation-agent] CURATION_AGENT_SECRET not set — skipping");
+    await recordAiRun(usageCtx, { outcome: "skipped", errorMessage: "CURATION_AGENT_SECRET not set", durationMs: 0 });
     await notifyOwner({
       title: "❌ Daily curation FAILED",
       content: "CURATION_AGENT_SECRET is not configured, so the agent cannot authenticate to the endpoint. Run End of Day manually.",
@@ -846,7 +884,8 @@ async function runDailyCurationInner(finalAttempt: boolean): Promise<void> {
   let lastError: unknown;
   for (let runAttempt = 1; runAttempt <= FULL_RUN_ATTEMPTS; runAttempt++) {
     try {
-      await attemptDailyCuration(client, startTime);
+      const submitAttempts = await attemptDailyCuration(client, startTime, usageCtx);
+      await recordAiRun(usageCtx, { outcome: "success", submitAttempts, durationMs: Date.now() - startTime });
       return;
     } catch (err) {
       lastError = err;
@@ -861,6 +900,7 @@ async function runDailyCurationInner(finalAttempt: boolean): Promise<void> {
 
   const elapsed = Math.round((Date.now() - startTime) / 1000);
   const msg = (lastError as any)?.message ?? String(lastError);
+  await recordAiRun(usageCtx, { outcome: "failed", errorMessage: msg, durationMs: Date.now() - startTime });
   try {
     if (finalAttempt) {
       await notifyOwner({
@@ -885,8 +925,9 @@ async function runDailyCurationInner(finalAttempt: boolean): Promise<void> {
   }
 }
 
-/** One full curation attempt: fetch context → research → submit (with freshness retries). Throws on failure. */
-async function attemptDailyCuration(client: Anthropic, startTime: number): Promise<void> {
+/** One full curation attempt: fetch context → research → submit (with freshness retries). Throws on failure.
+ *  Resolves to the number of payload submissions it took (for the usage log). */
+async function attemptDailyCuration(client: Anthropic, startTime: number, usageCtx: AiRunContext): Promise<number> {
   const recentGames = await fetchRecentGames();
   // The agent must reason in the MARKET's calendar. UTC rolls to "tomorrow" at
   // 8 PM New York — every evening watchdog/boot-sweep recovery run lands after
@@ -904,8 +945,8 @@ async function attemptDailyCuration(client: Anthropic, startTime: number): Promi
   const { getStagedDraftGameAfter } = await import("../db");
   const stagedDraft = await getStagedDraftGameAfter(todayEt);
   if (stagedDraft) {
-    await attemptResultsOnlyCuration(client, startTime, recentGames, todayEt, stagedDraft);
-    return;
+    usageCtx.runKind = "daily_results_only";
+    return await attemptResultsOnlyCuration(client, startTime, recentGames, todayEt, stagedDraft, usageCtx);
   }
 
   const messages: Anthropic.MessageParam[] = [
@@ -928,7 +969,7 @@ async function attemptDailyCuration(client: Anthropic, startTime: number): Promi
   const containerRef: { id: string | undefined } = { id: undefined };
 
   for (let attempt = 1; attempt <= MAX_SUBMIT_ATTEMPTS; attempt++) {
-    const finalMessage = await research(client, messages, containerRef, SYSTEM_PROMPT);
+    const finalMessage = await research(client, messages, containerRef, SYSTEM_PROMPT, usageCtx);
     const text = extractText(finalMessage);
     const payload = parsePayload(text);
 
@@ -942,7 +983,7 @@ async function attemptDailyCuration(client: Anthropic, startTime: number): Promi
       const elapsed = Math.round((Date.now() - startTime) / 1000);
       console.log(`[curation-agent] Success in ${elapsed}s (attempt ${attempt}). nextGameId=${body?.nextGameId}`);
       // The endpoint already sends a success notification; nothing more to do.
-      return;
+      return attempt;
     }
 
     if (status === 422) {
@@ -977,8 +1018,9 @@ async function attemptResultsOnlyCuration(
   startTime: number,
   recentGames: string,
   todayEt: string,
-  stagedDraft: { id: number; companyATicker: string; companyBTicker: string; gameDate: string }
-): Promise<void> {
+  stagedDraft: { id: number; companyATicker: string; companyBTicker: string; gameDate: string },
+  usageCtx: AiRunContext
+): Promise<number> {
   const messages: Anthropic.MessageParam[] = [
     {
       role: "user",
@@ -999,18 +1041,23 @@ async function attemptResultsOnlyCuration(
     messages,
     RESULTS_ONLY_SYSTEM_PROMPT,
     submitCuration,
-    "[curation-agent-results-only]"
+    "[curation-agent-results-only]",
+    usageCtx
   );
   const elapsed = Math.round((Date.now() - startTime) / 1000);
   console.log(`[curation-agent] Results-only success in ${elapsed}s (attempt ${attempt}). stagedGameId=${stagedDraft.id}, nextGameId=${body?.nextGameId}`);
   // The endpoint already sends a success notification; nothing more to do.
+  return attempt;
 }
 
 // ─── Phase A: afternoon staging run ──────────────────────────────────────────
-async function runStagingCurationInner(finalAttempt: boolean): Promise<void> {
+async function runStagingCurationInner(finalAttempt: boolean, trigger: string): Promise<void> {
+  // gameDate is the date the run is TOLD (todayEt), not the date it stages for.
+  const usageCtx = newUsageContext("staging", trigger);
   if (!ENV.anthropicApiKey || !ENV.curationAgentSecret) {
     const reason = !ENV.anthropicApiKey ? "ANTHROPIC_API_KEY not set" : "CURATION_AGENT_SECRET not set";
     console.error(`[curation-staging] ${reason} — skipping`);
+    await recordAiRun(usageCtx, { outcome: "skipped", errorMessage: reason, durationMs: 0 });
     await notifyOwner({
       title: "⚠️ Afternoon staging skipped",
       content: `${reason}, so the afternoon staging run could not authenticate. No action needed — the post-close run will fall back to today's combined curation.`,
@@ -1028,7 +1075,8 @@ async function runStagingCurationInner(finalAttempt: boolean): Promise<void> {
   let lastError: unknown;
   for (let runAttempt = 1; runAttempt <= FULL_RUN_ATTEMPTS; runAttempt++) {
     try {
-      await attemptStagingCuration(client, startTime);
+      const submitAttempts = await attemptStagingCuration(client, startTime, usageCtx);
+      await recordAiRun(usageCtx, { outcome: "success", submitAttempts, durationMs: Date.now() - startTime });
       return;
     } catch (err) {
       lastError = err;
@@ -1043,6 +1091,7 @@ async function runStagingCurationInner(finalAttempt: boolean): Promise<void> {
 
   const elapsed = Math.round((Date.now() - startTime) / 1000);
   const msg = (lastError as any)?.message ?? String(lastError);
+  await recordAiRun(usageCtx, { outcome: "failed", errorMessage: msg, durationMs: Date.now() - startTime });
   // Staging failures are NEVER the alarming ❌ email — the post-close run's
   // proven legacy path is the fallback (golden safety property), so this is
   // always the calm ⚠️ note, whether or not the 15:30 watchdog will retry.
@@ -1063,7 +1112,7 @@ async function runStagingCurationInner(finalAttempt: boolean): Promise<void> {
 }
 
 /** One full staging attempt: fetch context → research tomorrow's matchup only → submit (with freshness retries). Throws on failure. */
-async function attemptStagingCuration(client: Anthropic, startTime: number): Promise<void> {
+async function attemptStagingCuration(client: Anthropic, startTime: number, usageCtx: AiRunContext): Promise<number> {
   const recentGames = await fetchRecentGames();
   const todayEt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
 
@@ -1091,11 +1140,13 @@ async function attemptStagingCuration(client: Anthropic, startTime: number): Pro
     messages,
     STAGING_SYSTEM_PROMPT,
     submitStaging,
-    "[curation-staging]"
+    "[curation-staging]",
+    usageCtx
   );
   const elapsed = Math.round((Date.now() - startTime) / 1000);
   console.log(`[curation-staging] Success in ${elapsed}s (attempt ${attempt}). stagedGameId=${body?.stagedGameId}`);
   // The endpoint already sends a success notification; nothing more to do.
+  return attempt;
 }
 
 // ─── HTTP trigger (manual) ───────────────────────────────────────────────────
@@ -1105,7 +1156,7 @@ async function runCurationHandler(req: Request, res: Response) {
     return res.status(403).json({ error: "Forbidden" });
   }
   // Fire-and-forget: the agent can run for several minutes; don't hold the request open.
-  runDailyCuration().catch((err) => console.error("[curation-agent] Background run error:", err));
+  runDailyCuration({ trigger: "api-endpoint" }).catch((err) => console.error("[curation-agent] Background run error:", err));
   return res.json({ ok: true, started: true });
 }
 
