@@ -111,7 +111,7 @@ Each beat's audio is padded with silence to the beat's measured duration (`apad=
 
 ### Subtitles
 
-`play.srt` is generated from the beats: one cue per beat, start = beat start + 0.1 s, end = audio end. Lines wrapped to at most 2 lines of 38 characters. Burned in with ffmpeg's `subtitles` filter, styled: Plus Jakarta Sans (the site's font, bundled via `@fontsource/plus-jakarta-sans` already in the app's deps; copy the TTF into the tool), 30 px at 1080 width, white on a 55 % black rounded box, bottom margin that keeps the caption inside the phone screen and clear of the page's bottom controls. The `.srt` is also written beside the mp4 for upload as a proper caption track.
+`play.srt` is generated from the beats: one cue per beat, start = beat start + 0.1 s, end = audio end. Lines wrapped to at most 2 lines of 38 characters. **Burn-in is done with PNG overlays, not libass:** the Homebrew ffmpeg (9.0.2, checked 2026-10-17) has no `subtitles` or `drawtext` filter. Each cue is rendered to a transparent PNG (SVG → `@resvg/resvg-js`, the same path as the phone bezel) and composited with `overlay=...:enable='between(t,start,end)'`. Style: Plus Jakarta Sans (the site's font; resvg needs a TTF/OTF, so fetch `PlusJakartaSans[wght].ttf` from the Google Fonts GitHub repo into `assets/fonts/`, and fall back to Helvetica Neue if that fails), 30 px at 1080 width, white on a 55 % black rounded box, bottom margin that keeps the caption inside the phone screen and clear of the page's bottom controls. The title and end cards are PNGs made the same way. The `.srt` is also written beside the mp4 for upload as a proper caption track.
 
 ### Phone frame and exports
 
