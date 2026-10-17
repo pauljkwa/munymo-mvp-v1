@@ -1,6 +1,6 @@
 # Demo Video Pipeline + Clip 1 "Play today's game"
 
-**Date:** 2026-10-17. **Status: APPROVED by Paul in chat 2026-10-17 (voice Heart at 0.92, both exports, keep the full-analysis tap). Build handed to a cheaper model the same day.** Builder: a cheaper model (Sonnet) implements from this spec; Fable reviews the first rendered clip frame by frame. Decided in chat 2026-10-17 (see memory `demo-video-plan`).
+**Date:** 2026-10-17. **Status: APPROVED by Paul in chat 2026-10-17 (voice Heart at 0.92, both exports, keep the full-analysis tap). Built by a Sonnet agent the same day; clip 1 rendered against the live EIX vs DUK game. Section 11 records how the build departed from this spec.** Builder: a cheaper model (Sonnet) implements from this spec; Fable reviews the first rendered clip frame by frame. Decided in chat 2026-10-17 (see memory `demo-video-plan`).
 
 ## 1. What we are making
 
@@ -125,7 +125,7 @@ Exports per clip:
 | `play-landscape.mp4` | 1920×1080, same codecs | YouTube main channel |
 | `play.srt` | | caption upload |
 
-Vertical: the framed phone fills the height on a brand-green gradient. Landscape: the framed phone sits center-left; the right third shows a static title card ("Play today's game", "munymo.com", "Free · no sign-up to play") in the site's typography. Both begin with 0.8 s of the title card alone and end with 2.5 s of an end card: Mo avatar, "munymo.com", "One matchup a day. Free."
+Vertical: the framed phone fills the height on a brand-green gradient. Landscape: the framed phone sits center-left; the right third shows a static title card ("Play today's game", "munymo.com", "Free · no sign-up to play") in the site's typography. Both begin with 0.8 s of the title card alone and end with an end card (the home-screen icon `client/public/icon-512.png` cropped to a circle, "munymo.com", "One matchup a day. Free.", "Mo is Munymo's AI analyst"). The closing narration line starts ON the end card, and the card holds for that line's audio length + 0.6 s (about 4.3 s); a fixed 2.5 s was tried first and forced the line to start over the page.
 
 ## 6. Clip 1: "Play today's game"
 
@@ -194,3 +194,17 @@ The clip passes when:
 1. **Voice:** Kokoro `af_heart` at speed 0.92. Pronunciation "Money-mo" via the `PRONOUNCE` map.
 2. **Exports:** both vertical (1080×1920) and landscape (1920×1080).
 3. **Beat 5:** keep the "Show full analysis" tap.
+
+## 11. As built (2026-10-17)
+
+Departures from the sections above, all accepted:
+
+- **Capture.** Playwright `recordVideo` and the CDP screencast both top out at the CSS viewport (390×844). The recorder instead polls `Page.captureScreenshot` at scale 3 (~23 fps), giving native 1170×2532 frames timestamped on the beat clock; the lead-in is trimmed from the timeline, not with `blackdetect`. Raw frames are deleted after a successful assemble (they were 594 MB).
+- **Viewport.** Playwright's `iPhone 14` descriptor is 390×664; it is overridden to 390×844.
+- **Captions, vertical.** The phone occupies the top 1640 px of the 1920 px canvas and captions sit in the green band below it (34 px), because captions over the screen covered the very buttons being tapped. Landscape captions live in the right-hand panel under the title card.
+- **Cues.** Long beats are split into several cues of at most two 38-character lines, timed by character share, so cue edges are approximate against the speech.
+- **Fonts.** The Plus Jakarta Sans variable TTF renders at one weight in resvg; bold is faked with a same-color stroke.
+- **Holds.** Default hold after a beat is 0.25 s (one value in `src/record.ts`); narration alone is 86 s, clip ≈ 93 s.
+- **Locators the app made awkward** (candidates for small accessibility fixes, none blocking): company cards have no standalone accessible name (located as the first two buttons after the "Today's Matchup" heading); reason options, side buttons and reading-check answers have no named group. The metric sheet's close button bug found by the recorder was fixed in the app (commit 139e6e5).
+- **Narration** was shortened on 2026-10-17 after the first render ran 107 s; the lines in `clips/play.ts` are canonical, not the table in Section 6.
+- **Reading check.** The guest's first-option answer was wrong on the recorded day and stays in, as Section 6 says.
