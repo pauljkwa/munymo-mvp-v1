@@ -6,7 +6,6 @@ import {
   PlusCircle,
   Users,
   ScrollText,
-  Receipt,
   ChevronRight,
   LogOut,
   Sunset,
@@ -21,7 +20,6 @@ const navItems = [
   { href: "/admin/end-of-day", label: "End of Day", icon: Sunset },
   { href: "/admin/games/new", label: "New Game", icon: PlusCircle },
   { href: "/admin/players", label: "Players", icon: Users },
-  { href: "/admin/costs", label: "Running costs", icon: Receipt },
   { href: "/admin/audit", label: "Audit Log", icon: ScrollText },
 ];
 

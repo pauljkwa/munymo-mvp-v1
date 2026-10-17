@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch, useLocation } from "wouter";
-import { useEffect } from "react";
+import { Suspense, lazy, useEffect } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import ReferralAttribution from "./components/ReferralAttribution";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -24,7 +24,6 @@ import AdminEditGame from "./pages/admin/AdminEditGame";
 import AdminPublishResult from "./pages/admin/AdminPublishResult";
 import AdminPlayers from "./pages/admin/AdminPlayers";
 import AdminAuditLog from "./pages/admin/AdminAuditLog";
-import AdminCosts from "./pages/admin/AdminCosts";
 import AdminEndOfDay from "./pages/admin/AdminEndOfDay";
 import MyDashboard from "./pages/MyDashboard";
 import TermsOfUse from "./pages/legal/TermsOfUse";
@@ -34,6 +33,15 @@ import ResponsibleGaming from "./pages/legal/ResponsibleGaming";
 import EmailLanding from "./pages/EmailLanding";
 import Demo from "./pages/Demo";
 import Feedback from "./pages/Feedback";
+
+// The owner dashboard (references/owner-dashboard-spec.md §5) is the same bundle
+// served from dash.munymo.com. The server tags the shell with this meta; the
+// hostname check is the fallback for local dev. Its code is a separate chunk so
+// the game never pays for it.
+const DashApp = lazy(() => import("./dash/DashApp"));
+const isDash =
+  document.querySelector<HTMLMetaElement>('meta[name="munymo-app"]')?.content === "dash" ||
+  /^dash\./i.test(window.location.hostname);
 
 function ScrollToTop() {
   const [location] = useLocation();
@@ -73,7 +81,6 @@ function Router() {
       <Route path="/admin/games/:id/result" component={AdminPublishResult} />
       <Route path="/admin/players" component={AdminPlayers} />
       <Route path="/admin/audit" component={AdminAuditLog} />
-      <Route path="/admin/costs" component={AdminCosts} />
       <Route path="/admin/end-of-day" component={AdminEndOfDay} />
 
       <Route path="/email-landing" component={EmailLanding} />
@@ -84,6 +91,15 @@ function Router() {
 }
 
 function App() {
+  // The dashboard host renders the dashboard and nothing else: no game router,
+  // no tab bar, no marketing pages, no referral attribution.
+  if (isDash) {
+    return (
+      <Suspense fallback={null}>
+        <DashApp />
+      </Suspense>
+    );
+  }
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="light" switchable>

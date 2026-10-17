@@ -16,6 +16,8 @@ import {
   playerPicks,
   practicePicks,
   pushSubscriptions,
+  referralCodes,
+  referralEvents,
   streakRecords,
   users,
   validationQuestions,
@@ -1339,6 +1341,110 @@ export async function deleteVendorCost(id: number): Promise<{ month: string; ven
   if (!row) return null;
   await db.delete(vendorCosts).where(eq(vendorCosts.id, id));
   return row;
+}
+
+// ─── Owner dashboard (read-only) ──────────────────────────────────────────────
+//
+// Feeds owner.dashboard (references/owner-dashboard-spec.md §6). Every helper
+// here is a single SELECT: the dashboard must never write. Counts that take a
+// user id leave the tester bots out in the query; the per-player row sets are
+// returned whole and filtered by shared/ownerDashboard.ts.
+
+const BOT_IDS_LIST: number[] = [...TESTER_BOT_IDS];
+
+/** Every user with the columns the player tiles read, plus their streak row if any. */
+export async function getOwnerPlayerRows() {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      id: users.id,
+      name: users.name,
+      displayName: users.displayName,
+      createdAt: users.createdAt,
+      lastSignedIn: users.lastSignedIn,
+      emailOptIn: users.emailOptIn,
+      pushOptIn: users.pushOptIn,
+      awayStatus: streakRecords.awayStatus,
+      currentStreak: streakRecords.currentStreak,
+    })
+    .from(users)
+    .leftJoin(streakRecords, eq(streakRecords.userId, users.id));
+}
+
+/** One row per player who has ever picked: the time of their newest live pick. */
+export async function getPickActivityByUser() {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    // mapWith: decode the aggregate with the timestamp column's own decoder (UTC), not as a raw string.
+    .select({ userId: playerPicks.userId, lastPickAt: sql<Date>`max(${playerPicks.createdAt})`.mapWith(playerPicks.createdAt) })
+    .from(playerPicks)
+    .groupBy(playerPicks.userId);
+  return rows;
+}
+
+/** The user id of every registered push device (one entry per device). */
+export async function getPushSubscriptionUserIds(): Promise<number[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select({ userId: pushSubscriptions.userId }).from(pushSubscriptions);
+  return rows.map((r) => r.userId);
+}
+
+/** Live picks made on one game, tester bots excluded. */
+export async function countPicksForGame(gameId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const [row] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(playerPicks)
+    .where(and(eq(playerPicks.gameId, gameId), notInArray(playerPicks.userId, BOT_IDS_LIST)));
+  return Number(row?.count ?? 0);
+}
+
+/** Referral codes that have been enrolled by an owner (printed-but-unclaimed codes are not counted). */
+export async function countEnrolledReferralCodes(): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const [row] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(referralCodes)
+    .where(eq(referralCodes.status, "active"));
+  return Number(row?.count ?? 0);
+}
+
+/** Referral scans and sign-ups since a moment. */
+export async function countReferralEventsSince(since: Date): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const [row] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(referralEvents)
+    .where(gte(referralEvents.createdAt, since));
+  return Number(row?.count ?? 0);
+}
+
+/** Lessons completed since a moment, tester bots excluded. */
+export async function countLessonsCompletedSince(since: Date): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const [row] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(lessonProgress)
+    .where(and(gte(lessonProgress.completedAt, since), notInArray(lessonProgress.userId, BOT_IDS_LIST)));
+  return Number(row?.count ?? 0);
+}
+
+/** Practice plays started since a moment, tester bots excluded. */
+export async function countPracticePicksSince(since: Date): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const [row] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(practicePicks)
+    .where(and(gte(practicePicks.createdAt, since), notInArray(practicePicks.userId, BOT_IDS_LIST)));
+  return Number(row?.count ?? 0);
 }
 
 // ─── Metric Explanations ────────────────────────────────────────────────────────

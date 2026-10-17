@@ -106,6 +106,15 @@ import {
   getVendorCostRows,
   upsertVendorCost,
   deleteVendorCost,
+  getStagedDraftGameAfter,
+  getOwnerPlayerRows,
+  getPickActivityByUser,
+  getPushSubscriptionUserIds,
+  countPicksForGame,
+  countEnrolledReferralCodes,
+  countReferralEventsSince,
+  countLessonsCompletedSince,
+  countPracticePicksSince,
   getLessonProgressForUser,
   markLessonComplete,
   getSeasonStandings,
@@ -116,6 +125,7 @@ import {
 import { ALL_LESSON_IDS } from "@shared/lessonIds";
 import { aiCostByMonth, groupVendorCosts, monthKey, summarizeTurns } from "@shared/aiUsage";
 import { vendorCostInputSchema } from "@shared/vendorCostSchema";
+import { etDateString, nextCronOccurrences, summarizePipeline, summarizePlayers } from "@shared/ownerDashboard";
 import { pingIndexNow } from "./_core/indexNow";
 import { archivePath } from "@shared/slugs";
 import {
@@ -136,6 +146,19 @@ function todayUTC(): string {
 const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
   if (ctx.user.role !== "admin") {
     throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+  }
+  return next({ ctx });
+});
+
+/**
+ * Owner guard (references/owner-dashboard-spec.md §4). The gate is the owner's
+ * ACCOUNT (OWNER_USER_ID, a users.id), never the admin role: an admin who is not
+ * the owner is refused like anyone else. Unset means nobody is the owner, never
+ * "everyone is". ENV is read on every call so a test can set it.
+ */
+const ownerProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (!ENV.ownerUserId || ctx.user.id !== ENV.ownerUserId) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Owner access required" });
   }
   return next({ ctx });
 });
@@ -1225,9 +1248,13 @@ async function closeAndScoreGame(
 
 // ─── Admin Router ─────────────────────────────────────────────────────────────
 
-/** Running-costs ledger (spec: references/running-costs-ledger-spec.md §6). */
-const adminCostsRouter = router({
-  aiSummary: adminProcedure
+/**
+ * Running-costs ledger (references/running-costs-ledger-spec.md §6), moved from
+ * admin.costs to the owner by references/owner-dashboard-spec.md §4. Audit log
+ * action names are unchanged.
+ */
+const ownerCostsRouter = router({
+  aiSummary: ownerProcedure
     .input(z.object({ days: z.number().int().min(1).max(365).default(30) }).default({ days: 30 }))
     .query(async ({ input }) => {
       const now = new Date();
@@ -1239,7 +1266,7 @@ const adminCostsRouter = router({
       return summarizeTurns(rows, { now, days: input.days });
     }),
 
-  vendorList: adminProcedure
+  vendorList: ownerProcedure
     .input(z.object({ months: z.number().int().min(1).max(36).default(12) }).default({ months: 12 }))
     .query(async ({ input }) => {
       const now = new Date();
@@ -1251,7 +1278,7 @@ const adminCostsRouter = router({
       return { months: groupVendorCosts(vendorRows, aiCostByMonth(usageRows)) };
     }),
 
-  vendorUpsert: adminProcedure.input(vendorCostInputSchema).mutation(async ({ ctx, input }) => {
+  vendorUpsert: ownerProcedure.input(vendorCostInputSchema).mutation(async ({ ctx, input }) => {
     const id = await upsertVendorCost({
       month: input.month,
       vendor: input.vendor,
@@ -1271,7 +1298,7 @@ const adminCostsRouter = router({
     return { ok: true as const };
   }),
 
-  vendorDelete: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+  vendorDelete: ownerProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
     const removed = await deleteVendorCost(input.id);
     if (!removed) throw new TRPCError({ code: "NOT_FOUND", message: "That entry no longer exists" });
     await writeAuditLog(ctx.user.id, "vendor_cost_delete", "vendor_cost", input.id, `${removed.month} ${removed.vendor}`);
@@ -1279,9 +1306,107 @@ const adminCostsRouter = router({
   }),
 });
 
-const adminRouter = router({
-  costs: adminCostsRouter,
+const DAY_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * Owner dashboard (references/owner-dashboard-spec.md §4 and §6). `whoami` is a
+ * plain protectedProcedure on purpose: the dash app shows a signed-in non-owner
+ * their own account id so the owner can read it off the screen the first time.
+ * `dashboard` only reads; nothing in it writes to the database.
+ */
+const ownerRouter = router({
+  whoami: protectedProcedure.query(({ ctx }) => ({
+    userId: ctx.user.id,
+    isOwner: Boolean(ENV.ownerUserId) && ctx.user.id === ENV.ownerUserId,
+  })),
+
+  dashboard: ownerProcedure.query(async () => {
+    const now = new Date();
+    const todayEt = etDateString(now);
+    const since30 = new Date(now.getTime() - 30 * DAY_MS);
+    // Twelve calendar months of ledger, which also covers month-to-date and the last 30 days of AI usage.
+    const ledgerFirst = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 11, 1));
+
+    const [
+      liveGame,
+      staged,
+      usageRows,
+      vendorRows,
+      playerRows,
+      pickActivity,
+      pushUserIds,
+      survey,
+      outbound,
+      referralCodes,
+      referralEvents30d,
+      lessons30d,
+      practice30d,
+    ] = await Promise.all([
+      getActiveOrUpcomingGame().then(async (game) => ({ game, picks: game ? await countPicksForGame(game.id) : 0 })),
+      getStagedDraftGameAfter(todayEt),
+      getAiUsageRowsSince(ledgerFirst),
+      getVendorCostRows(monthKey(ledgerFirst), monthKey(now)),
+      getOwnerPlayerRows(),
+      getPickActivityByUser(),
+      getPushSubscriptionUserIds(),
+      getMarketVoteStats(),
+      getOutboundClickStats(),
+      countEnrolledReferralCodes(),
+      countReferralEventsSince(since30),
+      countLessonsCompletedSince(since30),
+      countPracticePicksSince(since30),
+    ]);
+
+    const money = summarizeTurns(usageRows, { now, days: 30 });
+    const { game, picks: picksToday } = liveGame;
+
+    return {
+      generatedAt: now.toISOString(),
+      today: {
+        game: game
+          ? {
+              id: game.id,
+              companyATicker: game.companyATicker,
+              companyBTicker: game.companyBTicker,
+              gameDate: game.gameDate,
+              status: game.status,
+              lockoutAt: game.lockoutAt ? game.lockoutAt.toISOString() : null,
+            }
+          : null,
+        picksToday,
+        stagedDraft: staged
+          ? { tickers: [staged.companyATicker, staged.companyBTicker] as [string, string], gameDate: staged.gameDate }
+          : null,
+        curationInFlight: isCurationRunInFlight(),
+        lastRun: money.runs[0] ?? null,
+        nextRuns: nextCronOccurrences(now),
+      },
+      money,
+      ledger: groupVendorCosts(vendorRows, aiCostByMonth(usageRows)),
+      pipeline: summarizePipeline(usageRows, { now, days: 30 }),
+      players: summarizePlayers({
+        users: playerRows,
+        picks: pickActivity,
+        pushSubscriptionUserIds: pushUserIds,
+        now,
+        nameOf: publicPlayerName,
+      }),
+      growth: {
+        survey,
+        outbound: { total: outbound.total, byPublisher: outbound.byPublisher.slice(0, 8) },
+        referrals: { codes: referralCodes, events30d: referralEvents30d },
+        lessonsCompleted30d: lessons30d,
+        practicePicks30d: practice30d,
+        // Guest picks live in the visitor's browser (client/src/lib/guestPick.ts); nothing server-side to count.
+        guestPicks30d: null as number | null,
+      },
+    };
+  }),
+
+  costs: ownerCostsRouter,
+});
+
+const adminRouter = router({
   // Outbound-referral reporting: total clicks sent to publishers + per-publisher
   // breakdown. Ammunition for "we sent you N thousand readers" partnership pitches.
   outboundClickStats: adminProcedure.query(async () => {
@@ -2822,6 +2947,7 @@ export const appRouter = router({
   practice: practiceRouter,
   streaks: streaksRouter,
   admin: adminRouter,
+  owner: ownerRouter,
   dashboard: dashboardRouter,
     metrics: metricsRouter,
   push: pushRouter,

@@ -205,6 +205,9 @@ export default defineConfig({
       ".manusvm.computer",
       "localhost",
       "127.0.0.1",
+      // Owner dashboard in local dev: http://dash.localhost:5173 (Chrome and
+      // Safari resolve *.localhost without a hosts-file entry).
+      "dash.localhost",
     ],
     fs: {
       strict: true,

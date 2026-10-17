@@ -4,6 +4,9 @@ export const ENV = {
   databaseUrl: process.env.MUNYMO_DATABASE_URL || process.env.DATABASE_URL || "",
   oAuthServerUrl: process.env.OAUTH_SERVER_URL ?? "",
   ownerOpenId: process.env.OWNER_OPEN_ID ?? "",
+  // users.id of the site owner (owner dashboard, ownerProcedure in routers.ts).
+  // Unset, empty or not a number means 0: nobody is the owner.
+  ownerUserId: Number(process.env.OWNER_USER_ID) || 0,
   isProduction: process.env.NODE_ENV === "production",
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",

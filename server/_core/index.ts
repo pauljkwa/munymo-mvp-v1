@@ -10,6 +10,7 @@ import { registerScheduledCuration } from "./scheduledCuration";
 import { registerUnsubscribe } from "../unsubscribe";
 import { registerShareCard } from "./shareCard";
 import { registerSeo } from "./seo";
+import { isDashRequest, registerDashHost } from "./dashHost";
 import { registerTesterAgent } from "./testerAgent";
 import { registerCurationAgent } from "./curationAgent";
 import { autoSubmitLockedPicksHandler, runLockoutSweep } from "../autoSubmitHandler";
@@ -45,6 +46,9 @@ async function startServer() {
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  // First of all: on dash.munymo.com every response is noindex, robots.txt is
+  // deny-all and there is no sitemap. A no-op on every other host.
+  registerDashHost(app);
   registerStorageProxy(app);
 
   registerOAuthRoutes(app);
@@ -61,8 +65,9 @@ async function startServer() {
   // mark every response noindex — JSON data URLs must never show in results.
   app.use(
     "/api/trpc",
-    (_req, res, next) => {
-      res.setHeader("X-Robots-Tag", "noindex");
+    (req, res, next) => {
+      // The dashboard host already set the stricter "noindex, nofollow".
+      if (!isDashRequest(req)) res.setHeader("X-Robots-Tag", "noindex");
       next();
     },
     createExpressMiddleware({

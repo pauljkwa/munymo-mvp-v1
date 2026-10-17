@@ -6,6 +6,7 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import viteConfig from "../../vite.config";
 import { decorateShell, resolveLegacyRedirect } from "./seo";
+import { buildDashShell, isDashRequest } from "./dashHost";
 
 export async function setupVite(app: Express, server: Server) {
   const serverOptions = {
@@ -26,7 +27,10 @@ export async function setupVite(app: Express, server: Server) {
     const url = req.originalUrl;
 
     try {
-      const legacy = await resolveLegacyRedirect(url);
+      // The owner dashboard host never redirects and carries no public
+      // metadata; every path serves the same shell (the dash app routes itself).
+      const dash = isDashRequest(req);
+      const legacy = dash ? null : await resolveLegacyRedirect(url);
       if (legacy) return res.redirect(301, legacy);
 
       const clientTemplate = path.resolve(
@@ -43,6 +47,10 @@ export async function setupVite(app: Express, server: Server) {
         `src="/src/main.tsx?v=${nanoid()}"`
       );
       const page = await vite.transformIndexHtml(url, template);
+      if (dash) {
+        res.status(200).set({ "Content-Type": "text/html" }).end(buildDashShell(page));
+        return;
+      }
       // Same per-route decoration the production server sends, so SEO output
       // is inspectable in dev. decorateShell never throws.
       const out = await decorateShell(page, url);
@@ -95,6 +103,10 @@ export function serveStatic(app: Express) {
     res.status(404).end();
   });
 
+  // The dashboard host's shell is the same file with different head tags, built
+  // once per process (the build output never changes while the server runs).
+  let dashShell: string | null = null;
+
   // fall through to index.html if the file doesn't exist (client-side routing),
   // with per-route title/description/canonical injected server-side and a real
   // 404 status for unknown URLs — crawlers never execute the JS that sets
@@ -103,6 +115,15 @@ export function serveStatic(app: Express) {
     const indexPath = path.resolve(distPath, "index.html");
     res.set("Cache-Control", "no-cache");
     try {
+      // Owner dashboard host (dashHost.ts): one shell for every path, status 200,
+      // no legacy redirects, none of the public SEO decoration.
+      if (isDashRequest(req)) {
+        if (dashShell === null) {
+          dashShell = buildDashShell(await fs.promises.readFile(indexPath, "utf-8"));
+        }
+        res.status(200).set("Content-Type", "text/html; charset=utf-8").send(dashShell);
+        return;
+      }
       // req.originalUrl, not req.path: inside app.use("*") Express rewrites
       // req.path relative to the matched mount.
       // Pre-slug URLs (/research/810001, /learn/l100-1) move permanently to
