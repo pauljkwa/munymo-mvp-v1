@@ -14,7 +14,29 @@ import { ENV } from "./env";
 import { settleFromPrices } from "../scoring";
 import { buildUnsubscribeUrl } from "../unsubscribe";
 import { validateHighlightedMetrics } from "../highlightedMetrics";
-import { fetchPairSessionBars, summarizeSessionBars } from "./sessionPrices";
+import { compareWithBars, fetchPairSessionBars, summarizeSessionBars, type CrossCheck } from "./sessionPrices";
+
+/**
+ * Submit-time cross-check of the agent's four prices against the exchange
+ * data (Yahoo chart API). "mismatch" → the caller rejects with a 422 whose
+ * detail quotes the server's bars, so the agent's retry turn scores with them.
+ * "unavailable" → proceed as before, but say so in the success email.
+ */
+async function crossCheckSettlement(
+  game: { gameDate: string; companyATicker: string; companyBTicker: string },
+  today: { companyAStartPrice?: number | null; companyAEndPrice?: number | null; companyBStartPrice?: number | null; companyBEndPrice?: number | null }
+): Promise<CrossCheck> {
+  const bars = await fetchPairSessionBars(game.companyATicker, game.companyBTicker, game.gameDate);
+  const check = compareWithBars(bars, today);
+  console.log(`[daily-curation] price cross-check (${game.companyATicker}/${game.companyBTicker} ${game.gameDate}): ${check.status} — ${check.detail}`);
+  return check;
+}
+
+function crossCheckNote(check: CrossCheck | undefined): string {
+  if (!check) return "";
+  if (check.status === "ok") return " Price cross-check vs Yahoo: OK.";
+  return " Price cross-check vs Yahoo: UNAVAILABLE — prices NOT independently verified (the 20:30 ET audit will re-check).";
+}
 
 /**
  * Shared 422 text for "a concluded game is still unscored". When the agent
@@ -466,6 +488,7 @@ async function applyResultsOnlyCuration(
   let settledPerfA = today?.companyAPerf;
   let settledPerfB = today?.companyBPerf;
   let settlementWarnings: string[] = [];
+  let priceCheck: CrossCheck | undefined;
   const closingGameRows = await db.select().from(dailyGames).where(eq(dailyGames.id, closeGameId)).limit(1);
   if (closingGameRows[0]) {
     const settled = settleFromPrices({
@@ -489,6 +512,13 @@ async function applyResultsOnlyCuration(
     settledPerfB = settled.companyBPerf;
     settlementWarnings = settled.warnings;
     for (const w of settlementWarnings) console.warn("[daily-curation] settlement:", w);
+    priceCheck = await crossCheckSettlement(closingGameRows[0], today!);
+    if (priceCheck.status === "mismatch") {
+      const msg = `Game #${closeGameId} (${closingGameRows[0].companyATicker} vs ${closingGameRows[0].companyBTicker}, ${closingGameRows[0].gameDate}): ${priceCheck.detail} Rejected — re-submit using the server's prices.`;
+      console.error("[daily-curation] Rejected:", msg);
+      await notifyOwner({ title: "⚠️ Curation rejected — prices disagree with exchange data (auto-retrying)", content: msg });
+      return res.status(422).json({ error: "Settlement mismatch", detail: msg });
+    }
   }
 
   const endOfDayInput = {
@@ -520,7 +550,7 @@ async function applyResultsOnlyCuration(
   const warningNote = settlementWarnings.length
     ? ` Settlement warnings: ${settlementWarnings.join("; ")}.`
     : "";
-  const summary = `Results-only curation completed in ${elapsed}ms. Closed game #${closeGameId} (winner: ${winner}, open-to-close ${settledPerfA}% vs ${settledPerfB}%).${warningNote} Activated staged game #${result.nextGameId} (${result.nextGameTickers}).`;
+  const summary = `Results-only curation completed in ${elapsed}ms. Closed game #${closeGameId} (winner: ${winner}, open-to-close ${settledPerfA}% vs ${settledPerfB}%).${warningNote}${crossCheckNote(priceCheck)} Activated staged game #${result.nextGameId} (${result.nextGameTickers}).`;
   console.log("[daily-curation]", summary);
   await notifyOwner({
     title: `✅ Daily curation complete — activated staged game (${result.nextGameTickers})`,
@@ -664,6 +694,7 @@ async function dailyCurationHandler(req: Request, res: Response) {
     let settledPerfA = today?.companyAPerf;
     let settledPerfB = today?.companyBPerf;
     let settlementWarnings: string[] = [];
+    let priceCheck: CrossCheck | undefined;
     if (!marketClosed && today && today.winnerTicker && closeGameId) {
       const game = await db.select().from(dailyGames).where(eq(dailyGames.id, closeGameId)).limit(1);
       if (game[0]) {
@@ -688,6 +719,13 @@ async function dailyCurationHandler(req: Request, res: Response) {
         settledPerfB = settled.companyBPerf;
         settlementWarnings = settled.warnings;
         for (const w of settlementWarnings) console.warn("[daily-curation] settlement:", w);
+        priceCheck = await crossCheckSettlement(game[0], today);
+        if (priceCheck.status === "mismatch") {
+          const msg = `Game #${closeGameId} (${game[0].companyATicker} vs ${game[0].companyBTicker}, ${game[0].gameDate}): ${priceCheck.detail} Rejected — re-submit using the server's prices.`;
+          console.error("[daily-curation] Rejected:", msg);
+          await notifyOwner({ title: "⚠️ Curation rejected — prices disagree with exchange data (auto-retrying)", content: msg });
+          return res.status(422).json({ error: "Settlement mismatch", detail: msg });
+        }
       }
     }
 
@@ -770,7 +808,8 @@ async function dailyCurationHandler(req: Request, res: Response) {
       ? "No game was scored today — no completed game was due (market holiday, or the pending game's session hasn't concluded yet)."
       : closeGameId
         ? `Closed game #${closeGameId} (winner: ${winner}, open-to-close ${settledPerfA}% vs ${settledPerfB}%).` +
-          (settlementWarnings.length ? ` Settlement warnings: ${settlementWarnings.join("; ")}.` : "")
+          (settlementWarnings.length ? ` Settlement warnings: ${settlementWarnings.join("; ")}.` : "") +
+          crossCheckNote(priceCheck)
         : "No game closed (first game).";
     // Reflect whether we actually created the next game or the cadence guard
     // kept an already-queued one (in which case the agent's proposal was discarded).

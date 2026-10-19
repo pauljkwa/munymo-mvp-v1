@@ -118,3 +118,44 @@ describe("sessionPrices", () => {
     ).toBe("EIX: open 55.38, close 55.68 (+0.54% open-to-close); DUK: no bar available");
   });
 });
+
+describe("compareWithBars", () => {
+  const bars = {
+    tickerA: "EIX",
+    tickerB: "DUK",
+    dateEt: "2026-10-19",
+    a: { open: 55.38, close: 55.68 },
+    b: { open: 120.99, close: 119.27 },
+  };
+
+  it("accepts prices that agree to the cent", async () => {
+    const { compareWithBars } = await import("./_core/sessionPrices");
+    const r = compareWithBars(bars, { companyAStartPrice: 55.38, companyAEndPrice: 55.68, companyBStartPrice: 120.99, companyBEndPrice: 119.27 });
+    expect(r.status).toBe("ok");
+    expect(r.serverWinner).toBe("A");
+  });
+
+  it("rejects the 2026-10-19 submission (wrong EIX prices, flipped winner)", async () => {
+    const { compareWithBars } = await import("./_core/sessionPrices");
+    const r = compareWithBars(bars, { companyAStartPrice: 55.9, companyAEndPrice: 54.85, companyBStartPrice: 120.99, companyBEndPrice: 119.27 });
+    expect(r.status).toBe("mismatch");
+    expect(r.detail).toContain("EIX open 55.90 vs server 55.38");
+    expect(r.detail).toContain("EIX close 54.85 vs server 55.68");
+    expect(r.detail).toContain("winner would be DUK on the submitted prices but EIX on the server's bars");
+    expect(r.detail).toContain("Server bars for 2026-10-19");
+  });
+
+  it("rejects a flipped winner even when every price is inside tolerance", async () => {
+    const { compareWithBars } = await import("./_core/sessionPrices");
+    const close = { tickerA: "X", tickerB: "Y", dateEt: "2026-10-19", a: { open: 100, close: 100.2 }, b: { open: 100, close: 100.1 } };
+    const r = compareWithBars(close, { companyAStartPrice: 100, companyAEndPrice: 100.0, companyBStartPrice: 100, companyBEndPrice: 100.1 });
+    expect(r.status).toBe("mismatch");
+    expect(r.detail).toContain("winner would be Y");
+  });
+
+  it("skips missing submitted prices and reports unavailable when the server has no bars", async () => {
+    const { compareWithBars } = await import("./_core/sessionPrices");
+    expect(compareWithBars(bars, { companyAStartPrice: 55.38 }).status).toBe("ok");
+    expect(compareWithBars({ ...bars, b: null }, { companyAStartPrice: 55.38 }).status).toBe("unavailable");
+  });
+});

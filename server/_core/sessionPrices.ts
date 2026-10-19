@@ -167,3 +167,69 @@ export function describeSessionBarsForAgent(gameId: number, p: PairSessionBars):
     `needs positive evidence of a US market holiday or closure on ${p.dateEt}; failing to find a quote is never that evidence.`
   );
 }
+
+// ─── Cross-check: do the agent's (or a stored game's) four prices agree with the bars? ───
+
+export type FourPrices = {
+  companyAStartPrice?: number | null;
+  companyAEndPrice?: number | null;
+  companyBStartPrice?: number | null;
+  companyBEndPrice?: number | null;
+};
+
+export type CrossCheck = {
+  /** ok = within tolerance and same winner; mismatch = reject/alert; unavailable = server has no bars to compare. */
+  status: "ok" | "mismatch" | "unavailable";
+  detail: string;
+  serverWinner?: "A" | "B";
+  bars: PairSessionBars;
+};
+
+/** Default tolerance: official opens/closes agree to the cent across sources; half a percent is generous. */
+export const PRICE_TOLERANCE_PCT = 0.5;
+
+function winnerFromBars(a: SessionBar, b: SessionBar): "A" | "B" {
+  return pctOpenToClose(a) >= pctOpenToClose(b) ? "A" : "B"; // tie → A, same as settleFromPrices
+}
+
+/**
+ * Compare four submitted prices with the server's bars. Pure; the 2026-10-19
+ * EIX error (55.90/54.85 submitted vs 55.38/55.68 traded, winner flipped)
+ * is exactly what this catches. Missing submitted prices are skipped in the
+ * per-price comparison; the winner comparison needs all four.
+ */
+export function compareWithBars(bars: PairSessionBars, submitted: FourPrices, tolerancePct = PRICE_TOLERANCE_PCT): CrossCheck {
+  if (!bars.a || !bars.b) {
+    return { status: "unavailable", detail: `No server bars to compare for ${bars.dateEt} (${summarizeSessionBars(bars)}).`, bars };
+  }
+  const serverWinner = winnerFromBars(bars.a, bars.b);
+  const rows: Array<[string, number | null | undefined, number]> = [
+    [`${bars.tickerA} open`, submitted.companyAStartPrice, bars.a.open],
+    [`${bars.tickerA} close`, submitted.companyAEndPrice, bars.a.close],
+    [`${bars.tickerB} open`, submitted.companyBStartPrice, bars.b.open],
+    [`${bars.tickerB} close`, submitted.companyBEndPrice, bars.b.close],
+  ];
+  const problems: string[] = [];
+  for (const [label, got, want] of rows) {
+    if (!isPrice(got)) continue;
+    const dev = (Math.abs(got - want) / want) * 100;
+    if (dev > tolerancePct) problems.push(`${label} ${got.toFixed(2)} vs server ${want.toFixed(2)} (${dev.toFixed(2)}% off)`);
+  }
+  const allFour =
+    isPrice(submitted.companyAStartPrice) && isPrice(submitted.companyAEndPrice) &&
+    isPrice(submitted.companyBStartPrice) && isPrice(submitted.companyBEndPrice);
+  if (allFour) {
+    const submittedWinner = winnerFromBars(
+      { open: submitted.companyAStartPrice!, close: submitted.companyAEndPrice! },
+      { open: submitted.companyBStartPrice!, close: submitted.companyBEndPrice! }
+    );
+    if (submittedWinner !== serverWinner) {
+      problems.push(`winner would be ${submittedWinner === "A" ? bars.tickerA : bars.tickerB} on the submitted prices but ${serverWinner === "A" ? bars.tickerA : bars.tickerB} on the server's bars`);
+    }
+  }
+  const serverLine = `Server bars for ${bars.dateEt}: ${summarizeSessionBars(bars)}.`;
+  if (problems.length) {
+    return { status: "mismatch", serverWinner, bars, detail: `Price mismatch — ${problems.join("; ")}. ${serverLine}` };
+  }
+  return { status: "ok", serverWinner, bars, detail: `Prices agree with the server's bars within ${tolerancePct}%. ${serverLine}` };
+}

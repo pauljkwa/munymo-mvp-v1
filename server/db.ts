@@ -279,6 +279,17 @@ export async function getEarliestConcludedGame(todayEt: string) {
   return result[0];
 }
 
+/** Published games dated `sinceDate` or later — the nightly settlement audit's input. */
+export async function getPublishedGamesSince(sinceDate: string) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(dailyGames)
+    .where(and(eq(dailyGames.status, "result_published"), gte(dailyGames.gameDate, sinceDate)))
+    .orderBy(asc(dailyGames.gameDate));
+}
+
 export async function getStagedDraftGameAfter(afterDate: string) {
   const db = await getDb();
   if (!db) return undefined;

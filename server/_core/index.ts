@@ -204,6 +204,20 @@ async function startServer() {
     }
   }, { timezone: "America/New_York" });
 
+  // Settlement audit — 20:30 ET weekdays, after every curation slot (16:15 +
+  // watchdogs to 19:15) has had its say. Re-verifies the last few days'
+  // published prices/winners against Yahoo's bars and emails the owner on any
+  // disagreement. Added 2026-10-19 after a game was published with the wrong
+  // EIX prices and the wrong winner. Read-only.
+  cron.schedule("30 20 * * 1-5", async () => {
+    try {
+      const { runSettlementAudit } = await import("./settlementAudit");
+      await runSettlementAudit("cron-2030");
+    } catch (err) {
+      console.error("[settlement-audit] Cron error:", err);
+    }
+  }, { timezone: "America/New_York" });
+
   // Tester agent — runs at 6:00 PM America/New_York Monday–Friday, after curation.
   cron.schedule("0 18 * * 1-5", async () => {
     console.log("[tester-agent] Cron triggered");
