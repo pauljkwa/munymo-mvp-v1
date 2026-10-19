@@ -14,6 +14,36 @@ import { ENV } from "./env";
 import { settleFromPrices } from "../scoring";
 import { buildUnsubscribeUrl } from "../unsubscribe";
 import { validateHighlightedMetrics } from "../highlightedMetrics";
+import { fetchPairSessionBars, summarizeSessionBars } from "./sessionPrices";
+
+/**
+ * Shared 422 text for "a concluded game is still unscored". When the agent
+ * claimed the market was closed, the server checks Yahoo's chart API itself:
+ * if bars exist for that date the detail says so and quotes the prices, so
+ * the agent's retry turn can score the game instead of repeating the claim
+ * (2026-10-19: web_search had no same-day EIX/DUK quotes; the agent reported
+ * "market closed" twice and the game was orphaned until a code fix shipped).
+ */
+async function unscoredConcludedGameMessage(
+  concludedGame: { id: number; gameDate: string; companyATicker: string; companyBTicker: string },
+  marketClosed: boolean | undefined
+): Promise<string> {
+  let msg =
+    `Concluded game #${concludedGame.id} (${concludedGame.companyATicker} vs ${concludedGame.companyBTicker}, ` +
+    `${concludedGame.gameDate}) is unscored, but the payload ${marketClosed ? "claims the market was closed" : "has no winnerTicker"}. ` +
+    `Refusing to proceed — the game would be orphaned.`;
+  if (marketClosed) {
+    const bars = await fetchPairSessionBars(concludedGame.companyATicker, concludedGame.companyBTicker, concludedGame.gameDate).catch(() => null);
+    if (bars && (bars.a || bars.b)) {
+      msg +=
+        ` Server check: Yahoo Finance has regular-session bars for ${concludedGame.gameDate} — ${summarizeSessionBars(bars)} — ` +
+        `so the market WAS open. Score the game with these prices.`;
+      return msg;
+    }
+  }
+  msg += ` If the market genuinely didn't trade that day, cancel or re-date the game in /admin.`;
+  return msg;
+}
 
 /**
  * Shared-secret auth for the scheduled endpoints.
@@ -409,10 +439,7 @@ async function applyResultsOnlyCuration(
     .limit(1);
 
   if (concludedGame && (marketClosed || !today?.winnerTicker)) {
-    const msg =
-      `Concluded game #${concludedGame.id} (${concludedGame.companyATicker} vs ${concludedGame.companyBTicker}, ` +
-      `${concludedGame.gameDate}) is unscored, but the payload ${marketClosed ? "claims the market was closed" : "has no winnerTicker"}. ` +
-      `Refusing to proceed — the game would be orphaned. If the market genuinely didn't trade that day, cancel or re-date the game in /admin.`;
+    const msg = await unscoredConcludedGameMessage(concludedGame, marketClosed);
     console.error("[daily-curation] Rejected:", msg);
     await notifyOwner({ title: "⚠️ Curation rejected — concluded game not scored", content: msg });
     return res.status(422).json({ error: "Concluded game not scored", detail: msg });
@@ -593,10 +620,7 @@ async function dailyCurationHandler(req: Request, res: Response) {
       // Previously this silently skipped the close, created the next game, and
       // sent a "✅ complete" email — leaving the concluded game locked forever
       // and wedging every subsequent night on a ticker-validation mismatch.
-      const msg =
-        `Concluded game #${concludedGame.id} (${concludedGame.companyATicker} vs ${concludedGame.companyBTicker}, ` +
-        `${concludedGame.gameDate}) is unscored, but the payload ${marketClosed ? "claims the market was closed" : "has no winnerTicker"}. ` +
-        `Refusing to proceed — the game would be orphaned. If the market genuinely didn't trade that day, cancel or re-date the game in /admin.`;
+      const msg = await unscoredConcludedGameMessage(concludedGame, marketClosed);
       console.error("[daily-curation] Rejected:", msg);
       await notifyOwner({ title: "⚠️ Curation rejected — concluded game not scored", content: msg });
       return res.status(422).json({ error: "Concluded game not scored", detail: msg });

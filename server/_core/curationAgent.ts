@@ -37,6 +37,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { ENV } from "./env";
 import { notifyOwner } from "./notification";
 import { newRunId, nextTurnIndex, recordAiRun, recordAiTurn, type AiRunContext, type AiRunKind } from "./aiUsage";
+import { describeSessionBarsForAgent, fetchPairSessionBars, summarizeSessionBars } from "./sessionPrices";
 
 export const MODEL = "claude-sonnet-5"; // Sonnet 5 ≈ 60% cheaper than Opus 4.8; switched 2026-07-18 to keep curation under the API spend limit
 // Failsafe (2026-07-30, after an overload storm killed the night): 529
@@ -139,6 +140,8 @@ check_freshness is a fast, deterministic check against the live database — it 
 ## Determine today's winner
 From the recent games list, find the game with status "active" or "locked" that has the EARLIEST gameDate — the one whose trading day has just concluded. Do NOT pick a game with a later/future gameDate just because it appears first in the list (the list is sorted newest-first); if more than one game is active/locked at once, the earliest-dated one is always the correct one to score. SETTLEMENT RULE — read this twice. Each company's move is measured from today's REGULAR-SESSION OPEN (the first trade at 9:30 AM ET) to today's REGULAR-SESSION CLOSE (the official 4:00 PM ET close). companyAPerf = (close − open) / open × 100, rounded to 2 decimals; same for B. Do NOT use the "% change" shown on a quote page — that figure is measured against the PRIOR day's close and includes the overnight gap, which players could already see before picks locked at the open. Look up the actual open and close prices for both companies, compute the two open-to-close percentages yourself, and the higher one wins (tie → company A). The server recomputes both percentages from the four prices you supply and will override your companyAPerf, companyBPerf and winnerTicker if they disagree, so get the four prices right: companyAStartPrice / companyAEndPrice / companyBStartPrice / companyBEndPrice as the actual $ prices (e.g. 187.32) at the open and the close. Then write winnerTicker, a 2–3 sentence resultSummary (quote the open-to-close moves, not the prior-close change), and a 3–5 paragraph hindsightSpotlight educational debrief.
 
+SERVER-FETCHED PRICES: when the user message contains a "SERVER-FETCHED SESSION PRICES" block, those open/close prices are canonical — use them verbatim as the four price fields and do not search for alternatives. If that block gives a bar for the concluded game's date, the market WAS open that day, whatever web_search does or doesn't show.
+
 HINDSIGHT SPOTLIGHT OPENING RULE: the hindsightSpotlight MUST open with one sentence that classifies the day by the gap between the two open-to-close moves (winningMargin, in percentage points), using exactly these thresholds: under 0.25 points = "a coin toss"; 0.25 up to (but not including) 1 point = "clear"; 1 point or more = "decisive". Example opening: "Today was a coin toss: the two stocks finished 0.17 points apart." On a coin-toss day you must then say plainly that the result is too close to carry a lesson about the companies, BEFORE you explain how each stock traded. On clear and decisive days, go on to the usual debrief.
 
 ## Select tomorrow's matchup
@@ -220,7 +223,7 @@ If there is no prior game (first game ever) or no questionType history, pick any
 - If this run happens BEFORE the US market opens on a trading day (e.g. a manual recovery run in the US morning), the next valid trading day is TODAY — do NOT skip to tomorrow. The game you create locks at today's 9:30 AM ET open.
 - If the earliest active/locked game's gameDate is today-but-pre-close or in the future, its session has NOT concluded and there is no result to report: set "today": null and "marketClosed": true. Never report a result for a game whose trading day hasn't finished.
 - lockoutAt: gameDate at 13:30:00 UTC during US DST (2nd Sun Mar – 1st Sun Nov) or 14:30:00 UTC otherwise (both = 9:30 AM ET, NASDAQ open). Full ISO 8601, e.g. 2026-07-07T13:30:00.000Z.
-- If today was a US market holiday (markets closed), set "today": null and "marketClosed": true, and only create the next game.
+- If today was a US market holiday (markets closed), set "today": null and "marketClosed": true, and only create the next game. "marketClosed" needs POSITIVE evidence that the exchange did not trade (an NYSE/NASDAQ holiday or an announced closure). Failing to find a quote in web_search is never that evidence — on 2026-10-19, a normal Monday, no same-day quotes for the two utilities were indexed and the run wrongly reported the market closed, leaving the game unscored.
 
 ## Output format — CRITICAL
 Your FINAL message must contain ONLY the JSON object below — no markdown fences, no commentary, no explanation before or after. All research/reasoning happens in tool use and thinking; the final message is pure JSON.
@@ -380,7 +383,8 @@ const RESULTS_ONLY_SYSTEM_PROMPT =
   `The user message tells you the ID of the already-staged next game as "stagedGameId" — echo that exact number ` +
   `back unchanged; do not invent or look up a different one.\n\n` +
   `{\n  "marketClosed": false,\n  "stagedGameId": <the exact number given to you in the user message>,\n  "today": ${TODAY_OUTPUT_BLOCK}\n}\n\n` +
-  `If today was a US market holiday, or the earliest active/locked game's session hasn't concluded yet, set "marketClosed": true and "today": null instead — never invent a result.`;
+  `If today was a US market holiday, or the earliest active/locked game's session hasn't concluded yet, set "marketClosed": true and "today": null instead — never invent a result. ` +
+  `A missing quote is not a holiday: if the user message carries SERVER-FETCHED SESSION PRICES for the date, the market was open and the game must be scored with those prices.`;
 
 // ─── Recent games (freshness context) ────────────────────────────────────────
 async function fetchRecentGames(): Promise<string> {
@@ -679,8 +683,10 @@ async function researchAndSubmitWithRetry(
         role: "user",
         content:
           `The submission was REJECTED with HTTP 422. Reason: ${JSON.stringify(violations)}.\n` +
-          `Choose a DIFFERENT matchup that satisfies all freshness rules (re-check the recent games list), ` +
-          `and output the full corrected CurationPayload JSON again — only JSON.`,
+          `Fix exactly what the reason describes and output the full corrected CurationPayload JSON again — only JSON. ` +
+          `If the reason is a freshness violation, choose a DIFFERENT matchup (re-check the recent games list). ` +
+          `If the reason says a concluded game is unscored, score it: any prices quoted in the reason are the server's ` +
+          `own regular-session figures and prove the market was open — use them.`,
       });
       continue; // retry
     }
@@ -959,7 +965,8 @@ async function attemptDailyCuration(client: Anthropic, startTime: number, usageC
         `Follow the freshness pre-qualification sequence from your system prompt: scan news, abandon any thread whose ` +
         `sector/companies are banned immediately, then call check_freshness to confirm your candidate BEFORE researching ` +
         `prices or writing content. Once confirmed, research today's result and tomorrow's matchup using web_search, ` +
-        `then output the single CurationPayload JSON object as your final message.`,
+        `then output the single CurationPayload JSON object as your final message.` +
+        (await sessionPricesNote(todayEt)),
     },
   ];
 
@@ -1013,6 +1020,29 @@ async function attemptDailyCuration(client: Anthropic, startTime: number, usageC
  * uses, via the shared researchAndSubmitWithRetry loop, just with the
  * results-only system prompt and a smaller opening message).
  */
+/**
+ * Pre-fetch the concluded game's regular-session open/close from Yahoo's chart
+ * API and phrase it for the agent's opening message (see sessionPrices.ts for
+ * the 2026-10-19 incident this closes). Returns "" when there is no concluded
+ * game to score (holiday evening, first game) or when the session hasn't
+ * closed yet — a partial bar must never be presented as a settlement price.
+ * Never throws: on any error the agent simply gets no block and researches
+ * prices via web_search as it always did.
+ */
+async function sessionPricesNote(todayEt: string): Promise<string> {
+  try {
+    const { getEarliestConcludedGame } = await import("../db");
+    const game = await getEarliestConcludedGame(todayEt);
+    if (!game || !isGameSessionConcluded(game.gameDate)) return "";
+    const bars = await fetchPairSessionBars(game.companyATicker, game.companyBTicker, game.gameDate);
+    console.log(`[curation-agent] session prices for game ${game.id} (${game.gameDate}): ${summarizeSessionBars(bars)}`);
+    return `\n\n${describeSessionBarsForAgent(game.id, bars)}`;
+  } catch (err) {
+    console.warn("[curation-agent] session prices unavailable:", err instanceof Error ? err.message : err);
+    return "";
+  }
+}
+
 async function attemptResultsOnlyCuration(
   client: Anthropic,
   startTime: number,
@@ -1031,8 +1061,10 @@ async function attemptResultsOnlyCuration(
         `Staged game: stagedGameId=${stagedDraft.id} (${stagedDraft.companyATicker} vs ${stagedDraft.companyBTicker}, ` +
         `${stagedDraft.gameDate}). Echo this exact stagedGameId back in your output.\n\n` +
         `Recent games, for finding the concluded game to score, from /api/scheduled/recent-games:\n${recentGames}\n\n` +
-        `Determine today's winner using web_search for real closing prices, then output the single CurationPayload ` +
-        `JSON object as your final message.`,
+        `Determine today's winner from the server-fetched session prices below (web_search for the narrative only; ` +
+        `fall back to web_search for prices only if the block says they are unavailable), then output the single ` +
+        `CurationPayload JSON object as your final message.` +
+        (await sessionPricesNote(todayEt)),
     },
   ];
 

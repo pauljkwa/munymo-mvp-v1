@@ -256,6 +256,29 @@ export async function getQueuedGameAfter(afterDate: string) {
  * not something staged waiting to be activated. Used by runDailyCuration's
  * Phase B pre-check to decide between the results-only and legacy conversation.
  */
+/**
+ * The game whose session has just concluded: the EARLIEST active/locked game
+ * dated `todayEt` or earlier — the same query dailyCurationHandler uses to
+ * pick the game to close (earliest, never latest; see its step-3 comment).
+ * Used to pre-fetch that game's session prices for the curation agent.
+ */
+export async function getEarliestConcludedGame(todayEt: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db
+    .select({
+      id: dailyGames.id,
+      gameDate: dailyGames.gameDate,
+      companyATicker: dailyGames.companyATicker,
+      companyBTicker: dailyGames.companyBTicker,
+    })
+    .from(dailyGames)
+    .where(and(or(eq(dailyGames.status, "active"), eq(dailyGames.status, "locked")), lte(dailyGames.gameDate, todayEt)))
+    .orderBy(asc(dailyGames.gameDate))
+    .limit(1);
+  return result[0];
+}
+
 export async function getStagedDraftGameAfter(afterDate: string) {
   const db = await getDb();
   if (!db) return undefined;
