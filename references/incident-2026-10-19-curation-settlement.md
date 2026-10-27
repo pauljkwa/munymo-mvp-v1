@@ -61,7 +61,7 @@ The market was open all day: the Nasdaq rose about 1.1%, the S&P 500 about 0.4%.
 ## Still open
 
 - **Paul's Monday pick.** No server-side record exists. Guest-mode picks are stored only in the browser (`client/src/lib/guestPick.ts`), so playing while signed out — e.g. in the iPhone home-screen app, which keeps its own sign-in — would leave exactly this trace: none. If Paul was signed in on the web and still has no pick, that is a save bug and needs its own investigation (device, browser, approximate time).
-- **Correction of game 2550001** is prepared but not applied until Paul runs `npx tsx scripts/correct-game-2550001.ts --apply`. Until then the morning audit flags it (as the 20:30 ET audit did every night from 10-20 to 10-23 — layer 5 works). **Still unapplied on 2026-10-27**: the live archive shows EIX $55.90→$54.85 and DUK as the winner.
+- **Correction of game 2550001** is prepared but not applied until Paul runs `npx tsx scripts/correct-game-2550001.ts --apply`. Until then the morning audit flags it (as the 20:30 ET audit did every night from 10-20 to 10-23 — layer 5 works). **Applied by Paul on 2026-10-27** and verified on the live archive: EIX $55.38→$55.68, winner EIX, day kind decisive.
 - **Data source concentration.** All three new layers lean on Yahoo's unofficial chart API. It has been reliable and needs no key, but if it ever blocks server traffic the layers degrade to "unverified", not to "wrong". A keyed provider (Twelve Data was proposed earlier for charts) would be the upgrade.
 
 ## Postscript 2026-10-27 — the evening audit's false "unavailable"
