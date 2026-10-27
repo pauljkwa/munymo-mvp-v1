@@ -64,17 +64,64 @@ export function parseYahooChart(json: unknown, dateEt: string): SessionBar | nul
     const open = quote.open[i];
     const close = quote.close[i];
     if (!isPrice(open) || !isPrice(close)) return null;
-    return { open: Math.round(open * 100) / 100, close: Math.round(close * 100) / 100 };
+    return { open: round2(open), close: round2(close) };
   }
   return null;
 }
 
 export type FetchLike = (url: string, init?: any) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
 
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
 /**
- * Fetch one ticker's bar for `dateEt`. Never throws — any failure (network,
- * non-200, bad JSON, no bar) logs a warning and resolves to null so the
- * caller can degrade to the agent's web_search path.
+ * Open/close for `dateEt` from an intraday (`interval=5m`, regular session
+ * only) chart: the first bar's open and the last bar's close for that New
+ * York date. Yahoo appends a live-quote element stamped at the regular close,
+ * which simply becomes the last bar. The first 5-minute bar's open can sit a
+ * cent or two from the official opening print (INTC 2026-10-26: 87.92 vs
+ * 87.94), far inside the 0.5% cross-check tolerance.
+ *
+ * Why it exists (2026-10-27): between the end of post-market (~20:00 ET) and
+ * Yahoo writing the finalised daily bar (present again by 00:15 ET), the
+ * `interval=1d` chart has no entry for the day just traded — the live-quote
+ * element that stood in for it all afternoon is gone. Every 16:15 ET
+ * cross-check from 2026-10-20 to 10-26 found the bar; every 20:30 ET audit
+ * reported "no bar available". The 5-minute bars are already stored by then.
+ */
+export function parseYahooIntraday(json: unknown, dateEt: string): SessionBar | null {
+  const result = (json as any)?.chart?.result?.[0];
+  const timestamps: unknown = result?.timestamp;
+  const quote = result?.indicators?.quote?.[0];
+  if (!Array.isArray(timestamps) || !quote || !Array.isArray(quote.open) || !Array.isArray(quote.close)) {
+    return null;
+  }
+  let open: number | null = null;
+  let close: number | null = null;
+  for (let i = 0; i < timestamps.length; i++) {
+    const ts = timestamps[i];
+    if (typeof ts !== "number" || etDateOf(ts) !== dateEt) continue;
+    if (open === null && isPrice(quote.open[i])) open = quote.open[i];
+    if (isPrice(quote.close[i])) close = quote.close[i];
+  }
+  if (open === null || close === null) return null;
+  return { open: round2(open), close: round2(close) };
+}
+
+/** Unix-second window that surely contains `dateEt`'s regular session (00:00Z that day to 12:00Z the next). */
+export function intradayWindow(dateEt: string): { period1: number; period2: number } {
+  const [y, m, d] = dateEt.split("-").map(Number);
+  const period1 = Math.floor(Date.UTC(y, m - 1, d) / 1000);
+  return { period1, period2: period1 + 36 * 3600 };
+}
+
+/**
+ * Fetch one ticker's bar for `dateEt`: the daily chart first, then the
+ * 5-minute bars when the daily bar is not published yet (see
+ * parseYahooIntraday). Never throws — any failure (network, non-200, bad
+ * JSON, no bar) logs a warning and resolves to null so the caller can degrade
+ * to the agent's web_search path.
  */
 export async function fetchSessionBar(
   ticker: string,
@@ -84,27 +131,41 @@ export async function fetchSessionBar(
   const fetchImpl: FetchLike = opts.fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
   const timeoutMs = opts.timeoutMs ?? 10_000;
   const symbol = toYahooSymbol(ticker);
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=5d&interval=1d`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetchImpl(url, {
-      signal: controller.signal,
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; MunymoCuration/1.0)", Accept: "application/json" },
-    });
-    if (!res.ok) {
-      console.warn(`[session-prices] ${symbol}: HTTP ${res.status}`);
+  const base = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}`;
+
+  // One request; null on any failure (already logged).
+  const getJson = async (url: string): Promise<unknown | null> => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetchImpl(url, {
+        signal: controller.signal,
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; MunymoCuration/1.0)", Accept: "application/json" },
+      });
+      if (!res.ok) {
+        console.warn(`[session-prices] ${symbol}: HTTP ${res.status}`);
+        return null;
+      }
+      return await res.json();
+    } catch (err) {
+      console.warn(`[session-prices] ${symbol}: fetch failed —`, err instanceof Error ? err.message : err);
       return null;
+    } finally {
+      clearTimeout(timer);
     }
-    const bar = parseYahooChart(await res.json(), dateEt);
-    if (!bar) console.warn(`[session-prices] ${symbol}: no regular-session bar for ${dateEt}`);
-    return bar;
-  } catch (err) {
-    console.warn(`[session-prices] ${symbol}: fetch failed —`, err instanceof Error ? err.message : err);
-    return null;
-  } finally {
-    clearTimeout(timer);
+  };
+
+  const daily = await getJson(`${base}?range=5d&interval=1d`);
+  if (daily === null) return null; // network/HTTP trouble: don't hit Yahoo again
+  let bar = parseYahooChart(daily, dateEt);
+  if (!bar) {
+    const { period1, period2 } = intradayWindow(dateEt);
+    const intraday = await getJson(`${base}?period1=${period1}&period2=${period2}&interval=5m&includePrePost=false`);
+    bar = intraday === null ? null : parseYahooIntraday(intraday, dateEt);
+    if (bar) console.log(`[session-prices] ${symbol}: ${dateEt} bar built from 5-minute bars (daily bar not published yet)`);
   }
+  if (!bar) console.warn(`[session-prices] ${symbol}: no regular-session bar for ${dateEt}`);
+  return bar;
 }
 
 export async function fetchPairSessionBars(

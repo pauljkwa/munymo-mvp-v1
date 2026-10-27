@@ -1,15 +1,22 @@
 /**
- * Nightly settlement audit — the safety net behind the submit-time
- * cross-check. Re-verifies every recently published game's four stored
- * prices and winner against Yahoo Finance's regular-session bars and emails
- * the owner when anything disagrees (or when the check could not run).
+ * Settlement audit — the safety net behind the submit-time cross-check.
+ * Re-verifies every recently published game's four stored prices and winner
+ * against Yahoo Finance's regular-session bars and emails the owner when
+ * anything disagrees (or when the check could not run).
  *
  * Why both: the submit-time check in scheduledCuration.ts only helps when
  * Yahoo answers during the run. If it didn't, the agent's prices went in
- * unverified — this pass catches that an hour or two later, while the
- * next game is still open and a correction is cheap. It never changes
- * data; fixing a game is a deliberate act (see scripts/correct-game-2550001.ts
+ * unverified — this pass catches that the next morning, while the next
+ * game is still open and a correction is cheap. It never changes data;
+ * fixing a game is a deliberate act (see scripts/correct-game-2550001.ts
  * for the pattern).
+ *
+ * Timing: 06:30 ET Tuesday–Saturday, the morning after each game. It ran at
+ * 20:30 ET from 2026-10-19 to 10-26 and reported the same-day game as
+ * "unavailable" every night: Yahoo's daily chart has no bar for the day just
+ * traded between ~20:00 ET and ~00:15 ET (see sessionPrices.ts). By morning
+ * the finalised bar is there, and sessionPrices now falls back to the
+ * 5-minute bars anyway.
  */
 import { notifyOwner } from "./notification";
 import { compareWithBars, fetchPairSessionBars } from "./sessionPrices";
@@ -55,7 +62,7 @@ export async function runSettlementAudit(trigger: string): Promise<AuditResult[]
         ? `⚠️ Settlement audit: ${mismatches.length} published result(s) disagree with exchange prices`
         : `ℹ️ Settlement audit: ${bad.length} result(s) could not be verified`,
       content:
-        `Nightly re-check of recently published games against Yahoo Finance's regular-session bars (${trigger}).\n\n` +
+        `Morning re-check of the last three days' published games against Yahoo Finance's regular-session bars (${trigger}).\n\n` +
         bad.map(line).join("\n") +
         `\n\n` +
         (mismatches.length

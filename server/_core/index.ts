@@ -204,12 +204,14 @@ async function startServer() {
     }
   }, { timezone: "America/New_York" });
 
-  // Settlement audit — 20:30 ET weekdays, after every curation slot (16:15 +
-  // watchdogs to 19:15) has had its say. Re-verifies the last few days'
-  // published prices/winners against Yahoo's bars and emails the owner on any
-  // disagreement. Added 2026-10-19 after a game was published with the wrong
-  // EIX prices and the wrong winner. Read-only.
-  cron.schedule("30 20 * * 1-5", async () => {
+  // Settlement audit — 06:30 ET Tuesday–Saturday, the morning after each
+  // game. Re-verifies the last few days' published prices/winners against
+  // Yahoo's finalised daily bars and emails the owner on any disagreement.
+  // Added 2026-10-19 (at 20:30 ET) after a game was published with the wrong
+  // EIX prices and the wrong winner; moved to the morning 2026-10-27 because
+  // Yahoo's daily chart has no bar for the day just traded until ~00:15 ET,
+  // so every evening run flagged the same-day game as "unavailable". Read-only.
+  cron.schedule("30 6 * * 2-6", async () => {
     try {
       const { runSettlementAudit } = await import("./settlementAudit");
       await runSettlementAudit("cron-2030");

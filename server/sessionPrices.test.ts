@@ -3,7 +3,9 @@ import {
   describeSessionBarsForAgent,
   etDateOf,
   fetchSessionBar,
+  intradayWindow,
   parseYahooChart,
+  parseYahooIntraday,
   pctOpenToClose,
   summarizeSessionBars,
   toYahooSymbol,
@@ -88,6 +90,53 @@ describe("sessionPrices", () => {
     };
     expect(await fetchSessionBar("brk.b", "2026-10-19", { fetchImpl: good })).toEqual({ open: 120.99, close: 119.27 });
     expect(seen[0]).toContain("/chart/BRK-B?");
+  });
+
+  it("builds the bar from 5-minute bars: first open, last close, other dates and nulls ignored", () => {
+    // 2026-10-26 09:30 ET = 13:30Z; Yahoo appends a live-quote element stamped at the 16:00 ET close.
+    const open = 1793021400;
+    const bars = [
+      { ts: open - 86400, open: 1, close: 1 }, // Sunday junk: another date
+      { ts: open, open: 229.02, close: 227.64 },
+      { ts: open + 300, open: 227.53, close: 229.99 },
+      { ts: open + 6 * 3600 + 25 * 60, open: 233.595, close: null },
+      { ts: open + 6 * 3600 + 30 * 60, open: 233.78, close: 233.78 },
+    ];
+    expect(parseYahooIntraday(chart(bars), "2026-10-26")).toEqual({ open: 229.02, close: 233.78 });
+    expect(parseYahooIntraday(chart(bars), "2026-10-27")).toBeNull();
+    expect(parseYahooIntraday({ chart: { result: [] } }, "2026-10-26")).toBeNull();
+    const w = intradayWindow("2026-10-26");
+    expect(new Date(w.period1 * 1000).toISOString()).toBe("2026-10-26T00:00:00.000Z");
+    expect(w.period2 - w.period1).toBe(36 * 3600);
+  });
+
+  it("fetchSessionBar falls back to 5-minute bars when the daily chart has no bar for the date yet", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const seen: string[] = [];
+    const eveningGap = async (url: string) => {
+      seen.push(url);
+      if (url.includes("interval=1d")) {
+        return { ok: true, status: 200, json: async () => chart([{ ts: FRI_OPEN, open: 55.0, close: 55.9 }]) }; // Friday only
+      }
+      return { ok: true, status: 200, json: async () => chart([{ ts: MON_OPEN, open: 55.38, close: 55.5 }, { ts: MON_OPEN + 300, open: 55.5, close: 55.68 }]) };
+    };
+    expect(await fetchSessionBar("EIX", "2026-10-19", { fetchImpl: eveningGap })).toEqual({ open: 55.38, close: 55.68 });
+    expect(seen).toHaveLength(2);
+    expect(seen[1]).toContain("interval=5m");
+    expect(seen[1]).toContain("includePrePost=false");
+    log.mockRestore();
+  });
+
+  it("fetchSessionBar does not hit Yahoo twice when the daily request itself fails", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    let calls = 0;
+    const down = async () => {
+      calls++;
+      return { ok: false, status: 503, json: async () => ({}) };
+    };
+    expect(await fetchSessionBar("EIX", "2026-10-19", { fetchImpl: down })).toBeNull();
+    expect(calls).toBe(1);
+    warn.mockRestore();
   });
 
   it("tells the agent the market WAS open when both bars exist", () => {
