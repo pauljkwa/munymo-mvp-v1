@@ -10,7 +10,8 @@
     "check": "tsc --noEmit",
     "format": "prettier --write .",
     "test": "vitest run",
-    "db:push": "drizzle-kit generate && drizzle-kit migrate"
+    "db:push": "drizzle-kit generate && drizzle-kit migrate",
+    "gsc:report": "sh scripts/gsc-weekly-report.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
