@@ -1063,12 +1063,13 @@ If a new Manus chat has zero connections, the first priority before any code wor
 
 ## 26. What to Build Next (Priority Order)
 
-### Open to-do list (kept current — last updated 2026-10-27, weekly Search Console report done)
+### Open to-do list (kept current — last updated 2026-11-02, Mo's Four Metrics explainer spec written)
 
 The numbered list below this block is historical (mid-2026) and mostly shipped. These are the live open items:
 
 | To-do | Notes |
 |-------|-------|
+| **Mo's Four Metrics explainer** (added 2026-11-02) | Paul, 2026-11-02: the results page should explain why Mo chose the four highlighted metrics *before the open* and how each played out, so novices see the pre-open analytics, not only hindsight. Nothing explains them today: the game page shows one fixed sentence, Mo's reasoning is never recorded, and the results page shows "Your reason" only as a score. **Spec ready for a cheaper model: `references/mo-four-metrics-explainer-spec.md`.** Needs Paul's written approval for two nullable JSON columns on `daily_games` (`highlightedMetricNotes`, `highlightedMetricDebrief`) before the migration runs. |
 | **DISCUSSIONS, not tasks: fixing "the poor third" of the learning design** (opened 2026-10-05) | The mechanics review (`references/wsj-critic-article-2026-10-05.md`) found Munymo well made as a habit product but only two-thirds of a learning product: the score rewards luck, the debrief explains noise, the decision is one bit deep, and nothing learned is asked again. **Nothing below is approved and nothing gets built until its discussion is closed.** Full agenda, options, Fable's lean and the counter-argument for each, and a decisions log: `references/scoring-and-learning-discussions-2026-10-05.md`. Paul asked for these to be conversations that end in agreement, not a list of what Fable says goes. |
 | Discussion 1: what should the score reward? | **Decided 2026-10-07: the score rewards deciding well as well as being right (Scoring v2); trial running.** Built as Scoring v2 (Section 4, Section 9); spec `references/scoring-v2-build-spec-2026-10-07.md`. Trial of a few days from the first v2 game (expected 2026-10-08), then review with real results. |
 | Discussion 2: confidence on the final pick | **Decided 2026-10-07: confidence on the final pick, published table, Toss-up never loses; trial running.** Built as Scoring v2 (Section 4, Section 9); spec `references/scoring-v2-build-spec-2026-10-07.md`. Trial of a few days from the first v2 game (expected 2026-10-08), then review with real results. |
