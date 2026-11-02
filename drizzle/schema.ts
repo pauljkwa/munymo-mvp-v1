@@ -100,6 +100,11 @@ export const dailyGames = mysqlTable(
      * "your reason" step is chosen from these four.
      */
     highlightedMetrics: json("highlightedMetrics").$type<string[] | null>(),
+    // Mo's one-sentence reason for each highlighted metric, written when the game is staged.
+    // Keys are the exact labels stored in highlightedMetrics. Null for games staged before 2026-11.
+    highlightedMetricNotes: json("highlightedMetricNotes").$type<Record<string, string> | null>(),
+    // Mo's one-sentence "how it played out" per highlighted metric, written at settlement.
+    highlightedMetricDebrief: json("highlightedMetricDebrief").$type<Record<string, string> | null>(),
     /**
      * Set at settlement from the open-to-close margin: "coin_toss" below
      * DAY_KIND_COIN_TOSS_MARGIN_PCT_POINTS, "clear" below 1 point, else
