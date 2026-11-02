@@ -14,7 +14,7 @@ import { notifyOwner } from "./notification";
 import { ENV } from "./env";
 import { settleFromPrices } from "../scoring";
 import { buildUnsubscribeUrl } from "../unsubscribe";
-import { validateHighlightedMetrics } from "../highlightedMetrics";
+import { validateHighlightedMetrics, resolveMetricNotes } from "../highlightedMetrics";
 import { compareWithBars, fetchPairSessionBars, summarizeSessionBars, type CrossCheck } from "./sessionPrices";
 
 /**
@@ -383,6 +383,12 @@ function resolveHighlightedMetrics(tomorrow: CurationTomorrow): string[] | null 
   return validateHighlightedMetrics(tomorrow.highlightedMetrics, rows, tomorrow.companyATicker, tomorrow.companyBTicker, "stage-game");
 }
 
+/** Mo's per-metric pre-open notes, resolved against the highlights already
+ *  validated for this game. Null when there are no highlights or no usable notes. */
+function resolveNotesFor(tomorrow: CurationTomorrow, highlights: string[] | null): Record<string, string> | null {
+  return resolveMetricNotes(tomorrow.highlightedMetricNotes, highlights, "stage-game");
+}
+
 /** Upserts a game's research + validation question from a `tomorrow` block.
  *  Idempotent — safe to call again on a retried submission (used by both the
  *  C1 guard's re-upsert and the initial creation path). */
@@ -410,7 +416,8 @@ async function upsertProposalContent(gameId: number, tomorrow: CurationTomorrow)
     const { getGameById } = await import("../db");
     const current = await getGameById(gameId);
     if (!current || current.status === "draft") {
-      await updateGame(gameId, { highlightedMetrics: resolveHighlightedMetrics(tomorrow) });
+      const highlights = resolveHighlightedMetrics(tomorrow);
+      await updateGame(gameId, { highlightedMetrics: highlights, highlightedMetricNotes: resolveNotesFor(tomorrow, highlights) });
     } else {
       console.warn(`[scoring v2] game ${gameId} is ${current.status}; highlightedMetrics left unchanged on re-apply`);
     }
@@ -533,6 +540,7 @@ async function applyResultsOnlyCuration(
     companyBEndPrice: today?.companyBEndPrice,
     resultSummary: today?.resultSummary,
     hindsightSpotlight: today?.hindsightSpotlight,
+    highlightedMetricDebrief: today?.highlightedMetricDebrief,
     activateStagedGameId: stagedGame.id,
   };
 
@@ -770,6 +778,7 @@ async function dailyCurationHandler(req: Request, res: Response) {
       companyBEndPrice: today?.companyBEndPrice,
       resultSummary: today?.resultSummary,
       hindsightSpotlight: today?.hindsightSpotlight,
+      highlightedMetricDebrief: today?.highlightedMetricDebrief,
       nextGameDate: tomorrow.gameDate,
       nextExchange: tomorrow.exchange ?? "NASDAQ",
       nextCompanyAName: tomorrow.companyAName,
@@ -786,6 +795,7 @@ async function dailyCurationHandler(req: Request, res: Response) {
       nextResearchSummary: tomorrow.researchSummary,
       nextResearchMetrics: tomorrow.researchMetrics as Record<string, string> | undefined,
       nextHighlightedMetrics: Array.isArray(tomorrow.highlightedMetrics) && tomorrow.highlightedMetrics.length === 4 ? tomorrow.highlightedMetrics : undefined,
+      nextHighlightedMetricNotes: tomorrow.highlightedMetricNotes,
       nextQuestionType: questionType,
       nextQuestionText: tomorrow.validationQuestion?.questionText,
       nextQuestionOptions: tomorrow.validationQuestion?.options ?? undefined,
@@ -877,6 +887,8 @@ interface CurationTomorrow {
   researchMetrics?: Record<string, string>;
   /** Scoring v2: exactly four metric labels (no ticker prefix) or "Price trend". */
   highlightedMetrics?: string[];
+  /** Mo's one sentence per highlighted label: why it separates the two companies. Players see it only after the result. */
+  highlightedMetricNotes?: Record<string, string>;
   validationQuestion?: {
     questionType: string;
     questionText: string;
@@ -902,6 +914,8 @@ interface CurationPayload {
     crowdVotePctB?: null;
     resultSummary?: string;
     hindsightSpotlight?: string;
+    /** One sentence per highlighted label: how that metric held up today. */
+    highlightedMetricDebrief?: Record<string, string>;
     resultSourceNote?: string;
   };
   /** Phase B results-only payload: references the game Phase A already
@@ -994,6 +1008,7 @@ async function stageGameHandler(req: Request, res: Response) {
     const lockoutAt = expectedLockoutIso(tomorrow.gameDate);
     const existingAtDate = await getTodayGame(tomorrow.gameDate);
     const cancelledAtDate = existingAtDate?.status === "cancelled" ? existingAtDate : undefined;
+    const resolvedHighlights = resolveHighlightedMetrics(tomorrow);
     const nextGameFields = {
       gameDate: tomorrow.gameDate,
       exchange: tomorrow.exchange ?? "NASDAQ",
@@ -1008,7 +1023,9 @@ async function stageGameHandler(req: Request, res: Response) {
       sourcePublisher: tomorrow.sourcePublisher,
       lockoutAt: new Date(lockoutAt),
       // Scoring v2 (null = this game runs legacy scoring)
-      highlightedMetrics: resolveHighlightedMetrics(tomorrow),
+      highlightedMetrics: resolvedHighlights,
+      // Mo's Four Metrics: pre-open reasons, withheld from players until the result is published.
+      highlightedMetricNotes: resolveNotesFor(tomorrow, resolvedHighlights),
       // Cron-triggered — no admin session; id 1 ("Cron") is the same
       // convention dailyCurationHandler uses for its admin.endOfDay caller context.
       createdBy: 1,

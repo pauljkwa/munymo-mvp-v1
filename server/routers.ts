@@ -26,7 +26,7 @@ import {
 } from "./email";
 import { z } from "zod";
 import { COOKIE_NAME, PRICE_TREND_LABEL } from "@shared/const";
-import { valuesForMetric, validateHighlightedMetrics, scorePracticeV2, type MetricRow } from "./highlightedMetrics";
+import { valuesForMetric, validateHighlightedMetrics, resolveMetricNotes, scorePracticeV2, type MetricRow } from "./highlightedMetrics";
 import { chooseHighlightsForGame, usableMetricLabels } from "./_core/backfillHighlights";
 import { newRunId, recordAiRun, recordAiTurn, type AiRunContext } from "./_core/aiUsage";
 import { currentSeasonKey, seasonLabel, seasonWindow } from "@shared/leaderboard";
@@ -182,13 +182,24 @@ const backfillFailedGameIds = new Set<number>(); // games Mo failed on this proc
 
 // ─── Games Router ─────────────────────────────────────────────────────────────
 
+/**
+ * Mo's Four Metrics explainer: the pre-game notes and the post-game debrief are
+ * players' to see only once the result is published. Before that both come back
+ * null (like dayKind and the perfs), so nothing about Mo's reasoning is in the
+ * network tab on the game page.
+ */
+function withholdMetricReasons<T extends { status: string; highlightedMetricNotes?: unknown; highlightedMetricDebrief?: unknown }>(game: T): T {
+  if (game.status === "result_published") return game;
+  return { ...game, highlightedMetricNotes: null, highlightedMetricDebrief: null };
+}
+
 const gamesRouter = router({
   getToday: publicProcedure.query(async () => {
     // Returns the nearest active/locked game — allows game to be visible
     // from the afternoon before trading day through to lockout
     const game = await getActiveOrUpcomingGame();
     if (!game) return null;
-    return game;
+    return withholdMetricReasons(game);
   }),
 
   getById: publicProcedure
@@ -196,7 +207,7 @@ const gamesRouter = router({
     .query(async ({ input }) => {
       const game = await getGameById(input.id);
       if (!game) throw new TRPCError({ code: "NOT_FOUND" });
-      return game;
+      return withholdMetricReasons(game);
     }),
 
   // Archive pages are addressed by descriptive slug (shared/slugs.ts).
@@ -205,7 +216,7 @@ const gamesRouter = router({
     .query(async ({ input }) => {
       const game = await getPublishedGameBySlug(input.slug);
       if (!game) throw new TRPCError({ code: "NOT_FOUND" });
-      return game;
+      return withholdMetricReasons(game);
     }),
 
   // "More matchups" under an archive page. Published games only.
@@ -1083,6 +1094,8 @@ async function closeAndScoreGame(
     resultSummary?: string;
     hindsightSpotlight?: string;
     resultCommentary?: string;
+    /** Mo's per-metric "how it played out" sentences, keyed by highlighted label. */
+    highlightedMetricDebrief?: Record<string, string>;
   }
 ): Promise<{
   scoredPicks: Array<{ userId: number; predictionScore: number; validationScore: number; reasonScore?: number; confidenceScore?: number; totalScore: number }>;
@@ -1234,6 +1247,8 @@ async function closeAndScoreGame(
     resultSummary: opts.resultSummary,
     hindsightSpotlight: opts.hindsightSpotlight,
     resultCommentary: opts.resultCommentary,
+    // Never throws and never blocks settlement: a bad debrief just stores null.
+    highlightedMetricDebrief: resolveMetricNotes(opts.highlightedMetricDebrief, game.highlightedMetrics ?? null, "settlement"),
     publishedAt: new Date(),
   });
 
@@ -1777,6 +1792,7 @@ const adminRouter = router({
         resultSummary: z.string().optional(),
         hindsightSpotlight: z.string().optional(),
         resultCommentary: z.string().optional(),
+        highlightedMetricDebrief: z.record(z.string(), z.string()).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -1796,6 +1812,7 @@ const adminRouter = router({
         resultSummary: input.resultSummary,
         hindsightSpotlight: input.hindsightSpotlight,
         resultCommentary: input.resultCommentary,
+        highlightedMetricDebrief: input.highlightedMetricDebrief,
       });
 
       await writeAuditLog(
@@ -1915,6 +1932,8 @@ const adminRouter = router({
         companyBEndPrice: z.number().optional(),
         resultSummary: z.string().optional(),
         hindsightSpotlight: z.string().optional(),
+        // Mo's Four Metrics: one "how it played out" sentence per highlighted label.
+        highlightedMetricDebrief: z.record(z.string(), z.string()).optional(),
         // ── Tomorrow's game — via fresh creation OR activating a game Phase A
         // already staged as a draft earlier in the afternoon ──
         activateStagedGameId: z.number().optional(),
@@ -1937,6 +1956,8 @@ const adminRouter = router({
         nextResearchMetrics: z.record(z.string(), z.string()).optional(),
         // Scoring v2: Mo's four highlighted metrics (validated against the panel labels below).
         nextHighlightedMetrics: z.array(z.string()).length(4).optional(),
+        // Mo's one-sentence reason per highlighted label (shown only after the result is published).
+        nextHighlightedMetricNotes: z.record(z.string(), z.string()).optional(),
         // ── Tomorrow's validation question ──
         nextQuestionType: z.enum(["multiple_choice", "yes_no", "true_false"]).optional(),
         nextQuestionText: z.string().optional(),
@@ -1989,6 +2010,7 @@ const adminRouter = router({
           companyBEndPrice: input.companyBEndPrice,
           resultSummary: input.resultSummary,
           hindsightSpotlight: input.hindsightSpotlight,
+          highlightedMetricDebrief: input.highlightedMetricDebrief,
         });
         // The settled winner is what was scored and stored; everything below
         // (audit log, result emails, push) must describe that, not the input.
@@ -2115,6 +2137,8 @@ const adminRouter = router({
             sourcePublisher: input.nextSourcePublisher,
             lockoutAt: input.nextLockoutAt ? new Date(input.nextLockoutAt) : undefined,
             highlightedMetrics: nextHighlightedMetrics,
+            // No highlights means no notes.
+            highlightedMetricNotes: resolveMetricNotes(input.nextHighlightedMetricNotes, nextHighlightedMetrics, "endOfDay"),
             createdBy: ctx.user.id,
             status: "active" as const,
           };

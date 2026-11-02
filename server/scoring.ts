@@ -54,27 +54,8 @@ export function computeReasonScore(
   return SCORE_WEIGHTS.reason;
 }
 
-/**
- * Objective direction for a highlighted metric, from the two panel values.
- * Returns the side the numbers favor, or null when the metric has no safe
- * direction (P/E, beta, market cap, last move, distance from high, earnings
- * date, analyst consensus when both ratings match). Only Revenue Growth
- * qualifies today; "faster is stronger" is the one reading nobody argues with.
- */
-export function objectiveSideForMetric(
-  label: string,
-  valueA: string | undefined,
-  valueB: string | undefined
-): "A" | "B" | null {
-  if (!/revenue growth/i.test(label) || !valueA || !valueB) return null;
-  const pct = (v: string) => {
-    const m = v.replace(/,/g, "").match(/([+-]?\d+(?:\.\d+)?)\s*%/);
-    return m ? parseFloat(m[1]) : null;
-  };
-  const a = pct(valueA), b = pct(valueB);
-  if (a == null || b == null || a === b) return null;
-  return a > b ? "A" : "B";
-}
+// Moved to shared/ so the results pages use the very same function (2026-11-02).
+export { objectiveSideForMetric } from "@shared/metricValues";
 
 /** Reading check: right or wrong, untimed. */
 export function computeCheckScore(validationAnswer: string | null | undefined, correctAnswer: string): number {
