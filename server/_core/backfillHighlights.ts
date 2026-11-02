@@ -20,12 +20,19 @@ import { PRICE_TREND_LABEL } from "@shared/const";
 
 const RULES_HEADING = "## highlightedMetrics rules";
 
-/** The exact rules section from the curation prompt (heading to next "## "). */
+/** Where the section moves on from CHOOSING the four metrics to WRITING about them
+ *  (per-metric notes, weaving them into the research). The backfill only chooses. */
+const WRITING_RULES_MARKER = "\nFor each of the four, write ONE sentence";
+
+/** The exact choosing rules from the curation prompt (heading to next "## ", minus the
+ *  notes/weaving paragraphs, which don't apply to a pick-only backfill call). */
 export function extractHighlightRules(prompt: string = SYSTEM_PROMPT): string {
   const start = prompt.indexOf(RULES_HEADING);
   if (start === -1) throw new Error(`Prompt anchor not found: ${RULES_HEADING}`);
   const next = prompt.indexOf("\n## ", start + RULES_HEADING.length);
-  return (next === -1 ? prompt.slice(start) : prompt.slice(start, next)).trim();
+  const section = next === -1 ? prompt.slice(start) : prompt.slice(start, next);
+  const writing = section.indexOf(WRITING_RULES_MARKER);
+  return (writing === -1 ? section : section.slice(0, writing)).trim();
 }
 
 /**

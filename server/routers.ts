@@ -188,7 +188,7 @@ const backfillFailedGameIds = new Set<number>(); // games Mo failed on this proc
  * null (like dayKind and the perfs), so nothing about Mo's reasoning is in the
  * network tab on the game page.
  */
-function withholdMetricReasons<T extends { status: string; highlightedMetricNotes?: unknown; highlightedMetricDebrief?: unknown }>(game: T): T {
+export function withholdMetricReasons<T extends { status: string; highlightedMetricNotes?: unknown; highlightedMetricDebrief?: unknown }>(game: T): T {
   if (game.status === "result_published") return game;
   return { ...game, highlightedMetricNotes: null, highlightedMetricDebrief: null };
 }
