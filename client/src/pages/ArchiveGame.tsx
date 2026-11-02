@@ -1,5 +1,7 @@
 import { trpc } from "@/lib/trpc";
 import MoByline from "@/components/MoByline";
+import MoFourMetricsCard from "@/components/MoFourMetricsCard";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { withReferralParams } from "@/lib/utils";
 import { useParams } from "wouter";
@@ -47,6 +49,9 @@ export default function ArchiveGame() {
     { enabled: !!gameId }
   );
   const { data: communityStats } = trpc.games.getCommunityStats.useQuery({ gameId }, { enabled: !!gameId });
+  // Signed-in players see which of the four they named as their reason.
+  const { isAuthenticated } = useAuth();
+  const { data: myPick } = trpc.picks.getMyPick.useQuery({ gameId }, { enabled: isAuthenticated && !!gameId });
   const { data: validationQ } = trpc.games.getValidationQuestion.useQuery({ gameId }, { enabled: !!gameId });
   const { data: related } = trpc.games.getRelated.useQuery({ gameId }, { enabled: !!gameId });
   // Fire-and-forget: log clicks on the source-article link for referral reporting.
@@ -286,6 +291,19 @@ export default function ArchiveGame() {
             </p>
           </div>
         )}
+
+        {/* Mo's Four Metrics (after the result, before the Hindsight Spotlight) */}
+        <MoFourMetricsCard
+          tickerA={game.companyATicker}
+          tickerB={game.companyBTicker}
+          winner={game.winner}
+          highlightedMetrics={game.highlightedMetrics}
+          notes={game.highlightedMetricNotes}
+          debrief={game.highlightedMetricDebrief}
+          metrics={research?.metrics}
+          myPick={isAuthenticated ? myPick : null}
+          className="mb-5"
+        />
 
         {/* Hindsight Spotlight */}
         {research?.hindsightSpotlight && (

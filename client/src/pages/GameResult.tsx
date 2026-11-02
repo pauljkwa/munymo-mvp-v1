@@ -1,6 +1,7 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { lessonPath } from "@shared/slugs";
 import MoByline from "@/components/MoByline";
+import MoFourMetricsCard from "@/components/MoFourMetricsCard";
 import PerfectScoreConfetti from "@/components/PerfectScoreConfetti";
 import MoreToPlay from "@/components/MoreToPlay";
 import ShareResultButton from "@/components/ShareResultButton";
@@ -46,6 +47,8 @@ export default function GameResult() {
     { enabled: isAuthenticated && !!gameId }
   );
   const { data: communityStats } = trpc.games.getCommunityStats.useQuery({ gameId });
+  // The research panel values, for the "Mo's Four Metrics" card.
+  const { data: research } = trpc.games.getResearch.useQuery({ gameId }, { enabled: !!gameId });
   const { data: validationQ } = trpc.games.getValidationQuestion.useQuery({ gameId });
   const { data: myStreak } = trpc.streaks.getMyStreak.useQuery(
     undefined,
@@ -559,6 +562,18 @@ export default function GameResult() {
             </p>
           </div>
         )}
+
+        {/* ── Mo's Four Metrics: why the four, and how each held up ── */}
+        <MoFourMetricsCard
+          tickerA={game.companyATicker}
+          tickerB={game.companyBTicker}
+          winner={game.winner}
+          highlightedMetrics={game.highlightedMetrics}
+          notes={game.highlightedMetricNotes}
+          debrief={game.highlightedMetricDebrief}
+          metrics={research?.metrics}
+          myPick={isAuthenticated ? myPick : null}
+        />
 
         {/* ── Day kind (scoring v2) ── */}
         {dayKind && (
