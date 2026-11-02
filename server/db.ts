@@ -271,6 +271,8 @@ export async function getEarliestConcludedGame(todayEt: string) {
       gameDate: dailyGames.gameDate,
       companyATicker: dailyGames.companyATicker,
       companyBTicker: dailyGames.companyBTicker,
+      highlightedMetrics: dailyGames.highlightedMetrics,
+      highlightedMetricNotes: dailyGames.highlightedMetricNotes,
     })
     .from(dailyGames)
     .where(and(or(eq(dailyGames.status, "active"), eq(dailyGames.status, "locked")), lte(dailyGames.gameDate, todayEt)))

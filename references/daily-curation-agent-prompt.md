@@ -51,6 +51,7 @@ Record:
 - `companyBStartPrice` / `companyBEndPrice` — Company B's actual $ price at today's session open and close
 - `resultSummary` — 2–3 sentence explanation of why the winner won today (use real data: earnings, news, sector moves)
 - `hindsightSpotlight` — 3–5 paragraph educational debrief. Include: what drove the result, what the research said vs what happened, analyst consensus at close, key lesson for investors, and what to watch going forward. **It must open with one sentence that classifies the day** by the gap between the two open-to-close moves (the same thresholds the server uses): under 0.25 percentage points = "a coin toss"; 0.25 up to 1 point = "clear"; 1 point or more = "decisive". On a coin-toss day, say plainly that the result is too close to carry a lesson about the companies, BEFORE explaining how each stock traded.
+- `highlightedMetricDebrief` — for each of the four highlighted metrics listed in the user message (same keys), ONE sentence on how that metric held up today. Say plainly whether the company the numbers favored was the one that won the open-to-close move, and if not, what overrode it (news, earnings, the broader market). On a coin-toss day say the gap was too small for any metric to claim credit. Never pretend a metric predicted the result when it didn't; the lesson is the point. Under 300 characters each, plain prose, no markup.
 
 ---
 
@@ -105,6 +106,10 @@ For each company, gather the following metrics. Use Yahoo Finance, financial new
 Every value must stand alone without relative time words — anchor dates explicitly.
 
 **Highlighted metrics (`highlightedMetrics`):** Pick EXACTLY four metrics where the two companies differ most meaningfully today. Players are asked to choose which highlighted metric is the main reason for their pick. Each entry is a metric label WITHOUT the ticker prefix — one of `Market Cap`, `P/E Ratio`, `Revenue Growth`, `Analyst Consensus`, `Next Earnings`, `Beta`, `Last Session Move`, `vs 52-Week High` — or `Price trend` (the 20-session chart). All four must be different. `Price trend` qualifies only when the two companies' 20-session moves differ by more than 10 percentage points, or one chart shows an event the other lacks. Never choose a metric where both values are the same or either is "No confirmed date". If the list is invalid the game falls back to the legacy scoring for that day.
+
+**Metric notes (`highlightedMetricNotes`):** For each of the four, write ONE sentence (key = the exact label) saying why this metric separates the two companies going into the game day. Quote the two values and say what the gap usually means for a single session. These notes are shown to players only AFTER the result is published, as the "before the open" half of a debrief, so write them as your pre-game reasoning: never say or hint which company will win, never use hindsight, and never use relative time words (anchor dates explicitly). For `Price trend`, describe the shape of the two 20-session charts (the gap, spike or breakdown that qualified it). Plain prose, 1–2 sentences, under 300 characters, no markup.
+
+**Weave the four metrics into the research:** Touch on each of the four highlighted metrics somewhere in `researchContent` and `researchSummary`, in context, the way an analyst would mention it. Do NOT label them, list them, number them, or use the words "highlighted", "key metric" or "Mo". A close reader should be able to find the threads; a skimmer should not be told. The brief must still read as a story about the two companies, not as a walkthrough of the metrics panel.
 
 **Pairing Rationale:** Write 2–3 sentences explaining what is happening in the market **today specifically** that makes this matchup timely. Reference the actual news event, earnings release, analyst call, sector move, or macro development from the last 48 hours that motivated this pick. This is not a description of the companies or their general rivalry — it is the reason a player opening the app today will immediately understand why *these two, right now*. If you cannot point to a specific recent event, you have chosen the wrong companies.
 
@@ -211,6 +216,7 @@ The JSON structure to POST:
     "crowdVotePctB": null,
     "resultSummary": "<2-3 sentences>",
     "hindsightSpotlight": "<3-5 paragraphs>",
+    "highlightedMetricDebrief": { "<label>": "<1 sentence>", "<label>": "<1 sentence>", "<label>": "<1 sentence>", "<label>": "<1 sentence>" },
     "resultSourceNote": "Closing prices sourced from Yahoo Finance on <today's date>"
   },
   "tomorrow": {
@@ -244,6 +250,7 @@ The JSON structure to POST:
       "<CompanyB ticker> vs 52-Week High": "<X% below high>"
     },
     "highlightedMetrics": ["<label>", "<label>", "<label>", "<label>"],
+    "highlightedMetricNotes": { "<label>": "<1 sentence>", "<label>": "<1 sentence>", "<label>": "<1 sentence>", "<label>": "<1 sentence>" },
     "validationQuestion": {
       "questionType": "multiple_choice | true_false | yes_no  (see Step 5 — vary this, don't always use multiple_choice)",
       "questionText": "<question text>",

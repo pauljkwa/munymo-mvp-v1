@@ -37,6 +37,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { ENV } from "./env";
 import { notifyOwner } from "./notification";
 import { newRunId, nextTurnIndex, recordAiRun, recordAiTurn, type AiRunContext, type AiRunKind } from "./aiUsage";
+import { describeHighlightedMetricsForAgent } from "../highlightedMetrics";
 import { describeSessionBarsForAgent, fetchPairSessionBars, summarizeSessionBars } from "./sessionPrices";
 
 export const MODEL = "claude-sonnet-5"; // Sonnet 5 ≈ 60% cheaper than Opus 4.8; switched 2026-07-18 to keep curation under the API spend limit
@@ -144,6 +145,8 @@ SERVER-FETCHED PRICES: when the user message contains a "SERVER-FETCHED SESSION 
 
 HINDSIGHT SPOTLIGHT OPENING RULE: the hindsightSpotlight MUST open with one sentence that classifies the day by the gap between the two open-to-close moves (winningMargin, in percentage points), using exactly these thresholds: under 0.25 points = "a coin toss"; 0.25 up to (but not including) 1 point = "clear"; 1 point or more = "decisive". Example opening: "Today was a coin toss: the two stocks finished 0.17 points apart." On a coin-toss day you must then say plainly that the result is too close to carry a lesson about the companies, BEFORE you explain how each stock traded. On clear and decisive days, go on to the usual debrief.
 
+Also write highlightedMetricDebrief: for each of the four highlighted metrics listed in the user message (same keys), ONE sentence on how that metric held up today. Say plainly whether the company the numbers favored was the one that won the open-to-close move, and if not, what overrode it (news, earnings, the broader market). On a coin-toss day say the gap was too small for any metric to claim credit. Never pretend a metric predicted the result when it didn't; the lesson is the point. Under 300 characters each, plain prose, no markup.
+
 ## Select tomorrow's matchup
 Follow the freshness pre-qualification sequence above first. Once a candidate sector + pair is confirmed fresh via check_freshness, continue only if the two companies are: genuine rivals/comparisons; widely recognised; the subject of a real investment debate; and tied to a specific news story from the last 48 hours (you must be able to name it). Avoid penny stocks, micro-caps, ETFs, and index funds. If a confirmed-fresh candidate fails these qualitative checks, pick a different one and re-confirm freshness before continuing.
 
@@ -181,6 +184,10 @@ Players are asked to name, from YOUR four highlighted metrics, the one that is t
 - "Price trend" qualifies ONLY when the two companies' 20-session moves differ by more than 10 percentage points, or one chart shows an event (a gap, a spike, a breakdown) that the other lacks. Otherwise do not choose it.
 - NEVER choose a metric where both companies have the same value. "Next Earnings" qualifies only when one company reports on the game day or the next morning and the other does not (that is the single biggest difference a day can have); never when both say "No confirmed date".
 - Do not choose metrics just to cover both horizons; choose the four that genuinely separate the two companies.
+
+For each of the four, write ONE sentence in "highlightedMetricNotes" (key = the exact label) saying why this metric separates the two companies going into the game day. Quote the two values and say what the gap usually means for a single session. These notes are shown to players only AFTER the result is published, as the "before the open" half of a debrief, so write them as your pre-game reasoning: never say or hint which company will win, never use hindsight, and never use relative time words (anchor dates as in the Dates section). For "Price trend", describe the shape of the two 20-session charts (the gap, spike or breakdown that qualified it). Plain prose, 1–2 sentences, under 300 characters, no markup.
+
+Weave the four highlighted metrics into researchContent and researchSummary as part of the narrative: each of the four should be touched on somewhere in the prose, in context, the way an analyst would mention it. Do NOT label them, list them, number them, or use the words "highlighted", "key metric" or "Mo". A close reader should be able to find the threads; a skimmer should not be told. The brief must still read as a story about the two companies, not as a walkthrough of the metrics panel.
 
 ## Dates in player-facing content — no relative time
 You are writing the night BEFORE the game day, and players read this content the next day (or later, after a weekend). Relative time words go stale and embarrass us: a company "scheduled to report earnings today" may have reported by the time anyone reads it. In pairingRationale, researchContent, researchSummary, and the validation question:
@@ -243,6 +250,7 @@ Every text field is shown to players exactly as written — plain prose only. Ne
     "winningMargin": <abs(companyAPerf - companyBPerf)>,
     "resultSummary": "<2-3 sentences>",
     "hindsightSpotlight": "<3-5 paragraphs>",
+    "highlightedMetricDebrief": { "<label>": "<1 sentence>", "<label>": "<1 sentence>", "<label>": "<1 sentence>", "<label>": "<1 sentence>" },
     "resultSourceNote": "Open and close prices sourced from Yahoo Finance on <today's date>; moves are regular-session open-to-close"
   },
   "tomorrow": {
@@ -279,6 +287,7 @@ Every text field is shown to players exactly as written — plain prose only. Ne
       "<B ticker> vs 52-Week High": "<X% below high>"
     },
     "highlightedMetrics": ["<label>", "<label>", "<label>", "<label>"],
+    "highlightedMetricNotes": { "<label>": "<1 sentence>", "<label>": "<1 sentence>", "<label>": "<1 sentence>", "<label>": "<1 sentence>" },
     "validationQuestion": {
       "questionType": "<multiple_choice | true_false | yes_no — see the 'Validation question' rules above>",
       "questionText": "<question text>",
@@ -352,7 +361,7 @@ const TOMORROW_OUTPUT_BLOCK = extractBalancedBlock(fullOutputFormat, requireInde
  * section incl. the market-calendar rule — is reused verbatim via the slices
  * above, per the build spec.
  */
-const STAGING_SYSTEM_PROMPT =
+export const STAGING_SYSTEM_PROMPT =
   IDENTITY +
   `Your job runs once per US trading day, in the afternoon while that trading day's session is still open — this ` +
   `is the RESEARCH-ONLY half of curation. You must:\n` +
@@ -373,7 +382,7 @@ const STAGING_SYSTEM_PROMPT =
  * asks to preserve) and reduces the output to the `today` block plus the
  * `stagedGameId` the run is told to echo back.
  */
-const RESULTS_ONLY_SYSTEM_PROMPT =
+export const RESULTS_ONLY_SYSTEM_PROMPT =
   IDENTITY +
   `Your job runs just after NASDAQ closes. Tomorrow's game has already been staged in advance — this is the ` +
   `RESULTS-ONLY half of curation. You must:\n` +
@@ -968,7 +977,7 @@ async function attemptDailyCuration(client: Anthropic, startTime: number, usageC
         `sector/companies are banned immediately, then call check_freshness to confirm your candidate BEFORE researching ` +
         `prices or writing content. Once confirmed, research today's result and tomorrow's matchup using web_search, ` +
         `then output the single CurationPayload JSON object as your final message.` +
-        (await sessionPricesNote(todayEt)),
+        (await settlementContextNote(todayEt)),
     },
   ];
 
@@ -1031,16 +1040,52 @@ async function attemptDailyCuration(client: Anthropic, startTime: number, usageC
  * Never throws: on any error the agent simply gets no block and researches
  * prices via web_search as it always did.
  */
-async function sessionPricesNote(todayEt: string): Promise<string> {
+async function sessionPricesNote(todayEt: string, knownGame?: ConcludedGame | null): Promise<string> {
   try {
     const { getEarliestConcludedGame } = await import("../db");
-    const game = await getEarliestConcludedGame(todayEt);
+    const game = knownGame === undefined ? await getEarliestConcludedGame(todayEt) : knownGame;
     if (!game || !isGameSessionConcluded(game.gameDate)) return "";
     const bars = await fetchPairSessionBars(game.companyATicker, game.companyBTicker, game.gameDate);
     console.log(`[curation-agent] session prices for game ${game.id} (${game.gameDate}): ${summarizeSessionBars(bars)}`);
     return `\n\n${describeSessionBarsForAgent(game.id, bars)}`;
   } catch (err) {
     console.warn("[curation-agent] session prices unavailable:", err instanceof Error ? err.message : err);
+    return "";
+  }
+}
+
+type ConcludedGame = NonNullable<Awaited<ReturnType<typeof import("../db").getEarliestConcludedGame>>>;
+
+/**
+ * Settlement-run context appended to the opening user message: the server-fetched
+ * session prices plus Mo's Four Metrics block (the stored labels, values and Mo's
+ * own pre-open notes, so highlightedMetricDebrief is written against exactly
+ * those keys). Both blocks come from ONE concluded-game lookup so they always
+ * describe the same game. Never throws; either block is simply omitted on error
+ * or when the game has no highlights.
+ */
+async function settlementContextNote(todayEt: string): Promise<string> {
+  let game: ConcludedGame | null | undefined;
+  try {
+    const { getEarliestConcludedGame } = await import("../db");
+    game = (await getEarliestConcludedGame(todayEt)) ?? null;
+  } catch (err) {
+    console.warn("[curation-agent] concluded-game lookup failed:", err instanceof Error ? err.message : err);
+    return await sessionPricesNote(todayEt);
+  }
+  return (await sessionPricesNote(todayEt, game)) + (await highlightedMetricsNote(game));
+}
+
+async function highlightedMetricsNote(game: ConcludedGame | null): Promise<string> {
+  try {
+    if (!game?.highlightedMetrics?.length) return "";
+    const { getResearchByGameId } = await import("../db");
+    const research = await getResearchByGameId(game.id);
+    const rows = (research?.researchMetrics ?? []) as Array<{ label: string; value: string }>;
+    const block = describeHighlightedMetricsForAgent(game, rows);
+    return block ? `\n\n${block}` : "";
+  } catch (err) {
+    console.warn("[curation-agent] highlighted-metrics block unavailable:", err instanceof Error ? err.message : err);
     return "";
   }
 }
@@ -1066,7 +1111,7 @@ async function attemptResultsOnlyCuration(
         `Determine today's winner from the server-fetched session prices below (web_search for the narrative only; ` +
         `fall back to web_search for prices only if the block says they are unavailable), then output the single ` +
         `CurationPayload JSON object as your final message.` +
-        (await sessionPricesNote(todayEt)),
+        (await settlementContextNote(todayEt)),
     },
   ];
 
