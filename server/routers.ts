@@ -1,3 +1,4 @@
+import { sanitizeAiStrings } from "./aiText";
 import { TRPCError } from "@trpc/server";
 import type Anthropic from "@anthropic-ai/sdk";
 import {
@@ -1779,6 +1780,8 @@ const adminRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      // Agent-written text may carry Claude citation markup (server/aiText.ts).
+      input = sanitizeAiStrings(input);
       const game = await getGameById(input.gameId);
       if (!game) throw new TRPCError({ code: "NOT_FOUND" });
 
@@ -1961,6 +1964,8 @@ const adminRouter = router({
       )
     )
     .mutation(async ({ ctx, input }) => {
+      // Agent-written text may carry Claude citation markup (server/aiText.ts).
+      input = sanitizeAiStrings(input);
       // ── 1. Close today's game (skipped if no closeGameId — Game 1 / first game) ──
       let game: Awaited<ReturnType<typeof getGameById>> | null = null;
       let winner: "A" | "B" | undefined;

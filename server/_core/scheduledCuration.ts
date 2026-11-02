@@ -8,6 +8,7 @@
  *                                       freshness rules where applicable, runs End of Day logic
  *                                       (close today + create/activate tomorrow)
  */
+import { sanitizeAiStrings } from "../aiText";
 import type { Express, Request, Response } from "express";
 import { notifyOwner } from "./notification";
 import { ENV } from "./env";
@@ -571,7 +572,9 @@ async function dailyCurationHandler(req: Request, res: Response) {
       return res.status(403).json({ error: "cron-only endpoint" });
     }
 
-    const body = req.body as CurationPayload;
+    // Strip Claude's citation markup from every string before anything is
+    // stored — the client renders agent text verbatim (server/aiText.ts).
+    const body = sanitizeAiStrings(req.body as CurationPayload);
     const { today, tomorrow, marketClosed } = body;
 
     // ── Payload routing (results-only vs legacy) ──
@@ -943,7 +946,7 @@ async function stageGameHandler(req: Request, res: Response) {
       return res.status(403).json({ error: "cron-only endpoint" });
     }
 
-    const body = req.body as StageGamePayload;
+    const body = sanitizeAiStrings(req.body as StageGamePayload);
     const { tomorrow } = body;
     if (!tomorrow) {
       return res.status(400).json({ error: "Missing 'tomorrow' block in payload" });

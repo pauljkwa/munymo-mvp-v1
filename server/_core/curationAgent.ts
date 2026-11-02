@@ -228,6 +228,8 @@ If there is no prior game (first game ever) or no questionType history, pick any
 ## Output format — CRITICAL
 Your FINAL message must contain ONLY the JSON object below — no markdown fences, no commentary, no explanation before or after. All research/reasoning happens in tool use and thinking; the final message is pure JSON.
 
+Every text field is shown to players exactly as written — plain prose only. Never put citation or markup tags in any string: no <cite> tags, no HTML, no XML. If a sentence comes from a source, paraphrase it or name the publisher in words ("Reuters reported that…"), never wrap it in a tag.
+
 {
   "marketClosed": false,
   "today": {
