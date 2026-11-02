@@ -1,26 +1,24 @@
 # Mo's Four Metrics explainer — build spec (2026-11-02)
 
-**Decision:** Paul, 2026-11-02: the results page should explain *why Mo chose the four highlighted metrics before the open* and *how each one played out*, so a novice sees the pre-open analytics Mo used, not only the hindsight. Spec written by Fable for a cheaper model to build; Fable reviews the diff.
+**Decision:** Paul, 2026-11-02: the results page should explain *why Mo chose the four highlighted metrics before the open* and *how each one played out*, so a novice sees the pre-open analytics Mo used, not only the hindsight. **Revised the same day:** nothing new is shown before the open. Players should use their own nous and investigative skills; it is enough that the four metrics are marked as the ones Mo finds indicative. Mo instead weaves the four metrics subtly into the research text, and the explicit reasoning appears only on the results page. A studious player who reads the wrap-up daily learns the reasoning and applies it to the next game without hand-holding. Spec written by Fable for a cheaper model to build; Fable reviews the diff.
 
 **Schema:** two new nullable JSON columns on `daily_games` (ADD only). **Paul must approve in writing before the migration runs**, and Paul runs `scripts/apply-migration.sh` himself (the agent harness blocks `db:push`). Apply the migration *before* pushing code that reads the columns.
 
-**Not in scope:** backfilling old games (Mo was never asked for this; the card simply does not render without notes), any change to scoring, any change to which metrics Mo may choose, leagues, practice mode.
+**Not in scope:** any new pre-open UI (no "Mo:" lines on the game page, nothing under the Your-reason buttons, the fixed sentence above the metrics table stays as it is), backfilling old games (Mo was never asked for this; the card simply does not render without notes), any change to scoring, any change to which metrics Mo may choose, leagues, practice mode.
 
 ---
 
 ## What the player sees
 
-### Before the open (game page, `client/src/pages/DailyGame.tsx`)
+### Before the open (game page) — no UI change
 
-Today each of Mo's four metrics gets a "Highlighted" chip and one fixed sentence above the table ("Mo has highlighted the four metrics where these two companies differ most today."). Add, under each highlighted row (spanning both columns, inside the row's shaded band, below the two value cells), Mo's one-sentence reason in small italic muted text, prefixed by a tiny "Mo:" label. For `Price trend` the sentence sits in the highlighted chart-CTA band. Example:
+The game page stays exactly as it is: the four metrics carry their "Highlighted" chip and the one fixed sentence above the table. Mo's per-metric reasons are **recorded at staging but not displayed** until the result is published (the server withholds them, see "Reading it").
 
-> *Mo: Revenue Growth — Alphabet is growing 14% a year against The Trade Desk's 3%; on a day with no earnings for either, the faster grower is the one buyers usually reach for first.*
+What changes before the open is the research text itself. Mo's prompt (below) asks that `researchContent` and `researchSummary` touch on each of the four highlighted metrics in passing, as part of the narrative, without labelling them, listing them, or saying "highlighted". A player who reads the brief closely will find the threads; one who skims will not be told. Example of the intended register, inside a paragraph about The Trade Desk:
 
-Change the sentence above the table to: "Mo has highlighted the four metrics where these two companies differ most today, and says why under each one. You'll be asked which one is your reason."
+> ...and it is growing revenue at a far slower clip than its larger rival, which matters more than usual on a day when neither company has news of its own.
 
-In the **Your reason** step (the four buttons, around `DailyGame.tsx:1056–1080`), show the same sentence under each button in the same small italic style. It is a reminder, not a hint about which side wins: Mo's sentence never says who will win (prompt rule below).
-
-If a game has highlights but no notes (any game staged before this deploy, or a run where the notes failed validation), nothing changes: no empty "Mo:" lines.
+That is the whole pre-open treatment. No new fields are sent to the client before settlement.
 
 ### After the close (results page `client/src/pages/GameResult.tsx` and the public archive page `client/src/pages/ArchiveGame.tsx`)
 
@@ -82,7 +80,7 @@ Log one `console.warn` naming the dropped keys when some are dropped. Use it for
 
 ### Reading it
 
-- `games.getToday` / `getById` (whatever `DailyGame.tsx` and `GameResult.tsx` already use for `highlightedMetrics`) return the two new fields. Do **not** add the debrief to any pre-settlement response: return `highlightedMetricDebrief` only when `status === "result_published"`, exactly as `dayKind` and the perfs are withheld until finished (see the practice `getGame` comment near `routers.ts:530`).
+- `games.getToday` / `getById` (whatever `GameResult.tsx` and `ArchiveGame.tsx` already use for `highlightedMetrics`) return the two new fields **only when `status === "result_published"`**; before that both are returned as null, exactly as `dayKind` and the perfs are withheld until finished (see the practice `getGame` comment near `routers.ts:530`). The pre-open game page never receives them, so there is nothing for a player to find in the network tab.
 - `getResearch` already returns `metrics` as a label → value record for both live and snapshot rows; the card uses `valuesForMetric`-style matching client-side (there is a `sameLabel` helper in `DailyGame.tsx`; lift it to `shared/` if the results page needs it too).
 - The player's `reasonMetric` and `reasonSide` are already on the pick row the results page loads (`myPick`); confirm the `getMyPick`-style query selects them and add them if not.
 
@@ -94,7 +92,9 @@ Keep every `requireIndex` anchor string intact ("## highlightedMetrics rules", "
 
 1. In **"## highlightedMetrics rules"**, append:
 
-   > For each of the four, write ONE sentence in `highlightedMetricNotes` (key = the exact label) saying why this metric separates the two companies going into the game day. Quote the two values and say what the gap usually means for a single session. Write it before the open: never say or hint which company will win, never use hindsight, and never use relative time words (anchor dates as in the Dates section). For "Price trend", describe the shape of the two 20-session charts (the gap, spike or breakdown that qualified it). Plain prose, 1–2 sentences, under 300 characters, no markup.
+   > For each of the four, write ONE sentence in `highlightedMetricNotes` (key = the exact label) saying why this metric separates the two companies going into the game day. Quote the two values and say what the gap usually means for a single session. These notes are shown to players only AFTER the result is published, as the "before the open" half of a debrief, so write them as your pre-game reasoning: never say or hint which company will win, never use hindsight, and never use relative time words (anchor dates as in the Dates section). For "Price trend", describe the shape of the two 20-session charts (the gap, spike or breakdown that qualified it). Plain prose, 1–2 sentences, under 300 characters, no markup.
+   >
+   > Weave the four highlighted metrics into `researchContent` and `researchSummary` as part of the narrative: each of the four should be touched on somewhere in the prose, in context, the way an analyst would mention it. Do NOT label them, list them, number them, or use the words "highlighted", "key metric" or "Mo". A close reader should be able to find the threads; a skimmer should not be told. The brief must still read as a story about the two companies, not as a walkthrough of the metrics panel.
 
 2. In **"## Determine today's winner"**, after the Hindsight Spotlight opening rule, append:
 
@@ -127,7 +127,7 @@ In the staging ✅ email (`server/_core/scheduledCuration.ts` success notificati
 
 ## Demo page
 
-`client/src/pages/Demo.tsx` `DEMO_GAME`: add four sample notes and four sample debrief lines for its AAPL vs MSFT matchup so the demo's results screen shows the card. Keep them short and consistent with the existing demo copy.
+`client/src/pages/Demo.tsx` `DEMO_GAME`: add four sample notes and four sample debrief lines for its AAPL vs MSFT matchup so the demo's **results** screen shows the card. The demo's pre-open steps do not change. Keep them short and consistent with the existing demo copy.
 
 ---
 
@@ -136,6 +136,7 @@ In the staging ✅ email (`server/_core/scheduledCuration.ts` success notificati
 - `resolveMetricNotes`: exact keys kept; case/whitespace variants re-keyed to the stored label; unknown keys dropped with a warning; non-object → null; empty after filtering → null; values trimmed and capped at 400 chars; `highlighted === null` → null.
 - `describeHighlightedMetricsForAgent`: lists all four with both values and the note; Price trend line has no values; returns "" for a game without highlights.
 - Prompt structure: the existing anchor-based tests still pass; add one asserting the `today` block in `RESULTS_ONLY_SYSTEM_PROMPT` contains `highlightedMetricDebrief` and the `tomorrow` block in `STAGING_SYSTEM_PROMPT` contains `highlightedMetricNotes` (export the derived prompts for tests if they are not already).
+- Prompt text: `STAGING_SYSTEM_PROMPT` contains the weaving rule ("Do NOT label them, list them") and `SYSTEM_PROMPT` contains it once.
 - `sanitizeAiStrings` already has coverage for record values.
 
 `npx tsc --noEmit` and `pnpm test` must pass before pushing.
@@ -148,4 +149,4 @@ Section 4 table: new row **"Mo's Four Metrics explainer (pre-open reasons + post
 
 ## Order of operations
 
-1. Paul approves the two columns in writing. 2. `drizzle/schema.ts` change → Paul runs `scripts/apply-migration.sh` → commit the generated files. 3. Code + tests green locally. 4. One commit, push to `main`. 5. Watch the next afternoon staging email for "Metric notes: 4/4", then the next settlement email, then open the results page on a phone. First game with the card is the first one staged after the deploy.
+1. Paul approves the two columns in writing. 2. `drizzle/schema.ts` change → Paul runs `scripts/apply-migration.sh` → commit the generated files. 3. Code + tests green locally. 4. One commit, push to `main`. 5. Watch the next afternoon staging email for "Metric notes: 4/4", then open the game page on a phone and confirm nothing new appears before the open (and that the research reads as a story, with the four metrics present but unlabelled), then after the settlement email open the results page. First game with the card is the first one staged after the deploy.
