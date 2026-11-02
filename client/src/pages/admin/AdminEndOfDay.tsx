@@ -52,6 +52,10 @@ interface FormState {
   metrics: MetricRow[];
   // Scoring v2: four highlighted metric labels (empty = legacy scoring)
   highlightedMetrics: string[];
+  // Mo's Four Metrics: label -> one sentence. Carried from the pasted JSON only
+  // (no form fields); the server re-validates them against the highlighted labels.
+  metricNotes: Record<string, string>;
+  metricDebrief: Record<string, string>;
   // Tomorrow's validation question
   nextQuestionType: "multiple_choice" | "yes_no" | "true_false" | "";
   nextQuestionText: string;
@@ -91,6 +95,8 @@ const defaultForm: FormState = {
   nextResearchContent: "",
   metrics: [{ id: makeId(), label: "", value: "" }],
   highlightedMetrics: [],
+  metricNotes: {},
+  metricDebrief: {},
   nextQuestionType: "",
   nextQuestionText: "",
   nextQuestionOptions: ["", ""],
@@ -98,6 +104,14 @@ const defaultForm: FormState = {
 };
 
 // ─── JSON Import ──────────────────────────────────────────────────────────────
+
+/** A pasted { label: sentence } object, keeping only string values. */
+function toNotesRecord(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  return Object.fromEntries(
+    Object.entries(raw as Record<string, unknown>).filter(([, v]) => typeof v === "string" && v.trim()) as [string, string][]
+  );
+}
 
 function parseJsonImport(raw: string): Partial<FormState> | null {
   try {
@@ -180,6 +194,8 @@ function parseJsonImport(raw: string): Partial<FormState> | null {
         const h = t("highlightedMetrics", "nextHighlightedMetrics");
         return Array.isArray(h) ? h.map(String) : [];
       })(),
+      metricNotes: toNotesRecord(t("highlightedMetricNotes", "nextHighlightedMetricNotes")),
+      metricDebrief: toNotesRecord(td("highlightedMetricDebrief")),
       // Validation question
       nextQuestionType: String(questionType) as "multiple_choice" | "yes_no" | "true_false" | "",
       nextQuestionText: String(questionText),
@@ -192,6 +208,13 @@ function parseJsonImport(raw: string): Partial<FormState> | null {
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
+
+/** "4 of 4 metrics" / "none": how many of the ticked metrics have a sentence. */
+function notesCount(notes: Record<string, string>, highlighted: string[]): string {
+  const keys = Object.keys(notes).map((k) => k.trim().toLowerCase());
+  const have = highlighted.filter((l) => keys.includes(l.trim().toLowerCase())).length;
+  return have === 0 ? "none" : `${have} of ${highlighted.length} metrics`;
+}
 
 export default function AdminEndOfDay() {
   const [, navigate] = useLocation();
@@ -319,6 +342,7 @@ export default function AdminEndOfDay() {
         companyBEndPrice: form.companyBEndPrice ? parseFloat(form.companyBEndPrice) : undefined,
         resultSummary: form.resultSummary,
         hindsightSpotlight: form.hindsightSpotlight,
+        highlightedMetricDebrief: Object.keys(form.metricDebrief).length > 0 ? form.metricDebrief : undefined,
       } : {}),
       nextGameDate: form.nextGameDate,
       nextExchange: form.nextExchange,
@@ -339,6 +363,7 @@ export default function AdminEndOfDay() {
       nextResearchContent: form.nextResearchContent || undefined,
       nextResearchMetrics: Object.keys(metricsRecord).length > 0 ? metricsRecord : undefined,
       nextHighlightedMetrics: form.highlightedMetrics.length === HIGHLIGHT_COUNT ? form.highlightedMetrics : undefined,
+      nextHighlightedMetricNotes: Object.keys(form.metricNotes).length > 0 ? form.metricNotes : undefined,
       nextQuestionType: (form.nextQuestionType as "multiple_choice" | "yes_no" | "true_false") || undefined,
       nextQuestionText: form.nextQuestionText || undefined,
       nextQuestionOptions: form.nextQuestionType === "multiple_choice" ? form.nextQuestionOptions.filter(Boolean) : undefined,
@@ -760,6 +785,11 @@ export default function AdminEndOfDay() {
                 selected={form.highlightedMetrics}
                 onChange={(next) => set("highlightedMetrics", next)}
               />
+              {/* Read-only: Mo's pre-open notes / post-close debrief come from the pasted JSON. Players see them only after the result. */}
+              <p className="text-xs text-muted-foreground">
+                Notes: {notesCount(form.metricNotes, form.highlightedMetrics)} · Debrief:{" "}
+                {notesCount(form.metricDebrief, form.highlightedMetrics)}
+              </p>
             </div>
           </CardContent>
         )}

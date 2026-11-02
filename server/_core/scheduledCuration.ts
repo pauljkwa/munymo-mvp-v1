@@ -383,6 +383,30 @@ function resolveHighlightedMetrics(tomorrow: CurationTomorrow): string[] | null 
   return validateHighlightedMetrics(tomorrow.highlightedMetrics, rows, tomorrow.companyATicker, tomorrow.companyBTicker, "stage-game");
 }
 
+/** One-line owner-email indicator: how many of the game's highlighted metrics have a stored
+ *  sentence ("Metric notes: 4/4", "Metric notes: missing"). Pure; exported for tests. */
+export function metricNotesIndicator(
+  what: "Metric notes" | "Metric debrief",
+  stored: Record<string, string> | null | undefined,
+  highlights: string[] | null | undefined
+): string {
+  if (!highlights || highlights.length === 0) return `${what}: n/a (no highlighted metrics)`;
+  const have = highlights.filter((l) => !!stored?.[l]).length;
+  return have === 0 ? `${what}: missing` : `${what}: ${have}/${highlights.length}`;
+}
+
+/** Reads the just-settled game back for the settlement email's debrief line. Never throws. */
+async function debriefIndicatorFor(gameId: number | undefined): Promise<string> {
+  if (!gameId) return "";
+  try {
+    const { getGameById } = await import("../db");
+    const g = await getGameById(gameId);
+    return g ? ` ${metricNotesIndicator("Metric debrief", g.highlightedMetricDebrief, g.highlightedMetrics)}.` : "";
+  } catch {
+    return "";
+  }
+}
+
 /** Mo's per-metric pre-open notes, resolved against the highlights already
  *  validated for this game. Null when there are no highlights or no usable notes. */
 function resolveNotesFor(tomorrow: CurationTomorrow, highlights: string[] | null): Record<string, string> | null {
@@ -559,7 +583,8 @@ async function applyResultsOnlyCuration(
   const warningNote = settlementWarnings.length
     ? ` Settlement warnings: ${settlementWarnings.join("; ")}.`
     : "";
-  const summary = `Results-only curation completed in ${elapsed}ms. Closed game #${closeGameId} (winner: ${winner}, open-to-close ${settledPerfA}% vs ${settledPerfB}%).${warningNote}${crossCheckNote(priceCheck)} Activated staged game #${result.nextGameId} (${result.nextGameTickers}).`;
+  const debriefNote = await debriefIndicatorFor(closeGameId);
+  const summary = `Results-only curation completed in ${elapsed}ms. Closed game #${closeGameId} (winner: ${winner}, open-to-close ${settledPerfA}% vs ${settledPerfB}%).${warningNote}${crossCheckNote(priceCheck)}${debriefNote} Activated staged game #${result.nextGameId} (${result.nextGameTickers}).`;
   console.log("[daily-curation]", summary);
   await notifyOwner({
     title: `✅ Daily curation complete — activated staged game (${result.nextGameTickers})`,
@@ -822,7 +847,8 @@ async function dailyCurationHandler(req: Request, res: Response) {
       : closeGameId
         ? `Closed game #${closeGameId} (winner: ${winner}, open-to-close ${settledPerfA}% vs ${settledPerfB}%).` +
           (settlementWarnings.length ? ` Settlement warnings: ${settlementWarnings.join("; ")}.` : "") +
-          crossCheckNote(priceCheck)
+          crossCheckNote(priceCheck) +
+          (await debriefIndicatorFor(closeGameId))
         : "No game closed (first game).";
     // Reflect whether we actually created the next game or the cadence guard
     // kept an already-queued one (in which case the agent's proposal was discarded).
@@ -1038,7 +1064,8 @@ async function stageGameHandler(req: Request, res: Response) {
     await upsertProposalContent(stagedGameId, tomorrow);
 
     const elapsed = Date.now() - startTime;
-    const summary = `Staged ${tomorrow.companyATicker} vs ${tomorrow.companyBTicker} for ${tomorrow.gameDate} as draft #${stagedGameId} in ${elapsed}ms.`;
+    const notesLine = metricNotesIndicator("Metric notes", nextGameFields.highlightedMetricNotes, resolvedHighlights);
+    const summary = `Staged ${tomorrow.companyATicker} vs ${tomorrow.companyBTicker} for ${tomorrow.gameDate} as draft #${stagedGameId} in ${elapsed}ms. ${notesLine}.`;
     console.log("[stage-game]", summary);
     await notifyOwner({
       title: `✅ Afternoon staging complete — ${tomorrow.companyATicker} vs ${tomorrow.companyBTicker}`,

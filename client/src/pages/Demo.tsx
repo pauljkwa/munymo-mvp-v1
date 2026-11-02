@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 
 import { MetricExplanationSheet } from "@/components/MetricExplanationSheet";
+import MoFourMetricsCard from "@/components/MoFourMetricsCard";
 
 // ─── Demo Data ────────────────────────────────────────────────────────────────
 
@@ -55,6 +56,20 @@ Key risk for Apple: any softness in China sales or a delay in AI feature rollout
     "MSFT Azure Growth (YoY)": "+21%",
     "MSFT Gross Margin": "69.4%",
   },
+  // Mo's Four Metrics: shown on the results screen only. The demo's pre-open steps are unchanged.
+  highlightedMetrics: ["Revenue Growth (YoY)", "P/E Ratio", "EPS (TTM)", "Gross Margin"],
+  highlightedMetricNotes: {
+    "Revenue Growth (YoY)": "MSFT is growing revenue at +17.6% YoY against +5.1% for AAPL; a gap that wide usually means analysts are revising one name's estimates upward faster than the other's.",
+    "P/E Ratio": "MSFT trades at 33.1x earnings against 29.4x for AAPL, so the market is already paying up for MSFT's growth, which leaves it more exposed if sentiment turns.",
+    "EPS (TTM)": "MSFT earns $12.93 per share over the last twelve months against $6.57 for AAPL; the raw levels say little on their own, so it matters mainly as the base under each P/E.",
+    "Gross Margin": "MSFT keeps 69.4% of each sales dollar as gross profit against 46.6% for AAPL, a structural gap that rarely moves in a single session.",
+  } as Record<string, string>,
+  highlightedMetricDebrief: {
+    "Revenue Growth (YoY)": "The numbers favored MSFT and MSFT won the session: analysts cited Azure acceleration in their upgrades, the kind of news that rewards the faster grower.",
+    "P/E Ratio": "The richer multiple did not hurt MSFT today; a premium valuation only bites when sentiment turns, and the day's news was supportive.",
+    "EPS (TTM)": "Per-share earnings did not drive the move; the price action followed the growth story, not the trailing profit level.",
+    "Gross Margin": "As expected, margins did nothing on the day; a gap this structural is background, not a trigger for one session's move.",
+  } as Record<string, string>,
   validationQuestion: {
     questionText:
       "Which metric best explains why Microsoft's gross margin is significantly higher than Apple's?",
@@ -819,6 +834,18 @@ export default function Demo() {
                   {DEMO_GAME.resultSummary}
                 </p>
               </div>
+
+              {/* Mo's Four Metrics (results screen only) */}
+              <MoFourMetricsCard
+                tickerA={DEMO_GAME.companyATicker}
+                tickerB={DEMO_GAME.companyBTicker}
+                winner={DEMO_GAME.winner === DEMO_GAME.companyATicker ? "A" : "B"}
+                highlightedMetrics={DEMO_GAME.highlightedMetrics}
+                notes={DEMO_GAME.highlightedMetricNotes}
+                debrief={DEMO_GAME.highlightedMetricDebrief}
+                metrics={DEMO_GAME.researchMetrics}
+                className=""
+              />
 
               {/* Hindsight Spotlight */}
               <div
