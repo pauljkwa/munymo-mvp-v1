@@ -2,13 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { createChart, ColorType, CandlestickSeries, type Time } from "lightweight-charts";
 import { trpc } from "@/lib/trpc";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 type Range = "1d" | "5d" | "1mo" | "3mo" | "6mo" | "1y";
 
@@ -194,21 +187,27 @@ export function CandlestickChart({
             </span>
           )}
         </div>
-        {/* Range selector — dropdown to avoid overflow on mobile */}
-        <Select value={range} onValueChange={(v) => setRange(v as Range)}>
-          <SelectTrigger className="h-7 w-20 text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          {/* z-[300]: the menu portals to <body>, and ChartSheet sits at z-[200],
-              so the default z-50 would open the menu hidden behind the sheet. */}
-          <SelectContent className="z-[300]">
-            {rangeOptions.map((r) => (
-              <SelectItem key={r.value} value={r.value} className="text-xs">
-                {r.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      </div>
+
+      {/* Range selector — plain tap buttons. A Radix dropdown here proved
+          unreliable on iOS inside the full-screen ChartSheet. */}
+      <div className="flex gap-1.5 px-4 py-2 border-b border-border" role="group" aria-label="Chart time range">
+        {rangeOptions.map((r) => (
+          <button
+            key={r.value}
+            type="button"
+            onClick={() => setRange(r.value)}
+            aria-pressed={range === r.value}
+            className="flex-1 h-8 rounded-md text-xs font-semibold transition-colors"
+            style={
+              range === r.value
+                ? { background: accentColor, color: "#fff", border: `1px solid ${accentColor}` }
+                : { background: "var(--color-surface-raised)", color: "var(--color-muted)", border: "1px solid var(--color-border)" }
+            }
+          >
+            {r.label}
+          </button>
+        ))}
       </div>
 
       {/* Chart area */}
