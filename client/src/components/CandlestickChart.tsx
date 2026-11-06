@@ -199,7 +199,9 @@ export function CandlestickChart({
           <SelectTrigger className="h-7 w-20 text-xs">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
+          {/* z-[300]: the menu portals to <body>, and ChartSheet sits at z-[200],
+              so the default z-50 would open the menu hidden behind the sheet. */}
+          <SelectContent className="z-[300]">
             {rangeOptions.map((r) => (
               <SelectItem key={r.value} value={r.value} className="text-xs">
                 {r.label}
